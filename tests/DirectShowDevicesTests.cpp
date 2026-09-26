@@ -10,6 +10,12 @@ int main() {
         ++failures;
     };
 
+    // Fail before enumeration: stale USB identity must never be reused.
+    std::wstring stalePath = L"previous capture device";
+    check(llcv::capture::FindVideoCaptureFilter({}, nullptr, nullptr, nullptr,
+              nullptr, &stalePath) == E_POINTER && stalePath.empty(),
+          "failed selection clears physical-device path without opening hardware");
+
     check(llcv::capture::RelatedCaptureAudioScore(
               L"AVerMedia HD Capture GC573", L"AVerMedia HD Capture GC573") ==
               1000,

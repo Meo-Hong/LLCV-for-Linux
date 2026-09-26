@@ -1,4 +1,4 @@
-Low Latency Capture Viewer v1.2.12 - dependencies
+Low Latency Capture Viewer v1.3.0 - dependencies
 =================================================
 
 License: GNU General Public License v3.0 or later. See the root LICENSE file.
@@ -11,7 +11,7 @@ separate Visual C++ Redistributable installation. The target PC needs:
 - A card exposing NV12/YUY2, or experimental MJPEG/P010, and compatible 48 kHz
   mono/stereo PCM or 32-bit float audio, either on the video filter or as a
   separate DirectShow audio-input filter
-- D3D11, DXGI, DirectShow, and WASAPI Windows system components
+- D3D11, DXGI, DirectShow, WASAPI, HID and SetupAPI Windows system components
 - Optional console LPCM 5.1: explicit 48 kHz 6/8-channel PCM capture input and
   WASAPI Shared output. Configure Windows speakers for 5.1; stereo endpoints
   downmix. Dolby/DTS decoding and ASIO/Exclusive 5.1 are not supported.
@@ -26,3 +26,33 @@ The tested/recommended card is AVerMedia GC573. Other cards are experimental;
 when their video and audio filters are separate, enable drift correction for
 long sessions if the diagnostics show repeated imbalance.
 No mpv.exe, FFmpeg DLL, third-party codec pack, or companion executable is required.
+
+Elgato driver/USB-protocol reference
+------------------------------
+The optional device tone-mapping request uses the published driver-property ABI
+from elgatosf/capture-device-support (SampleCode/DriverInterface.cpp,
+Library/ElgatoUVCDevice.cpp and Library/win/EGAVHIDImplementation.cpp), commit
+fe9630974d47f51bf54826e72fb8b654e620aa93. No Elgato SDK or DLL is bundled/linked.
+https://github.com/elgatosf/capture-device-support
+
+MIT License
+
+Copyright (c) 2022-23 Corsair Memory, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

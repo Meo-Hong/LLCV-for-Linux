@@ -54,4 +54,21 @@ HRESULT ValidateVideoLayout(const AM_MEDIA_TYPE* mediaType,
     int expectedWidth, int expectedHeight, VideoPixelFormat expectedFormat,
     DWORD& imageBytes, UINT32& stride, int& fps);
 
+// Immutable, normalized description of the connected sample format. Compared
+// only when a sample actually carries a dynamic media type, never per pixel.
+struct VideoSampleFormat {
+    bool valid = false;
+    VideoPixelFormat format = VideoPixelFormat::Auto;
+    int width = 0, height = 0, fps = 0;
+    DWORD bytes = 0, interlace = 0;
+    UINT32 stride = 0;
+    RECT source{}, target{};
+    DWORD aspectX = 0, aspectY = 0;
+    CaptureColorMetadata color{};
+};
+bool ReadVideoSampleFormat(const AM_MEDIA_TYPE* mediaType, int fallbackFps,
+                           VideoSampleFormat& result);
+bool MatchesVideoSampleFormat(const AM_MEDIA_TYPE* mediaType,
+                              const VideoSampleFormat& expected);
+
 }  // namespace llcv::video

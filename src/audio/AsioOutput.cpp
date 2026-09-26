@@ -23,6 +23,16 @@ std::mutex g_outputMutex;
 std::atomic<bool> g_acceptRequests{false};
 std::atomic<bool> g_restartRequested{false};
 
+void WriteInt32Stereo(const int16_t* source, int32_t* left, int32_t* right,
+                      size_t frames, ASIOSampleType type) {
+    // ASIO's valid-16-in-32 format is LSB aligned, unlike full 32-bit PCM.
+    const int32_t scale = type == ASIOSTInt32LSB16 ? 1 : 65536;
+    for (size_t i = 0; i < frames; ++i) {
+        left[i] = static_cast<int32_t>(source[i * 2]) * scale;
+        right[i] = static_cast<int32_t>(source[i * 2 + 1]) * scale;
+    }
+}
+
 long AsioMessage(long selector, long value, void*, double*) {
     switch (selector) {
     case kAsioSelectorSupported:
@@ -116,14 +126,7 @@ struct Output::Impl {
                    sampleType == ASIOSTInt32LSB16) {
             auto* left = static_cast<int32_t*>(buffers[0].buffers[index]);
             auto* right = static_cast<int32_t*>(buffers[1].buffers[index]);
-            for (std::size_t i = 0; i < frames; ++i) {
-                const int32_t valueLeft = static_cast<int32_t>(
-                    static_cast<int64_t>(scratch[i * 2]) << 16);
-                const int32_t valueRight = static_cast<int32_t>(
-                    static_cast<int64_t>(scratch[i * 2 + 1]) << 16);
-                left[i] = valueLeft;
-                right[i] = valueRight;
-            }
+            WriteInt32Stereo(scratch, left, right, frames, sampleType);
         } else {
             std::memset(buffers[0].buffers[index], 0,
                         static_cast<std::size_t>(bufferFrames) * 4);

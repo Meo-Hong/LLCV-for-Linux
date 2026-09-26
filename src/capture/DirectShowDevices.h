@@ -20,7 +20,7 @@ std::vector<DeviceInfo> EnumerateAudioInputDevices();
 HRESULT FindVideoCaptureFilter(
     const std::wstring& selectedId, const wchar_t* preferredDeviceName,
     IBaseFilter** output, std::wstring* selectedName,
-    LogCallback logCallback);
+    LogCallback logCallback, std::wstring* selectedDevicePath = nullptr);
 HRESULT FindCaptureAudioFilter(
     const std::wstring& selectedId, const std::wstring& videoName,
     IBaseFilter** output, std::wstring* selectedName,

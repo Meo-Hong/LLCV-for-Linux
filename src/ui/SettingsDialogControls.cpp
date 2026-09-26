@@ -566,7 +566,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
 
     state->forceHdr10Check = CreateWindowExW(
         0, L"BUTTON", text(
-            L"P010 HDR10 강제 (메타데이터 없을 때 · 실험적)"),
+            L"P010 HDR10 강제 (색 정보가 틀릴 때 · 실험적)"),
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         505, 376, 390, 28, hwnd,
         reinterpret_cast<HMENU>(

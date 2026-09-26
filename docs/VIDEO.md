@@ -9,6 +9,12 @@ presents it through the D3D11 Video Processor and, by default, a flip-discard sw
 maximum frame latency set to 1. Stale samples are discarded instead of being
 allowed to form a playback queue.
 
+If the device announces a changed video layout or color interpretation during
+playback, the viewer stops and asks you to restart capture instead of displaying
+frames using stale settings. Equivalent format confirmations continue normally.
+Restart capture if prompted after changing the console's HDR or resolution.
+This does not detect source changes that the device never reports.
+
 The app-processing value in the Tab overlay covers this application path. It is
 not the total HDMI-to-display latency; the capture device, source, desktop
 composition, monitor, and input device add latency outside the application.
@@ -99,10 +105,16 @@ changes are checked periodically.
 
 - The supported path is **P010 / BT.2020 / PQ / Limited → Flip HDR10**.
   Input chroma location selects left or top-left sampling.
+- P010 is **HDR-only**. Input reported as SDR is rejected with guidance instead
+  of rendered through an SDR P010 path. Select NV12/YUY2 for SDR.
 - Final connected color metadata takes priority. When PQ is known but some
   fields are missing, HDR10 defaults are used and logged as assumptions.
+- P010 without transfer/gamut metadata **assumes PQ/BT.2020 HDR10**, like the
+  OBS DirectShow P010 default. This is an assumption, not successful HDR
+  detection, and is identified in the log. Explicit SDR/HLG or incomplete
+  BT.2020 metadata is not replaced by this fallback. Range/chroma guards remain.
 - Use **Force HDR10** only for confirmed PQ/BT.2020 input whose metadata is
-  missing or incorrect. It does not convert SDR into HDR.
+  incorrect or incomplete. It does not convert SDR into HDR.
 - **HDR chroma placement** appears below Force HDR10 when P010 is selected.
   Leave it on **Auto (recommended)** normally. **Top-left** and **Left** are
   manual compatibility interpretations for missing or incorrect placement
@@ -110,8 +122,8 @@ changes are checked periodically.
   video does not by itself establish correct placement. These choices do not
   reconstruct staggered chroma planes or change HDR range validation.
 - HLG, Full-range HDR, and Blt HDR are unsupported, not silently reinterpreted
-  as SDR. P010 with completely absent color metadata retains the SDR assumption;
-  for an HDR source, check the force option or device settings.
+  as SDR. Use NV12/YUY2 for SDR sources without color metadata. Turning Force
+  HDR10 off does not disable the automatic HDR assumption for untagged P010.
 - Video PQ values are preserved without inventing mastering or peak-light
   metadata. The app does not provide its own HDR-to-SDR tone mapper.
 - HDR overlays use linear-light composition with Windows' SDR UI white level,
@@ -124,6 +136,25 @@ changes are checked periodically.
 Capture-device processing and display tone mapping may still differ from
 passthrough. Final luminance/color validation on actual HDR hardware remains
 necessary; these changes do not guarantee an exact match on every device.
+
+### Capture-card hardware tone mapping
+
+At capture startup, supported AVerMedia and Elgato devices are asked
+once to turn internal HDR-to-SDR conversion **off for P010** and **on for
+NV12/YUY2/MJPEG**. Support is queried on the selected capture filter rather than
+inferred from a product-name list. AVerMedia UVC extension control validates the
+selected filter's extension-node response before writing. P010 alone does not
+prove the signal is HDR.
+
+Unsupported or failed commands do not stop capture. `[capture-hdr]` logs the
+result; command acceptance is not verification of the actual input encoding.
+This adds no per-frame processing stage or frame queue.
+
+Elgato USB/HID control is restricted to the published HD60 S+, HD60 X and HD60 X
+Rev.2 device IDs. The video and HID interfaces must belong to the same physical
+Windows device container; ambiguous matches are skipped. No guessed commands
+are sent to other models or vendors. This is not a real-hardware compatibility
+guarantee for every card. Avoid concurrent capture-device use by multiple apps.
 
 ## Pixel-perfect and resizing
 

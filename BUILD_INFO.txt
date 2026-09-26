@@ -1,4 +1,16 @@
-Low Latency Capture Viewer v1.2.12 x64 (continued from the v0.14.2 rework)
+Low Latency Capture Viewer v1.3.0 x64 (continued from the v0.14.2 rework)
+
+v1.3.0 HDR input compatibility and low-latency pipeline refinements
+-----------------------------------------------------------------
+- Interprets untagged P010 as HDR10 PQ/BT.2020; explicit SDR uses NV12/YUY2.
+- Requests supported AVerMedia/Elgato hardware tone mapping at capture startup.
+- Validates runtime video/audio format notifications and sample buffer bounds.
+- Refreshes the latest input after output resets without adding a frame wait.
+- Refines MJPEG decoder setup, stream changes and optional low-latency requests.
+- Refines WASAPI Exclusive initialization/event rendering and ASIO PCM packing.
+- Keeps existing presentation and audio reserve defaults; no external runtime.
+- HDR frame audit and scRGB prototype OFF; physical HDR accuracy and end-to-end
+  latency remain hardware-validation items. See tests/RELEASE_V1_3_0_AUDIT.md.
 
 v1.2.12 Dedicated audio-only view
 ---------------------------------

@@ -40,34 +40,36 @@ STDMETHODIMP AudioSampleGrabberCallback::SampleCB(
     double, IMediaSample* sample) {
     if (!sample) return E_POINTER;
 
-    if (format_.path == capture_audio::Path::ConvertToSurround51) {
-        // A six/eight-channel packet interpreted with a stale stride produces
-        // severe noise. Latch rejection until the graph is rebuilt; do not guess.
-        if (surroundFormatChanged_) return VFW_E_TYPE_NOT_ACCEPTED;
+    {
+        // Any stale encoding/stride can produce noise. Latch rejection until
+        // the owner rebuilds the graph; unlabelled later packets are not safe.
+        if (formatChanged_) return VFW_E_TYPE_NOT_ACCEPTED;
         AM_MEDIA_TYPE* changed = nullptr;
         const HRESULT typeHr = sample->GetMediaType(&changed);
         const bool matches = typeHr == S_FALSE || (typeHr == S_OK && changed &&
-            capture_audio::MatchesSurroundFormat(*changed, format_));
+            capture_audio::MatchesFormat(*changed, format_));
         if (changed) {
             CoTaskMemFree(changed->pbFormat);
             if (changed->pUnk) changed->pUnk->Release();
             CoTaskMemFree(changed);
         }
-        if (!matches || ring_.Channels() != 6) {
-            surroundFormatChanged_ = true;
-            if (telemetry_.surroundFormatRejected)
-                telemetry_.surroundFormatRejected->store(true, std::memory_order_release);
+        const size_t outputChannels =
+            format_.path == capture_audio::Path::ConvertToSurround51 ? 6 : 2;
+        if (!matches || ring_.Channels() != outputChannels) {
+            formatChanged_ = true;
+            if (telemetry_.formatRejected)
+                telemetry_.formatRejected->store(true, std::memory_order_release);
             return VFW_E_TYPE_NOT_ACCEPTED;
         }
     }
 
     BYTE* data = nullptr;
     const HRESULT result = sample->GetPointer(&data);
-    if (FAILED(result) || !data) return result;
+    if (FAILED(result) || !data) return FAILED(result) ? result : E_POINTER;
 
     const long bytes = sample->GetActualDataLength();
-    // Validate multichannel driver packets before reading any sample bytes.
-    if (format_.path == capture_audio::Path::ConvertToSurround51 && bytes > sample->GetSize())
+    // Never trust a driver's reported length beyond its buffer capacity.
+    if (bytes > sample->GetSize())
         return E_INVALIDARG;
     if (bytes <= 0 || format_.blockAlign == 0 ||
         bytes % format_.blockAlign != 0) {

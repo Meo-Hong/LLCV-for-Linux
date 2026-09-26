@@ -27,6 +27,25 @@ void TestStartupWaitBoundary() {
     std::puts("Startup boundary: 20001 timestamps x pre/post input states passed.");
 }
 
+void TestInvalidHdrOutputStartup() {
+    const auto saved = g_settings;
+    g_settings.pixelFormat = VideoPixelFormat::P010;
+    g_settings.presentationMode = PresentationMode::Compatibility;
+    for (bool force : {false, true}) {
+        g_settings.forceHdr10 = force;
+        // The startup guard returns before COM, device enumeration or graph creation.
+        if (UnifiedCaptureRenderLoop(nullptr) || g_captureFailureHr != DXGI_ERROR_UNSUPPORTED ||
+            !g_hdrFailureDetail.load()) std::abort();
+        DirectD3D11Renderer renderer;
+        if (renderer.initialize(nullptr, 1920, 1080, 60, VideoPixelFormat::P010, true) !=
+                DXGI_ERROR_UNSUPPORTED || renderer.device || renderer.swapChain) std::abort();
+    }
+    g_settings = saved;
+    g_captureFailureHr = S_OK;
+    g_hdrFailureDetail = nullptr;
+    std::puts("Invalid HDR output blocked before capture/GPU access, Force off/on.");
+}
+
 namespace {
 void Require(bool value, const char* message) {
     if (!value) {
@@ -35,6 +54,27 @@ void Require(bool value, const char* message) {
     }
 }
 std::wstring savedMessage;
+void TestAsioIntegerPacking() {
+    constexpr size_t frames = 65536;
+    std::vector<int16_t> input(frames * 2);
+    std::vector<int32_t> left(frames + 1, 123), right(frames + 1, 456);
+    for (size_t i = 0; i < frames; ++i) {
+        input[i * 2] = static_cast<int16_t>(static_cast<int>(i) - 32768);
+        input[i * 2 + 1] = static_cast<int16_t>(32767 - static_cast<int>(i));
+    }
+    for (auto type : {ASIOSTInt32LSB, ASIOSTInt32LSB16}) {
+        llcv::asio::WriteInt32Stereo(input.data(), left.data(), right.data(), frames, type);
+        const int32_t scale = type == ASIOSTInt32LSB16 ? 1 : 65536;
+        for (size_t i = 0; i < frames; ++i) {
+            Require(left[i] == static_cast<int32_t>(input[i * 2]) * scale &&
+                    right[i] == static_cast<int32_t>(input[i * 2 + 1]) * scale,
+                    "ASIO integer conversion preserves all signed PCM16 values");
+        }
+        Require(left[frames] == 123 && right[frames] == 456,
+                "ASIO conversion stays within the output frame count");
+    }
+    std::puts("ASIO integer packing: both formats x all 65536 PCM16 values passed.");
+}
 void SaveMessage(const wchar_t* message) { savedMessage = message; }
 
 DWORD settingsProbeThread = 0;
@@ -589,6 +629,7 @@ static void TestSurroundWasapiFill() {
 }
 
 int main(int argc, char** argv) {
+    TestInvalidHdrOutputStartup();
     if (argc == 2 && std::string(argv[1]) == "--transition-stress") return RunTransitionStress(false);
     if (argc == 2 && std::string(argv[1]) == "--transition-faults") return RunTransitionStress(true);
     if (argc == 2 && std::string(argv[1]) == "--presentation-debug") {
@@ -601,6 +642,7 @@ int main(int argc, char** argv) {
         return TestPresentationGpu();
     }
     TestPresentationPolicy();
+    TestAsioIntegerPacking();
     TestStartupWaitBoundary();
     TestSettingsCapabilityRefresh();
     TestExclusiveScanResultLifetime();

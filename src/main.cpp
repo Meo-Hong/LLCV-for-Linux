@@ -50,12 +50,7 @@
 #include "capture/AudioSampleGrabber.h"
 #include "capture/DirectShowGraphResources.h"
 #include "capture/LatestVideoSample.h"
-#ifdef LLCV_EXPERIMENTAL_HARDWARE_TONEMAP
-#ifndef LLCV_HDR_FRAME_AUDIT
-#error Experimental vendor HDR control must only be built into a private diagnostic.
-#endif
 #include "capture/HardwareToneMapping.h"
-#endif
 #include "diagnostics/Logger.h"
 #include "diagnostics/AudioErrorHistory.h"
 #include "settings/AppSettings.h"
@@ -120,7 +115,7 @@ constexpr wchar_t kVideoPinName[] = L"Video";
 constexpr int kSampleRate = 48000;
 constexpr int kChannels = 2;
 constexpr int kBitsPerSample = 16;
-constexpr wchar_t kAppVersionLabel[] = L"v1.2.12";
+constexpr wchar_t kAppVersionLabel[] = L"v1.3.0";
 
 constexpr int kRecommendedCaptureBufferMs = 20;
 constexpr int kMaximumVolumePercent = 200;
@@ -246,6 +241,7 @@ static std::atomic<int> g_videoConfiguredFps{0};
 static std::atomic<bool> g_videoTearing{false};
 static std::atomic<bool> g_directVideoActive{false};
 static std::atomic<HRESULT> g_captureFailureHr{S_OK};
+static std::atomic<bool> g_captureVideoRejected{false};
 static std::atomic<UINT32> g_audioActualBufferFrames{0};
 static std::atomic<UINT32> g_audioWasapiPaddingFrames{0};
 static std::atomic<bool> g_asioAudioStarted{false};
@@ -817,7 +813,7 @@ static bool OnPcmRingOverrun(void*, size_t droppedFrames) {
 static PcmRing g_ring{kRingFrames, &g_audioRingFrames,
                       OnPcmRingOverrun, nullptr};
 static bool Surround51Active() { return g_ring.Channels() == 6; }
-static std::atomic<bool> g_surroundCaptureRejected{false};
+static std::atomic<bool> g_captureAudioRejected{false};
 static std::atomic<uint64_t> g_underruns{0};
 
 // -----------------------------------------------------------------------------
@@ -838,7 +834,7 @@ static ISampleGrabberCB* CreateAudioSampleCallback(
         &g_audioLastCaptureCallbackMs,
         &g_audioCaptureCallbacks,
         &g_audioCaptureFrames,
-        &g_surroundCaptureRejected,
+        &g_captureAudioRejected,
     };
     return new llcv::capture::AudioSampleGrabberCallback(
         format, g_ring, telemetry, CaptureAudioTrackingActive, nullptr);
@@ -850,10 +846,10 @@ static ISampleGrabberCB* CreateAudioSampleCallback(
 
 static HRESULT FindCaptureFilter(
     const std::wstring& selectedId, IBaseFilter** output,
-    std::wstring* selectedName = nullptr) {
+    std::wstring* selectedName = nullptr, std::wstring* selectedDevicePath = nullptr) {
     return llcv::capture::FindVideoCaptureFilter(
         selectedId, kCaptureName, output, selectedName,
-        LogModuleMessage);
+        LogModuleMessage, selectedDevicePath);
 }
 
 static HRESULT FindCaptureAudioFilter(
@@ -2050,6 +2046,10 @@ struct DirectD3D11Renderer {
                        llcv::video_color::Configuration color = {},
                        DXGI_COLOR_SPACE_TYPE hdrColorSpace = DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_TOPLEFT_P2020) {
         reset();
+        if (pixelFormat == VideoPixelFormat::P010 && !hdrInputMetadataAvailable) {
+            fwprintf(stderr, L"[hdr] P010 is HDR-only; select NV12/YUY2 for SDR input.\n");
+            return DXGI_ERROR_UNSUPPORTED;
+        }
         hdrInputColorSpace = hdrColorSpace;
 #ifdef LLCV_HDR_SCRGB_PROTOTYPE
         scrgbOutput = g_useScrgbPrototype && pixelFormat == VideoPixelFormat::P010 && hdrInputMetadataAvailable;
@@ -2108,9 +2108,6 @@ struct DirectD3D11Renderer {
                 return hr;
             }
             hdrOutput = true;
-        } else if (pixelFormat == VideoPixelFormat::P010) {
-            fwprintf(stderr,
-                     L"[hdr] P010 SDR renderer selected; this is not HDR-to-SDR tone mapping.\n");
         }
 
         IDXGIDevice* dxgiDevice = nullptr;
@@ -3166,7 +3163,7 @@ static bool AudioOnlyCaptureLoop() {
                 hr = FindOutputPinByMajorType(capture, MEDIATYPE_Audio,
                                               &audioPin);
             }
-            if (Surround51Active()) g_surroundCaptureRejected.store(FAILED(hr));
+            if (Surround51Active()) g_captureAudioRejected.store(FAILED(hr));
         } else {
             g_activeCaptureDeviceName = L"(audio-only)";
             hr = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
@@ -3185,7 +3182,7 @@ static bool AudioOnlyCaptureLoop() {
             hr = Surround51Active()
                 ? llcv::capture_audio::FindSurroundPin(audioCapture, &audioPin)
                 : FindOutputPinByMajorType(audioCapture, MEDIATYPE_Audio, &audioPin);
-            if (Surround51Active()) g_surroundCaptureRejected.store(FAILED(hr));
+            if (Surround51Active()) g_captureAudioRejected.store(FAILED(hr));
         }
         if (FAILED(hr)) break;
         g_captureAudioAvailable.store(true, std::memory_order_release);
@@ -3196,7 +3193,7 @@ static bool AudioOnlyCaptureLoop() {
         selectedAudioType = llcv::capture_audio::SelectSupportedType(
             audioPin, selectedAudioFormat, &rejection, Surround51Active());
         if (!selectedAudioType) {
-            if (Surround51Active()) g_surroundCaptureRejected.store(true);
+            if (Surround51Active()) g_captureAudioRejected.store(true);
             fwprintf(stderr, L"[audio] capture input rejected: %s\n",
                      llcv::capture_audio::DescribeRejection(rejection).c_str());
             hr = VFW_E_TYPE_NOT_ACCEPTED;
@@ -3237,13 +3234,13 @@ static bool AudioOnlyCaptureLoop() {
                                     &audioGrabberOut))) break;
         if (FAILED(hr = GetFirstPin(audioNullRenderer, PINDIR_INPUT,
                                     &audioNullIn))) break;
-        if (Surround51Active()) g_surroundCaptureRejected.store(true);
+        if (Surround51Active()) g_captureAudioRejected.store(true);
         if (FAILED(hr = graph->ConnectDirect(audioPin, audioGrabberIn,
                                              selectedAudioType))) break;
         if (Surround51Active()) {
             hr = llcv::capture_audio::VerifySurroundConnection(audioGrabberIn, selectedAudioFormat);
             if (FAILED(hr)) break;
-            g_surroundCaptureRejected.store(false);
+            g_captureAudioRejected.store(false);
         }
         ReportConnectedAudioAllocator(audioGrabberIn,
                                       selectedAudioFormat.blockAlign);
@@ -3258,8 +3255,8 @@ static bool AudioOnlyCaptureLoop() {
                  g_activeCaptureAudioDeviceName.c_str(),
                  llcv::capture_audio::Describe(selectedAudioFormat).c_str());
         while (g_running.load(std::memory_order_acquire)) {
-            if (Surround51Active() && g_surroundCaptureRejected.load(std::memory_order_acquire)) {
-                initializationStage = L"5.1 capture format changed; restart required";
+            if (g_captureAudioRejected.load(std::memory_order_acquire)) {
+                initializationStage = L"capture audio format changed; restart required";
                 hr = VFW_E_TYPE_NOT_ACCEPTED;
                 initialized = false;
                 break;
@@ -3311,7 +3308,14 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
     const auto& preset = CurrentVideoPreset();
     g_hdrFailureDetail.store(nullptr, std::memory_order_release);
     g_captureFailureHr.store(S_OK, std::memory_order_release);
+    g_captureVideoRejected.store(false, std::memory_order_release);
     g_captureAudioAvailable.store(false, std::memory_order_release);
+    if (!llcv::presentation::SupportsCapture(g_settings.presentationMode, g_settings.pixelFormat)) {
+        g_hdrFailureDetail.store(L"P010 HDR10 requires Immediate or VSync (Flip), not compatibility output",
+                                 std::memory_order_release);
+        g_captureFailureHr.store(DXGI_ERROR_UNSUPPORTED, std::memory_order_release);
+        return false; // Also guard non-UI startup before opening a capture device.
+    }
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(hr)) {
         LogHr(L"CoInitializeEx(direct video)", hr);
@@ -3356,6 +3360,7 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
     const wchar_t* initializationStage = L"create DirectShow graph";
     DirectD3D11Renderer renderer;
     llcv::video::MjpegDecoder compressedDecoder;
+    std::wstring selectedVideoDevicePath;
 
     do {
         initializationStage = L"create DirectShow graph";
@@ -3369,7 +3374,7 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
 
         initializationStage = L"find selected video capture filter";
         hr = FindCaptureFilter(g_settings.captureDeviceId, &capture,
-                               &g_activeCaptureDeviceName);
+                               &g_activeCaptureDeviceName, &selectedVideoDevicePath);
         if (FAILED(hr)) break;
         initializationStage = L"add selected video capture filter";
         hr = graph->AddFilter(capture, L"Selected Capture Device");
@@ -3505,16 +3510,14 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
                                     &grabberOut))) break;
         if (FAILED(hr = GetFirstPin(nullRenderer, PINDIR_INPUT,
                                     &nullIn))) break;
-#ifdef LLCV_EXPERIMENTAL_HARDWARE_TONEMAP
-        // Not enabled in normal builds: command acceptance did not establish
-        // a fix, and actual device/driver safety still needs investigation.
         // Configure only this selected video device, once per graph start.
+        // Vendor controls are capability-checked. USB control requires the
+        // selected physical device container, never a name/VID-only match.
         // Optional vendor control must not make unsupported devices fail to
         // start. Do not restore at shutdown: that could overwrite another
         // application's setting. SDR graph starts explicitly request SDR.
         llcv::capture::ConfigureHardwareToneMapping(
-            capture, g_activeCaptureDeviceName, configuredFormat, LogModuleMessage);
-#endif
+            capture, g_activeCaptureDeviceName, configuredFormat, LogModuleMessage, selectedVideoDevicePath);
         if (FAILED(hr = graph->ConnectDirect(videoPin, grabberIn,
                                              nullptr))) break;
         // Some drivers expose color information only on the negotiated
@@ -3583,6 +3586,7 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
         // The connected type, not the advertised type, defines the raw upload.
         initializationStage = L"validate connected video layout";
         AM_MEDIA_TYPE connectedLayout{};
+        llcv::video::VideoSampleFormat sampleFormat{};
         hr = grabber->GetConnectedMediaType(&connectedLayout);
         const int previousFps = configuredFps;
         if (SUCCEEDED(hr)) hr = ValidateCaptureLayout(L"connected", &connectedLayout,
@@ -3605,6 +3609,9 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
                 llcv::video_color::SourceName(sdrColor.matrixSource),
                 llcv::video_color::SourceName(sdrColor.rangeSource));
         }
+        if (SUCCEEDED(hr) && !llcv::video::ReadVideoSampleFormat(
+                &connectedLayout, configuredFps, sampleFormat))
+            hr = HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
         FreeMediaType(connectedLayout);
         if (FAILED(hr)) break;
         if (configuredFormat == VideoPixelFormat::P010) {
@@ -3619,16 +3626,13 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
                     llcv::hdr::ChromaLocationName(g_settings.hdrChromaLocation),
                     input.colorSpace == DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020 ? L"Left" : L"TopLeft",
                     input.chromaOverridden ? 1u : 0u);
-            if (input.kind == llcv::hdr::InputKind::Unsupported) {
+            if (input.kind != llcv::hdr::InputKind::Hdr10) {
                 g_hdrFailureDetail.store(input.reason, std::memory_order_release);
                 hr = DXGI_ERROR_UNSUPPORTED;
                 break;
             }
             hdrInputMetadataAvailable = input.kind == llcv::hdr::InputKind::Hdr10;
             hdrColorSpace = input.colorSpace;
-            if (!hdrInputMetadataAvailable)
-                sdrColor = llcv::video_color::Resolve(false, preset.width, preset.height, {},
-                    {directShowColorInfo.transferMatrix, directShowColorInfo.nominalRange});
         }
         if (configuredFps != previousFps || configuredFormat == VideoPixelFormat::P010 ||
             (rawSdr && !(sdrColor == renderer.sdrColor))) {
@@ -3636,6 +3640,9 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
                                      rendererInputFormat, hdrInputMetadataAvailable, sdrColor, hdrColorSpace);
             if (FAILED(hr)) break;
         }
+        // Guard the same effective metadata used by the renderer, including
+        // selected/active-type hints omitted from the final connected type.
+        sampleFormat.color = directShowColorInfo;
         g_videoConfiguredFps.store(configuredFps, std::memory_order_release);
 #ifdef LLCV_HDR_FRAME_AUDIT
         renderer.auditMetadata = directShowColorInfo;
@@ -3649,7 +3656,7 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
             llcv::capture::VideoSampleTelemetry{&g_osdTrackingStartMs, &g_videoCapturedFrames,
               &g_videoReplacedFrames});
         auto& latest = *resources.latestVideoSample;
-        callback = new llcv::capture::VideoSampleGrabberCallback(&latest);
+        callback = new llcv::capture::VideoSampleGrabberCallback(&latest, nullptr, sampleFormat);
         hr = grabber->SetCallback(callback, 0);
         if (FAILED(hr)) break;
         // Prefer an audio pin on the selected video filter. Many USB UVC
@@ -3666,7 +3673,7 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
             if (FAILED(hr) && !Surround51Active()) {
                 hr = FindOutputPinByMajorType(capture, MEDIATYPE_Audio, &audioPin);
             }
-            if (Surround51Active()) g_surroundCaptureRejected.store(FAILED(hr));
+            if (Surround51Active()) g_captureAudioRejected.store(FAILED(hr));
         }
         if (FAILED(hr)) {
             initializationStage = g_settings.captureAudioDeviceId.empty()
@@ -3685,7 +3692,7 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
             hr = Surround51Active()
                 ? llcv::capture_audio::FindSurroundPin(audioSource, &audioPin)
                 : FindOutputPinByMajorType(audioSource, MEDIATYPE_Audio, &audioPin);
-            if (Surround51Active()) g_surroundCaptureRejected.store(FAILED(hr));
+            if (Surround51Active()) g_captureAudioRejected.store(FAILED(hr));
         }
         if (FAILED(hr)) break;
         g_captureAudioAvailable.store(true, std::memory_order_release);
@@ -3696,7 +3703,7 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
         selectedAudioType = llcv::capture_audio::SelectSupportedType(
             audioPin, selectedAudioFormat, &audioFormatRejection, Surround51Active());
         if (!selectedAudioType) {
-            if (Surround51Active()) g_surroundCaptureRejected.store(true);
+            if (Surround51Active()) g_captureAudioRejected.store(true);
             fwprintf(stderr, L"[audio] capture input rejected: %s\n",
                      llcv::capture_audio::DescribeRejection(
                          audioFormatRejection).c_str());
@@ -3739,12 +3746,12 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
                                     &audioGrabberOut))) break;
         if (FAILED(hr = GetFirstPin(audioNullRenderer, PINDIR_INPUT,
                                     &audioNullIn))) break;
-        if (Surround51Active()) g_surroundCaptureRejected.store(true);
+        if (Surround51Active()) g_captureAudioRejected.store(true);
         if (FAILED(hr = graph->ConnectDirect(audioPin, audioGrabberIn,
                                              selectedAudioType))) break;
         if (Surround51Active()) {
             hr = llcv::capture_audio::VerifySurroundConnection(audioGrabberIn, selectedAudioFormat);
-            g_surroundCaptureRejected.store(FAILED(hr));
+            g_captureAudioRejected.store(FAILED(hr));
             if (FAILED(hr)) break;
         }
         ReportConnectedAudioAllocator(audioGrabberIn,
@@ -3829,8 +3836,8 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
         const auto firstFrameDeadline = firstFrameStart + std::chrono::seconds(10);
         initializationStage = L"wait for first valid capture frame";
         while (g_running.load()) {
-            if (Surround51Active() && g_surroundCaptureRejected.load(std::memory_order_acquire)) {
-                initializationStage = L"5.1 capture format changed; restart required";
+            if (g_captureAudioRejected.load(std::memory_order_acquire)) {
+                initializationStage = L"capture audio format changed; restart required";
                 hr = VFW_E_TYPE_NOT_ACCEPTED;
                 initialized = false;
                 break;
@@ -3843,6 +3850,13 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
             }
             // Drain once even on timeout: publication can race the wait result.
             IMediaSample* videoSample = latest.TakeLatest(arrivalUs);
+            if (FAILED(latest.FormatFailure())) {
+                SafeRelease(videoSample);
+                initializationStage = L"capture video format changed or could not be verified; restart required";
+                hr = latest.FormatFailure();
+                initialized = false;
+                break;
+            }
             if (!videoSample) {
                 if (StartupInputWaitExpired(receivedAnyFrame,
                         std::chrono::steady_clock::now(), firstFrameDeadline)) {
@@ -3880,6 +3894,15 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
                 }
                 g_overlayGeneration.fetch_add(1,
                                                std::memory_order_relaxed);
+                // Output/device rebuild can outlast a capture interval. Upload
+                // the freshest available input, not the frame taken before it.
+                latest.RefreshAfterOutputReset(videoSample, arrivalUs);
+                if (FAILED(latest.FormatFailure())) {
+                    SafeRelease(videoSample);
+                    hr = latest.FormatFailure();
+                    initialized = false;
+                    break;
+                }
             }
             BYTE* sampleData = nullptr;
             IMFMediaBuffer* decodedBuffer = nullptr;
@@ -3903,8 +3926,8 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
                     DWORD maximum = 0;
                     DWORD current = 0;
                     hr = decodedBuffer->Lock(&sampleData, &maximum, &current);
-                    if (SUCCEEDED(hr) && sampleData && current != 0 &&
-                        compressedDecoder.stride() > 0) {
+                    if (SUCCEEDED(hr) && sampleData &&
+                        compressedDecoder.validOutputBuffer(maximum, current)) {
                         renderer.upload(sampleData,
                                         static_cast<UINT32>(
                                             compressedDecoder.stride()));
@@ -3917,6 +3940,8 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
                 hr = videoSample->GetPointer(&sampleData);
                 if (SUCCEEDED(hr) && sampleData) {
                     renderer.upload(sampleData, stride);
+                } else if (SUCCEEDED(hr)) {
+                    hr = E_POINTER;
                 }
             }
             videoSample->Release();
@@ -3965,6 +3990,12 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
         control->Stop();
     } while (false);
 
+    if (resources.latestVideoSample && FAILED(resources.latestVideoSample->FormatFailure())) {
+        g_captureVideoRejected.store(true, std::memory_order_release);
+        hr = resources.latestVideoSample->FormatFailure();
+        initialized = false;
+        initializationStage = L"capture video format changed or could not be verified; restart required";
+    }
     if (!initialized) {
         const HRESULT failure = FAILED(hr) ? hr : E_FAIL;
         g_captureFailureHr.store(failure, std::memory_order_release);
@@ -4937,10 +4968,10 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
             state->videoCombo, CB_GETCURSEL, 0, 0);
         const LRESULT presentationIndex = SendMessageW(
             state->presentationCombo, CB_GETCURSEL, 0, 0);
-        if (presentationIndex == 2 &&
-            SelectedPixelFormat(state) == VideoPixelFormat::P010 &&
-            SendMessageW(state->forceHdr10Check, BM_GETCHECK, 0, 0) == BST_CHECKED &&
-            SendMessageW(state->audioOnlyCheck, BM_GETCHECK, 0, 0) != BST_CHECKED) {
+        if (!llcv::presentation::SupportsCapture(
+                presentationIndex == 2 ? PresentationMode::Compatibility : PresentationMode::VSync,
+                SelectedPixelFormat(state),
+                SendMessageW(state->audioOnlyCheck, BM_GETCHECK, 0, 0) == BST_CHECKED)) {
             MessageBoxW(hwnd, IsEnglishUi()
                 ? L"HDR10 cannot use compatibility output. Select Immediate or VSync, "
                   L"or use an SDR capture format for this comparison."
@@ -7747,7 +7778,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
     const bool shiftLaunch = !smokeTest &&
         (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     const bool showStartupSettings = !smokeTest && !exclusiveProbe &&
-        (forceSettings || shiftLaunch || !g_settings.skipStartupSettings);
+        (forceSettings || shiftLaunch || !g_settings.skipStartupSettings ||
+         !llcv::presentation::SupportsCapture(g_settings.presentationMode,
+                                               g_settings.pixelFormat, g_settings.audioOnly));
     if (showStartupSettings &&
         !ShowSettingsDialog(hInst, forceSettings)) return 0;
     if (g_settings.audioOnly) {
@@ -7982,7 +8015,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
     // Freeze queue width before either audio thread (or its resampler) exists.
     g_ring.ConfigureChannels(g_settings.consoleSurround51 &&
         g_settings.audioMode == AudioMode::WasapiShared ? 6 : 2);
-    g_surroundCaptureRejected.store(false, std::memory_order_release);
+    g_captureAudioRejected.store(false, std::memory_order_release);
     std::thread renderThread(AudioRenderThread);
     std::atomic<bool> smokeCaptureFailed{false};
     std::thread unifiedCaptureThread([hwnd, smokeTest, &smokeCaptureFailed]() {
@@ -7997,10 +8030,22 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
                          ? L"[capture] audio-only graph stopped.\n"
                          : L"[capture] single capture graph stopped.\n");
             if (!smokeTest) {
-                if (g_surroundCaptureRejected.load(std::memory_order_acquire)) {
+                if (g_captureVideoRejected.load(std::memory_order_acquire)) {
+                    MessageBoxW(hwnd, IsEnglishUi()
+                        ? L"The capture video format changed or could not be verified. Playback was stopped to avoid interpreting frames with the wrong layout or colors.\n\nCheck the console HDR and capture format settings, then start capture again. Attach the diagnostic log if this repeats."
+                        : L"캡처 영상 형식이 변경되었거나 확인할 수 없어 잘못된 화면·색상 출력을 막기 위해 재생을 중단했습니다.\n\n콘솔의 HDR과 캡처 형식 설정을 확인한 뒤 다시 시작해 주세요. 반복되면 진단 로그를 첨부해 주세요.",
+                        L"Low Latency Capture Viewer", MB_OK | MB_ICONERROR);
+                    g_restartToSettings.store(true, std::memory_order_release);
+                } else if (Surround51Active() && g_captureAudioRejected.load(std::memory_order_acquire)) {
                     MessageBoxW(hwnd, IsEnglishUi()
                         ? L"The capture device did not provide a compatible 48 kHz 5.1/7.1 PCM input.\n\nSet the console to 5.1 LPCM and use a multichannel capture input. If unsupported, turn off Console LPCM 5.1 and select stereo on the console. Dolby/DTS bitstreams are not supported."
                         : L"캡처 장치에서 호환되는 48 kHz 5.1/7.1 PCM 입력을 받지 못했습니다.\n\n콘솔을 5.1 LPCM으로 설정하고 다채널 캡처 입력을 선택하세요. 지원하지 않는 장치라면 콘솔 LPCM 5.1 옵션을 끄고 콘솔도 스테레오로 바꿔 주세요. Dolby/DTS 비트스트림은 지원하지 않습니다.",
+                        L"Low Latency Capture Viewer", MB_OK | MB_ICONERROR);
+                    g_restartToSettings.store(true, std::memory_order_release);
+                } else if (g_captureAudioRejected.load(std::memory_order_acquire)) {
+                    MessageBoxW(hwnd, IsEnglishUi()
+                        ? L"The capture audio format changed during playback. Playback was stopped to prevent incorrect audio.\n\nCheck the console and capture device audio settings, then start capture again. Attach the diagnostic log if this repeats."
+                        : L"재생 중 캡처 오디오 형식이 변경되어 잘못된 음성 출력을 막기 위해 재생을 중단했습니다.\n\n콘솔과 캡처 장치의 오디오 설정을 확인한 뒤 다시 시작해 주세요. 반복되면 진단 로그를 첨부해 주세요.",
                         L"Low Latency Capture Viewer", MB_OK | MB_ICONERROR);
                     g_restartToSettings.store(true, std::memory_order_release);
                 } else if (g_settings.audioOnly) {
@@ -8074,8 +8119,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
                     static_cast<VideoPixelFormat>(g_activePixelFormat.load()) == VideoPixelFormat::P010) {
                     const wchar_t* detail = g_hdrFailureDetail.load(std::memory_order_acquire);
                     swprintf_s(message, IsEnglishUi()
-                        ? L"P010/HDR10 output is not supported by the current input or output path.\n\n%s\n\nHDR10 requires PQ / BT.2020 / Limited input and a supported Flip output conversion. HLG, Full-range HDR and Blt HDR are not supported. Enable Windows HDR on the viewing monitor. Attach the diagnostic log to report this issue."
-                        : L"현재 입력 형식 또는 출력 경로에서 P010/HDR10을 지원하지 않습니다.\n\n%s\n\nHDR10은 PQ / BT.2020 / Limited 입력과 변환을 지원하는 Flip 출력이 필요합니다. HLG, Full-range HDR, Blt HDR은 지원하지 않습니다. 표시할 모니터의 Windows HDR을 켜고, 문제가 계속되면 진단 로그를 첨부해 주세요.",
+                        ? L"P010/HDR10 output is not supported by the current input or output path.\n\n%s\n\nP010 is HDR-only; select NV12/YUY2 for SDR input. HDR10 requires PQ / BT.2020 / Limited input and a supported Flip output conversion. HLG, Full-range HDR and Blt HDR are not supported. Enable Windows HDR on the viewing monitor. Attach the diagnostic log to report this issue."
+                        : L"현재 입력 형식 또는 출력 경로에서 P010/HDR10을 지원하지 않습니다.\n\n%s\n\nP010은 HDR 전용이며 SDR 입력은 NV12/YUY2를 선택하세요. HDR10은 PQ / BT.2020 / Limited 입력과 변환을 지원하는 Flip 출력이 필요합니다. HLG, Full-range HDR, Blt HDR은 지원하지 않습니다. 표시할 모니터의 Windows HDR을 켜고, 문제가 계속되면 진단 로그를 첨부해 주세요.",
                         detail ? detail : (IsEnglishUi() ? L"Check the HDR conversion stage in the diagnostic log."
                                                         : L"진단 로그의 HDR 변환 단계에서 상세 원인을 확인할 수 있습니다."));
                 } else if (failure == HRESULT_FROM_WIN32(ERROR_TIMEOUT)) {

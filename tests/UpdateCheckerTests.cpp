@@ -20,6 +20,14 @@ void TestReleaseResponses() {
     using namespace llcv::update;
     CheckResult result;
     Expect(ParseLatestReleaseResponse(
+               R"({"tag_name":"v1.3.0","assets":[{"browser_download_url":"https://github.com/seria-aa/LowLatencyCaptureViewer/releases/download/v1.3.0/LowLatencyCaptureViewer_v1.3.0_Setup.exe"}]})",
+               L"v1.2.12", result) && result.success && result.newer &&
+               result.installerUrl == L"https://github.com/seria-aa/LowLatencyCaptureViewer/releases/download/v1.3.0/LowLatencyCaptureViewer_v1.3.0_Setup.exe",
+           "v1.2.12 users discover the v1.3.0 installer");
+    Expect(!IsNewerReleaseTag(L"v1.2.12", L"v1.3.0") &&
+           !IsNewerReleaseTag(L"v1.3.0", L"v1.3.0"),
+           "v1.3.0 does not offer an older or equal release");
+    Expect(ParseLatestReleaseResponse(
                R"({"tag_name":"v1.2.4","assets":[]})", L"v1.2.3", result) &&
                result.success && result.newer && result.installerUrl.empty(),
            "a newer release without an installer must not be called up to date");

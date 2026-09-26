@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <limits>
 #include <initializer_list>
+#include <string_view>
 using namespace llcv;
 static void Require(bool value, const char* text) {
     if (!value) { std::fprintf(stderr, "FAIL: %s\n", text); std::exit(1); }
@@ -17,7 +18,15 @@ int main() {
     Require(!hdr::DecodeSdrWhiteLevel(0, white) && white == 1600.0f, "zero query leaves fallback intact");
     Require(!hdr::DecodeSdrWhiteLevel((std::numeric_limits<ULONG>::max)(), white), "invalid query cannot exceed PQ range");
     video::CaptureColorMetadata m{};
-    Require(hdr::ResolveInput(m, false).kind == hdr::InputKind::Unknown, "absent != HDR");
+    const auto fallback = hdr::ResolveInput(m, false);
+    Require(fallback.kind == hdr::InputKind::Hdr10 && fallback.assumed && !fallback.chromaOverridden,
+        "untagged P010 uses an explicit HDR assumption, not a metadata detection");
+    Require(fallback.colorSpace == DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_TOPLEFT_P2020,
+        "untagged P010 retains limited/top-left HDR10 defaults");
+    m.present = true;
+    Require(hdr::ResolveInput(m, false).kind == hdr::InputKind::Hdr10 &&
+            hdr::ResolveInput(m, false).assumed, "present flags without transfer/gamut use the same default");
+    m = {};
     Require(hdr::ResolveInput(m, true).kind == hdr::InputKind::Hdr10, "explicit force");
     m.present = true; m.transferFunction = 15; m.primaries = 9;
     m.transferMatrix = 4; m.nominalRange = 2; m.chromaSubsampling = 7;
@@ -54,6 +63,23 @@ int main() {
     Require(hdr::ResolveInput(hlg, false).kind == hdr::InputKind::Unsupported, "HLG is not SDR or PQ");
     auto incomplete = m; incomplete.transferFunction = 0;
     Require(hdr::ResolveInput(incomplete, false).kind == hdr::InputKind::Unsupported, "2020 alone not SDR");
+    for (UINT transfer : {1u, 2u, 4u, 5u, 6u, 7u, 8u}) {
+        video::CaptureColorMetadata taggedSdr{};
+        taggedSdr.present = true; taggedSdr.transferFunction = transfer;
+        Require(hdr::ResolveInput(taggedSdr, false).kind == hdr::InputKind::Sdr,
+            "explicit SDR transfer is never replaced by P010 default");
+        Require(std::wstring_view(hdr::ResolveInput(taggedSdr, false).reason).find(L"NV12/YUY2") != std::wstring_view::npos,
+            "rejected SDR P010 has actionable format guidance");
+    }
+    for (UINT range = 0; range < 8; ++range)
+    for (UINT chroma = 0; chroma < 16; ++chroma) {
+        video::CaptureColorMetadata untagged{};
+        untagged.present = true; untagged.nominalRange = range; untagged.chromaSubsampling = chroma;
+        const auto automatic = hdr::ResolveInput(untagged, false);
+        const auto forced = hdr::ResolveInput(untagged, true);
+        Require(automatic.kind == forced.kind && automatic.colorSpace == forced.colorSpace,
+            "automatic P010 default preserves all range/chroma guards of explicit HDR");
+    }
     video::CaptureColorMetadata sdr{}; sdr.present = true; sdr.transferFunction = 5;
     Require(hdr::ResolveInput(hdr::ConnectedMetadata(m, sdr), false).kind == hdr::InputKind::Sdr,
         "final SDR transfer replaces stale HDR tuple");
@@ -100,7 +126,7 @@ int main() {
     Require(!hdr::ResolveInput(m, false).chromaOverridden,
         "Auto does not claim a manual override");
     // Cross-field regression: a placement override must ONLY relax chroma.
-    // Unknown/SDR/HLG, contradictory gamut, and unsupported ranges retain the
+    // Explicit SDR/HLG, contradictory gamut, and unsupported ranges retain the
     // same independent HDR gate; no state may leak between consecutive calls.
     unsigned combinations = 0;
     for (UINT transfer : {0u, 5u, 15u, 16u, 99u})
@@ -116,7 +142,7 @@ int main() {
         tuple.primaries = primaries; tuple.transferMatrix = matrix;
         tuple.nominalRange = range; tuple.chromaSubsampling = chroma;
         const bool manual = mode != hdr::ChromaLocation::Auto;
-        const bool supported = (force || transfer == 15) &&
+        const bool supported = (force || transfer == 15 || (!transfer && !primaries && !matrix)) &&
             (force || ((primaries == 0 || primaries == 9) &&
                        (matrix == 0 || matrix == 4 || matrix == 5))) &&
             (range == 0 || range == 2) &&
@@ -137,8 +163,10 @@ int main() {
         const video::CaptureColorMetadata absent{};
         Require(hdr::ResolveInput(absent, true).kind == hdr::InputKind::Hdr10,
             "GC573 absent metadata plus force is an explicit assumption");
-        Require(hdr::ResolveInput(absent, false).kind == hdr::InputKind::Unknown,
-            "turning force off must not retain prior HDR interpretation");
+        Require(hdr::ResolveInput(absent, false).kind == hdr::InputKind::Hdr10 &&
+                hdr::ResolveInput(absent, false).assumed &&
+                hdr::ResolveInput(absent, false).reason != hdr::ResolveInput(absent, true).reason,
+            "turning force off restores the independently logged automatic P010 assumption");
         const auto toSdr = hdr::ConnectedMetadata(m, sdr);
         Require(toSdr.primaries == 0 && toSdr.transferMatrix == 0 &&
                 hdr::ResolveInput(toSdr, false).kind == hdr::InputKind::Sdr,
