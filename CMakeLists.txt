@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(LowLatencyCaptureViewer VERSION 1.2.12 LANGUAGES CXX)
+project(LowLatencyCaptureViewer VERSION 1.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,6 +19,8 @@ add_executable(LowLatencyCaptureViewer
     src/capture/AudioSampleGrabber.cpp
     src/capture/DirectShowGraphResources.cpp
     src/capture/LatestVideoSample.cpp
+    src/capture/HardwareToneMapping.cpp
+    src/capture/ElgatoHidToneMapping.cpp
     src/diagnostics/Logger.cpp
     src/diagnostics/AudioErrorHistory.cpp
     src/settings/SettingsStore.cpp
@@ -45,17 +47,9 @@ target_include_directories(LowLatencyCaptureViewer PRIVATE
 
 option(LLCV_HDR_FRAME_AUDIT "Build a private F8 single-frame HDR diagnostic (not for release)" OFF)
 option(LLCV_HDR_SCRGB_PROTOTYPE "Private direct P010 shader/scRGB comparison (not for release)" OFF)
-option(LLCV_EXPERIMENTAL_HARDWARE_TONEMAP "Private vendor HDR control experiment (not for release)" OFF)
 if (LLCV_HDR_SCRGB_PROTOTYPE)
     set(LLCV_HDR_FRAME_AUDIT ON)
     target_compile_definitions(LowLatencyCaptureViewer PRIVATE LLCV_HDR_SCRGB_PROTOTYPE)
-endif()
-if (LLCV_EXPERIMENTAL_HARDWARE_TONEMAP)
-    if (NOT LLCV_HDR_FRAME_AUDIT)
-        message(FATAL_ERROR "Experimental vendor HDR control requires LLCV_HDR_FRAME_AUDIT=ON; it must not enter a release build.")
-    endif()
-    target_sources(LowLatencyCaptureViewer PRIVATE src/capture/HardwareToneMapping.cpp)
-    target_compile_definitions(LowLatencyCaptureViewer PRIVATE LLCV_EXPERIMENTAL_HARDWARE_TONEMAP)
 endif()
 if (LLCV_HDR_FRAME_AUDIT)
     target_compile_definitions(LowLatencyCaptureViewer PRIVATE LLCV_HDR_FRAME_AUDIT)
@@ -105,6 +99,8 @@ target_link_libraries(LowLatencyCaptureViewer PRIVATE
     mfuuid
     advapi32
     winhttp
+    hid
+    setupapi
 )
 
 if (MSVC)
@@ -113,6 +109,49 @@ endif()
 
 include(CTest)
 if (BUILD_TESTING)
+    add_executable(MjpegDecoderTests tests/MjpegDecoderTests.cpp src/video/VideoColor.cpp)
+    target_include_directories(MjpegDecoderTests PRIVATE src)
+    target_compile_definitions(MjpegDecoderTests PRIVATE
+        UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(MjpegDecoderTests PRIVATE mfplat mfuuid ole32 strmiids windowscodecs)
+    set_target_properties(MjpegDecoderTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_property(SOURCE tests/MjpegDecoderTests.cpp APPEND PROPERTY
+        OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/video/MjpegDecoder.cpp")
+    if (MSVC)
+        target_compile_options(MjpegDecoderTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+    endif()
+    add_test(NAME MjpegDecoderTests COMMAND MjpegDecoderTests)
+    add_test(NAME MjpegNativeDecoderTests COMMAND MjpegDecoderTests --native)
+    set_tests_properties(MjpegNativeDecoderTests PROPERTIES TIMEOUT 30)
+    add_executable(WasapiInitializationTests tests/WasapiInitializationTests.cpp
+        src/audio/AudioDeviceCapabilities.cpp)
+    target_include_directories(WasapiInitializationTests PRIVATE src)
+    target_compile_definitions(WasapiInitializationTests PRIVATE
+        UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(WasapiInitializationTests PRIVATE ole32 oleaut32 uuid avrt)
+    set_target_properties(WasapiInitializationTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_property(SOURCE tests/WasapiInitializationTests.cpp APPEND PROPERTY
+        OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/WasapiOutput.cpp")
+    set_property(SOURCE tests/AudioCallbackTests.cpp APPEND PROPERTY
+        OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/AsioOutput.cpp")
+    if (MSVC)
+        target_compile_options(WasapiInitializationTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+    endif()
+    add_test(NAME WasapiInitializationTests COMMAND WasapiInitializationTests)
+    add_executable(WasapiRenderTests tests/WasapiRenderTests.cpp
+        src/audio/AudioDeviceCapabilities.cpp)
+    target_include_directories(WasapiRenderTests PRIVATE src)
+    target_compile_definitions(WasapiRenderTests PRIVATE
+        UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(WasapiRenderTests PRIVATE ole32 oleaut32 uuid avrt)
+    set_target_properties(WasapiRenderTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_property(SOURCE tests/WasapiRenderTests.cpp APPEND PROPERTY
+        OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/audio/WasapiOutput.cpp")
+    if (MSVC)
+        target_compile_options(WasapiRenderTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+    endif()
+    add_test(NAME WasapiRenderTests COMMAND WasapiRenderTests)
+    set_tests_properties(WasapiRenderTests MjpegDecoderTests PROPERTIES TIMEOUT 30)
     add_executable(SurroundAudioTests tests/SurroundAudioTests.cpp
         src/capture/AudioSampleGrabber.cpp
         src/audio/CaptureAudioFormat.cpp src/audio/PcmPipeline.cpp src/audio/AudioMix.cpp)
@@ -124,17 +163,20 @@ if (BUILD_TESTING)
         target_compile_options(SurroundAudioTests PRIVATE /W4 /EHsc /permissive- /utf-8)
     endif()
     add_test(NAME SurroundAudioTests COMMAND SurroundAudioTests)
-    add_executable(HardwareToneMappingTests tests/HardwareToneMappingTests.cpp
-        src/capture/HardwareToneMapping.cpp)
-    target_include_directories(HardwareToneMappingTests PRIVATE src)
-    target_compile_definitions(HardwareToneMappingTests PRIVATE
-        UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
-    target_link_libraries(HardwareToneMappingTests PRIVATE strmiids uuid)
-    set_target_properties(HardwareToneMappingTests PROPERTIES WIN32_EXECUTABLE FALSE)
-    if (MSVC)
-        target_compile_options(HardwareToneMappingTests PRIVATE /W4 /EHsc /permissive- /utf-8)
-    endif()
-    add_test(NAME HardwareToneMappingTests COMMAND HardwareToneMappingTests)
+    # Fake COM/HID only: never open capture devices in regression tests.
+    foreach(tonemap_test HardwareToneMappingTests VendorUsbToneMappingTests)
+        add_executable(${tonemap_test} tests/${tonemap_test}.cpp
+            src/capture/HardwareToneMapping.cpp src/capture/ElgatoHidToneMapping.cpp)
+        target_include_directories(${tonemap_test} PRIVATE src)
+        target_compile_definitions(${tonemap_test} PRIVATE
+            UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN WINVER=0x0A00 _WIN32_WINNT=0x0A00)
+        target_link_libraries(${tonemap_test} PRIVATE strmiids uuid hid setupapi)
+        set_target_properties(${tonemap_test} PROPERTIES WIN32_EXECUTABLE FALSE)
+        if (MSVC)
+            target_compile_options(${tonemap_test} PRIVATE /W4 /EHsc /permissive- /utf-8)
+        endif()
+        add_test(NAME ${tonemap_test} COMMAND ${tonemap_test})
+    endforeach()
     add_executable(HdrPolicyTests tests/HdrPolicyTests.cpp)
     target_include_directories(HdrPolicyTests PRIVATE src)
     target_compile_definitions(HdrPolicyTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
@@ -164,11 +206,12 @@ if (BUILD_TESTING)
     set_tests_properties(SettingsViewTests PROPERTIES TIMEOUT 120)
     add_executable(LatestVideoSampleTests tests/LatestVideoSampleTests.cpp
         src/capture/LatestVideoSample.cpp
+        src/video/DirectShowVideoFormat.cpp
         src/capture/DirectShowGraphResources.cpp)
     target_include_directories(LatestVideoSampleTests PRIVATE src)
     target_compile_definitions(LatestVideoSampleTests PRIVATE
         UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
-    target_link_libraries(LatestVideoSampleTests PRIVATE ole32 strmiids uuid)
+    target_link_libraries(LatestVideoSampleTests PRIVATE ole32 strmiids uuid mfuuid user32)
     set_target_properties(LatestVideoSampleTests PROPERTIES WIN32_EXECUTABLE FALSE)
     if (MSVC)
         target_compile_options(LatestVideoSampleTests PRIVATE /W4 /EHsc /permissive- /utf-8)

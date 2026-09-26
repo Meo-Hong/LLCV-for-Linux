@@ -44,7 +44,7 @@ const wchar_t* Translate(const wchar_t* korean, bool useEnglish) {
         {L"지원 포맷 없음", L"No supported format"},
         {L"자동 선택 (NV12 우선 · 권장)", L"Auto select (NV12 first · recommended)"},
         {L"P010 10-bit HDR10 (실험적)", L"P010 10-bit HDR10 (experimental)"},
-        {L"P010 HDR10 강제 (메타데이터 없을 때 · 실험적)", L"Force P010 HDR10 (when metadata is missing · experimental)"},
+        {L"P010 HDR10 강제 (색 정보가 틀릴 때 · 실험적)", L"Force P010 HDR10 (incorrect color metadata · experimental)"},
         {L"HDR 색차 배치", L"HDR chroma placement"},
         {L"Top-left (호환성 해석)", L"Top-left (compatibility)"},
         {L"Left (호환성 해석)", L"Left (compatibility)"},

@@ -31,6 +31,13 @@ public:
     HRESULT decode(IMediaSample* directShowSample, IMFMediaBuffer** output);
 
     LONG stride() const { return stride_; }
+    bool validOutputBuffer(DWORD capacity, DWORD length) const {
+        // NV12 upload reads the full luma and interleaved chroma planes.
+        return width_ > 0 && height_ > 0 && stride_ >= width_ &&
+            length <= capacity && static_cast<uint64_t>(length) >=
+                static_cast<uint64_t>(stride_) *
+                    (static_cast<uint64_t>(height_) + (static_cast<uint64_t>(height_) + 1) / 2);
+    }
     video_color::Configuration colorConfiguration() const {
         return colorConfiguration_;
     }

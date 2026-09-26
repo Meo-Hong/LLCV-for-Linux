@@ -2,6 +2,7 @@
 
 #include "capture/SampleGrabberCompat.h"
 #include "diagnostics/LogSink.h"
+#include "video/DirectShowVideoFormat.h"
 
 #include <atomic>
 #include <cstddef>
@@ -31,7 +32,11 @@ public:
 
     void Push(IMediaSample* sample);
     IMediaSample* TakeLatest(int64_t& arrivalMicroseconds);
+    // Only after slow output reconfiguration: refresh without waiting/queueing.
+    void RefreshAfterOutputReset(IMediaSample*& current, int64_t& arrivalMicroseconds);
     uint64_t RejectedSamples() const { return rejectedSamples_.load(std::memory_order_relaxed); }
+    void RejectFormat(HRESULT failure);
+    HRESULT FormatFailure() const { return formatFailure_.load(std::memory_order_acquire); }
 
 private:
     bool TrackingActive() const;
@@ -44,12 +49,14 @@ private:
     VideoSampleTelemetry telemetry_{};
     // Updated only on invalid input, not on the normal per-frame path.
     std::atomic<uint64_t> rejectedSamples_{0};
+    std::atomic<HRESULT> formatFailure_{S_OK};
 };
 
 class VideoSampleGrabberCallback final : public ISampleGrabberCB {
 public:
     explicit VideoSampleGrabberCallback(
-        LatestVideoSample* sampleSlot, diagnostics::LogSink log = nullptr);
+        LatestVideoSample* sampleSlot, diagnostics::LogSink log = nullptr,
+        video::VideoSampleFormat format = {});
 
     STDMETHODIMP QueryInterface(REFIID id, void** object) override;
     STDMETHODIMP_(ULONG) AddRef() override;
@@ -61,6 +68,7 @@ public:
 private:
     std::atomic<ULONG> references_{1};
     LatestVideoSample* sampleSlot_ = nullptr;
+    const video::VideoSampleFormat format_;
 };
 
 }  // namespace llcv::capture

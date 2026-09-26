@@ -4,6 +4,10 @@
 #include <cstdio>
 #include <thread>
 #include <dvdmedia.h>
+#include <mfapi.h>
+#include <chrono>
+#include <algorithm>
+#include <array>
 
 static std::atomic<unsigned> liveSamples{0};
 static unsigned failures = 0;
@@ -15,9 +19,13 @@ static void Check(bool ok, const char* message) {
 class Sample final : public IMediaSample {
 public:
     explicit Sample(long bytes, unsigned sequence = 0)
-        : bytes_(bytes), sequence_(sequence) { ++liveSamples; }
+        : bytes_(bytes), capacity_(bytes), sequence_(sequence) { ++liveSamples; }
     ULONG References() const { return refs_.load(); }
     unsigned Sequence() const { return sequence_; }
+    const AM_MEDIA_TYPE* dynamicType = nullptr;
+    HRESULT typeResult = S_FALSE;
+    unsigned typeQueries = 0;
+    HANDLE sizeEntered = nullptr, sizeResume = nullptr;
     void GateSurfaceProbe(HANDLE entered, HANDLE resume) {
         probeEntered_ = entered; probeResume_ = resume;
     }
@@ -43,7 +51,13 @@ public:
         return refs;
     }
     STDMETHODIMP GetPointer(BYTE**) override { return E_NOTIMPL; }
-    STDMETHODIMP_(long) GetSize() override { return bytes_; }
+    STDMETHODIMP_(long) GetSize() override {
+        if (sizeEntered) {
+            SetEvent(sizeEntered);
+            WaitForSingleObject(sizeResume, 5000);
+        }
+        return capacity_;
+    }
     STDMETHODIMP GetTime(REFERENCE_TIME*, REFERENCE_TIME*) override { return E_NOTIMPL; }
     STDMETHODIMP SetTime(REFERENCE_TIME*, REFERENCE_TIME*) override { return E_NOTIMPL; }
     STDMETHODIMP IsSyncPoint() override { return S_OK; }
@@ -52,7 +66,25 @@ public:
     STDMETHODIMP SetPreroll(BOOL) override { return S_OK; }
     STDMETHODIMP_(long) GetActualDataLength() override { return bytes_; }
     STDMETHODIMP SetActualDataLength(long bytes) override { bytes_ = bytes; return S_OK; }
-    STDMETHODIMP GetMediaType(AM_MEDIA_TYPE**) override { return E_NOTIMPL; }
+    STDMETHODIMP GetMediaType(AM_MEDIA_TYPE** type) override {
+        ++typeQueries;
+        if (!type) return E_POINTER;
+        *type = nullptr;
+        if (dynamicType) {
+            auto* copy = static_cast<AM_MEDIA_TYPE*>(CoTaskMemAlloc(sizeof(AM_MEDIA_TYPE)));
+            if (!copy) return E_OUTOFMEMORY;
+            *copy = *dynamicType;
+            copy->pbFormat = nullptr;
+            if (dynamicType->pbFormat && dynamicType->cbFormat) {
+                copy->pbFormat = static_cast<BYTE*>(CoTaskMemAlloc(dynamicType->cbFormat));
+                if (!copy->pbFormat) { CoTaskMemFree(copy); return E_OUTOFMEMORY; }
+                memcpy(copy->pbFormat, dynamicType->pbFormat, dynamicType->cbFormat);
+            }
+            if (copy->pUnk) copy->pUnk->AddRef();
+            *type = copy;
+        }
+        return typeResult;
+    }
     STDMETHODIMP SetMediaType(AM_MEDIA_TYPE*) override { return E_NOTIMPL; }
     STDMETHODIMP IsDiscontinuity() override { return S_FALSE; }
     STDMETHODIMP SetDiscontinuity(BOOL) override { return S_OK; }
@@ -65,6 +97,7 @@ private:
     }
     std::atomic<ULONG> refs_{1};
     long bytes_;
+    const long capacity_;
     const unsigned sequence_;
     HANDLE probeEntered_ = nullptr, probeResume_ = nullptr;
     void (*destructionObserver_)(void*) = nullptr;
@@ -293,9 +326,13 @@ static void TestPartialRunTeardown(bool explicitReset) {
 }
 
 #include "VideoMailboxStress.inl"
+#include "VideoSampleFormatTests.inl"
 
 int main(int argc, char** argv) {
     if (argc == 2 && std::string(argv[1]) == "--stress") return RunMailboxStress();
+    if (argc == 2 && std::string(argv[1]) == "--format") { TestVideoSampleChanges(); return failures ? 1 : 0; }
+    if (argc == 2 && std::string(argv[1]) == "--benchmark") return BenchmarkSampleGuard();
+    TestVideoSampleChanges();
     using namespace llcv::capture;
     HANDLE ready = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     Check(ready != nullptr, "create test frame event");
@@ -304,6 +341,14 @@ int main(int argc, char** argv) {
     {
         LatestVideoSample slot(100, ready, {&start, &captured, &replaced});
         int64_t arrival = -1;
+        for (long invalidLength : {0L, -1L, 101L, LONG_MAX}) {
+            auto* malformed = new Sample(100);
+            malformed->SetActualDataLength(invalidLength);
+            slot.Push(malformed);
+            Check(malformed->References() == 1 && slot.TakeLatest(arrival) == nullptr &&
+                  captured == 0, "invalid raw frame length is not retained or counted");
+            malformed->Release();
+        }
         auto* shortSample = new Sample(99);
         slot.Push(shortSample);
         Check(shortSample->References() == 1, "rejected frame does not acquire a COM reference");

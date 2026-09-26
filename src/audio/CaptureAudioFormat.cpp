@@ -208,12 +208,20 @@ HRESULT FindSurroundPin(IBaseFilter* filter, IPin** output) {
 }
 
 bool MatchesSurroundFormat(const AM_MEDIA_TYPE& type, const Format& expected) noexcept {
-    const auto result = Classify(type, true);
+    return expected.path == Path::ConvertToSurround51 && MatchesFormat(type, expected);
+}
+
+bool MatchesFormat(const AM_MEDIA_TYPE& type, const Format& expected) noexcept {
+    const bool surround = expected.path == Path::ConvertToSurround51;
+    const auto result = Classify(type, surround);
     const auto& actual = result.format;
-    return result.supported && expected.path == Path::ConvertToSurround51 &&
+    // Mono/stereo conversion uses fixed channel order and accepts equivalent
+    // WAVEFORMATEX/EXTENSIBLE labels; surround routing requires an exact mask.
+    return result.supported && actual.path == expected.path &&
         actual.encoding == expected.encoding && actual.containerBits == expected.containerBits &&
         actual.validBits == expected.validBits && actual.channels == expected.channels &&
-        actual.blockAlign == expected.blockAlign && actual.channelMask == expected.channelMask;
+        actual.blockAlign == expected.blockAlign &&
+        (!surround || actual.channelMask == expected.channelMask);
 }
 
 HRESULT VerifySurroundConnection(IPin* input, const Format& expected) {

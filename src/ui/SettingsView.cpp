@@ -470,11 +470,13 @@ const wchar_t* SettingsHelpText(SettingsHelpTopic topic, bool english) {
                    L"the capture audio is genuinely too quiet.";
         case SettingsHelpTopic::ForceHdr10:
             return L"Force HDR10 output\n\n"
-                   L"Use this only when the source is confirmed to be HDR and the capture driver does not expose "
-                   L"color metadata. It treats P010 as BT.2020/PQ and enables the HDR10 swap chain.\n\n"
-                   L"If the source is SDR, or the monitor is not handling HDR correctly, colors can look strongly "
-                   L"oversaturated or otherwise wrong. Turn it off in that case. This does not add a frame queue; "
-                   L"it only changes the output color interpretation.";
+                   L"P010 without transfer/gamut metadata already defaults to BT.2020/PQ HDR10; "
+                   L"you do not need to enable this option for missing metadata alone. Explicit SDR metadata "
+                   L"is rejected when this option is off: P010 is HDR-only. Select NV12/YUY2 for SDR.\n\n"
+                   L"Use this override only for confirmed PQ/BT.2020 input with incorrect or incomplete color "
+                   L"metadata. Range and chroma validation still apply. It does not convert SDR into HDR. "
+                   L"For an SDR source without color metadata, select NV12/YUY2 instead. Enable Windows HDR "
+                   L"on the viewing monitor. No frame queue is added.";
         case SettingsHelpTopic::HdrChroma:
             return L"HDR chroma placement\n\n"
                    L"Auto follows the device metadata and rejects unsupported placements. Use Top-left or Left "
@@ -483,7 +485,7 @@ const wchar_t* SettingsHelpText(SettingsHelpTopic topic, bool english) {
                    L"This overrides the declared chroma placement; it does not repair genuinely staggered Cb/Cr "
                    L"planes or guarantee that placement 6 is supported. It does not change brightness, saturation, "
                    L"PQ interpretation or range validation, and adds no frame queue or processing pass. "
-                   L"For missing HDR metadata, Force HDR10 is a separate setting.";
+                   L"P010 without transfer/gamut metadata already defaults to PQ/BT.2020.";
         case SettingsHelpTopic::MjpegColor:
             return L"MJPEG color interpretation\n\n"
                    L"Auto uses decoder metadata first, then DirectShow metadata. If neither identifies "
@@ -526,10 +528,12 @@ const wchar_t* SettingsHelpText(SettingsHelpTopic topic, bool english) {
                L"소리가 이미 큰 경우에는 피크가 잘려 왜곡될 수 있으니, 실제로 음량이 부족할 때만 켜세요.";
     case SettingsHelpTopic::ForceHdr10:
         return L"HDR10 강제 출력 안내\n\n"
-               L"캡처 드라이버가 색공간 메타데이터를 제공하지 않지만 입력이 HDR임을 확인한 경우에만 사용하세요. "
-               L"P010을 BT.2020/PQ로 처리하고 HDR10 출력으로 표시합니다.\n\n"
-               L"입력이 SDR이거나 모니터의 HDR 처리가 맞지 않으면 색상이 과포화되거나 부정확해질 수 있습니다. "
-               L"그 경우 이 옵션을 끄세요. 프레임 큐를 추가하지 않으므로 표시 지연은 늘지 않고 출력 색상 해석만 바뀝니다.";
+               L"전달 함수·색역 정보가 없는 P010은 기본적으로 BT.2020/PQ HDR10으로 해석하므로, "
+               L"정보가 없다는 이유만으로 이 옵션을 켤 필요는 없습니다. P010은 HDR 전용이므로, 끈 상태에서 SDR로 보고된 입력은 차단합니다. SDR은 NV12/YUY2를 선택하세요.\n\n"
+               L"입력이 실제 PQ/BT.2020인데 색 정보가 잘못되었거나 불완전한 경우에만 강제로 해석하세요. "
+               L"색 범위·색차 배치 검증은 유지되며 SDR을 HDR로 변환하지는 않습니다. "
+               L"색 정보가 없는 SDR 입력은 NV12/YUY2를 선택하세요. 표시 모니터의 Windows HDR을 켜야 합니다. "
+               L"프레임 큐는 추가하지 않습니다.";
     case SettingsHelpTopic::HdrChroma:
         return L"HDR 색차 배치 안내\n\n"
                L"자동은 장치 메타데이터를 따르며 지원하지 않는 배치는 차단합니다. P010 HDR 장치의 "
@@ -537,7 +541,7 @@ const wchar_t* SettingsHelpText(SettingsHelpTopic topic, bool english) {
                L"글자를 기준 화면과 비교하세요.\n\n"
                L"이 옵션은 배치 정보의 해석을 바꿉니다. 실제 Cb/Cr가 서로 어긋난 데이터를 복원하거나 "
                L"배치 값 6의 지원을 보장하지 않습니다. 밝기·채도·PQ 해석·색 범위 검증은 바꾸지 않으며 "
-               L"프레임 큐나 처리 단계를 추가하지 않습니다. HDR 메타데이터가 없다면 HDR10 강제는 별도로 설정하세요.";
+               L"프레임 큐나 처리 단계를 추가하지 않습니다. 전달 함수·색역 정보가 없는 P010은 기본적으로 PQ/BT.2020으로 해석합니다.";
     case SettingsHelpTopic::MjpegColor:
         return L"MJPEG 색상 해석 안내\n\n"
                L"자동은 디코더 메타데이터를 먼저 사용하고, 없으면 DirectShow 정보를 확인합니다. 양쪽 모두 "

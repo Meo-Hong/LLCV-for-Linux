@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 
 namespace llcv::video {
 namespace {
@@ -28,7 +29,8 @@ HRESULT MjpegDecoder::initialize(
     const CaptureColorMetadata* directShowColor,
     video_color::Override colorOverride, LogCallback logCallback) {
     reset();
-    if (width <= 0 || height <= 0 || fps <= 0) return E_INVALIDARG;
+    if (width <= 0 || height <= 0 || fps <= 0 || (width & 1) || (height & 1))
+        return E_INVALIDARG;
 
     HRESULT hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
     if (FAILED(hr)) return hr;
@@ -87,37 +89,27 @@ HRESULT MjpegDecoder::initialize(
 
     HRESULT finalHr = MF_E_TOPO_CODEC_NOT_FOUND;
     for (UINT32 i = 0; i < activationCount; ++i) {
+        // Keep the first working decoder. Remaining activation references are
+        // released below without activating another transform over this one.
+        if (transform_) break;
         IMFTransform* candidate = nullptr;
         const HRESULT activateHr = activations[i]->ActivateObject(
             IID_PPV_ARGS(&candidate));
         if (SUCCEEDED(activateHr)) {
             IMFAttributes* attributes = nullptr;
-            if (SUCCEEDED(candidate->QueryInterface(IID_PPV_ARGS(&attributes)))) {
-                attributes->SetUINT32(MF_LOW_LATENCY, TRUE);
-                SafeRelease(attributes);
+            HRESULT latencyHr = candidate->GetAttributes(&attributes);
+            if (SUCCEEDED(latencyHr)) {
+                latencyHr = attributes
+                    ? attributes->SetUINT32(MF_LOW_LATENCY, TRUE) : E_NOINTERFACE;
             }
+            SafeRelease(attributes);
             HRESULT candidateHr = candidate->SetInputType(0, inputType, 0);
             if (SUCCEEDED(candidateHr)) {
                 candidateHr = SetNv12OutputType(candidate);
             }
             if (SUCCEEDED(candidateHr)) {
-                candidateHr = candidate->GetOutputStreamInfo(0, &outputInfo_);
-            }
-            if (SUCCEEDED(candidateHr)) {
                 transform_ = candidate;
                 candidate = nullptr;
-                UINT32 defaultStride = 0;
-                if (outputType_) {
-                    outputType_->GetUINT32(MF_MT_DEFAULT_STRIDE,
-                                            &defaultStride);
-                }
-                stride_ = defaultStride
-                    ? static_cast<LONG>(defaultStride)
-                    : static_cast<LONG>(width_);
-                bufferBytes_ = (std::max)(
-                    outputInfo_.cbSize,
-                    static_cast<DWORD>(width_) *
-                        static_cast<DWORD>(height_) * 3u / 2u);
                 transform_->ProcessMessage(
                     MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
                 transform_->ProcessMessage(
@@ -126,8 +118,10 @@ HRESULT MjpegDecoder::initialize(
                 swprintf_s(
                     message,
                     L"[video] Media Foundation compressed decoder: MJPEG -> "
-                    L"NV12, synchronous low-latency mode, output stride %ld.\n",
-                    stride_);
+                    L"NV12, synchronous, output stride %ld; low-latency request "
+                    L"%s (0x%08lX).\n",
+                    stride_, SUCCEEDED(latencyHr) ? L"accepted" : L"unavailable",
+                    static_cast<unsigned long>(latencyHr));
                 Log(message);
                 finalHr = S_OK;
             } else {
@@ -137,8 +131,8 @@ HRESULT MjpegDecoder::initialize(
             finalHr = activateHr;
         }
         SafeRelease(candidate);
-        activations[i]->Release();
     }
+    for (UINT32 i = 0; i < activationCount; ++i) activations[i]->Release();
     CoTaskMemFree(activations);
     SafeRelease(inputType);
     if (FAILED(finalHr)) reset();
@@ -153,6 +147,8 @@ HRESULT MjpegDecoder::decode(IMediaSample* directShowSample,
 
     BYTE* source = nullptr;
     const long sourceLength = directShowSample->GetActualDataLength();
+    if (sourceLength <= 0 || sourceLength > directShowSample->GetSize())
+        return E_INVALIDARG;
     HRESULT hr = directShowSample->GetPointer(&source);
     if (FAILED(hr) || !source || sourceLength <= 0) {
         return FAILED(hr) ? hr : E_FAIL;
@@ -176,7 +172,7 @@ HRESULT MjpegDecoder::decode(IMediaSample* directShowSample,
     if (SUCCEEDED(hr)) hr = inputSample->AddBuffer(inputBuffer);
     REFERENCE_TIME start = 0;
     REFERENCE_TIME stop = 0;
-    if (SUCCEEDED(directShowSample->GetTime(&start, &stop))) {
+    if (SUCCEEDED(hr) && SUCCEEDED(directShowSample->GetTime(&start, &stop))) {
         inputSample->SetSampleTime(start);
         if (stop > start) inputSample->SetSampleDuration(stop - start);
     }
@@ -293,7 +289,7 @@ void MjpegDecoder::UpdateColorConfiguration() {
 
 void MjpegDecoder::CopyMpegSequenceHeader(
     const AM_MEDIA_TYPE* captureType, IMFMediaType* destination) {
-    if (!captureType || !destination ||
+    if (!captureType || !destination || !captureType->pbFormat ||
         captureType->formattype != FORMAT_MPEG2Video ||
         captureType->cbFormat < FIELD_OFFSET(MPEG2VIDEOINFO,
                                              dwSequenceHeader)) {
@@ -311,7 +307,6 @@ void MjpegDecoder::CopyMpegSequenceHeader(
 }
 
 HRESULT MjpegDecoder::SetNv12OutputType(IMFTransform* transform) {
-    SafeRelease(outputType_);
     for (DWORD index = 0;; ++index) {
         IMFMediaType* candidate = nullptr;
         HRESULT hr = transform->GetOutputAvailableType(0, index, &candidate);
@@ -325,10 +320,50 @@ HRESULT MjpegDecoder::SetNv12OutputType(IMFTransform* transform) {
                 if (SUCCEEDED(transform->GetOutputCurrentType(0, &current)) &&
                     current) {
                     SafeRelease(candidate);
-                    outputType_ = current;
-                } else {
-                    outputType_ = candidate;
+                    candidate = current;
+                    current = nullptr;
                 }
+                SafeRelease(current);
+                UINT32 width = 0, height = 0, defaultStride = 0;
+                GUID effectiveSubtype{};
+                hr = candidate->GetGUID(MF_MT_SUBTYPE, &effectiveSubtype);
+                if (SUCCEEDED(hr))
+                    hr = MFGetAttributeSize(candidate, MF_MT_FRAME_SIZE, &width, &height);
+                if (SUCCEEDED(hr) && (effectiveSubtype != MFVideoFormat_NV12 ||
+                    width != static_cast<UINT32>(width_) ||
+                    height != static_cast<UINT32>(height_))) {
+                    hr = MF_E_INVALIDMEDIATYPE;
+                }
+                // NV12 is top-down. A missing default stride means packed rows;
+                // a present but invalid stride must not reach the GPU uploader.
+                if (SUCCEEDED(hr)) {
+                    const HRESULT strideHr = candidate->GetUINT32(
+                        MF_MT_DEFAULT_STRIDE, &defaultStride);
+                    if (strideHr == MF_E_ATTRIBUTENOTFOUND) defaultStride = width;
+                    else if (FAILED(strideHr)) hr = strideHr;
+                }
+                const LONG stride = static_cast<LONG>(defaultStride);
+                const uint64_t bytes = static_cast<uint64_t>(defaultStride) *
+                    (static_cast<uint64_t>(height) + height / 2u);
+                if (SUCCEEDED(hr) && (stride < width_ || (stride & 1) ||
+                    bytes > (std::numeric_limits<DWORD>::max)())) {
+                    hr = MF_E_INVALIDMEDIATYPE;
+                }
+                MFT_OUTPUT_STREAM_INFO info{};
+                if (SUCCEEDED(hr)) hr = transform->GetOutputStreamInfo(0, &info);
+                if (FAILED(hr)) {
+                    Log(L"[video] MJPEG output layout/stream requirements rejected; "
+                        L"capture dimensions must remain unchanged.\n");
+                    SafeRelease(candidate);
+                    return hr;
+                }
+                // Commit type, stride and allocation requirements together, both
+                // at startup and after MF_E_TRANSFORM_STREAM_CHANGE.
+                SafeRelease(outputType_);
+                outputType_ = candidate;
+                stride_ = stride;
+                outputInfo_ = info;
+                bufferBytes_ = (std::max)(info.cbSize, static_cast<DWORD>(bytes));
                 UpdateColorConfiguration();
                 return S_OK;
             }
@@ -360,6 +395,8 @@ HRESULT MjpegDecoder::PullOutput(IMFMediaBuffer** newest) {
     SafeRelease(output.pEvents);
     if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
         SafeRelease(output.pSample);
+        // A buffered frame may have the previous stride/color interpretation.
+        SafeRelease(*newest);
         return SetNv12OutputType(transform_);
     }
     if (SUCCEEDED(hr) && output.pSample) {

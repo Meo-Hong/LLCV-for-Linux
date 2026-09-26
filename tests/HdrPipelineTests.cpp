@@ -381,6 +381,15 @@ int main(int argc, char** argv) {
             std::puts("SKIP: GPU HDR conversion/debug layer unavailable"); DestroyWindow(hwnd); return 77;
         }
         Check(hr, "HDR initialize");
+        // Exercise the same policy -> renderer handoff as production, not just
+        // a test-only hardcoded HDR flag. Untagged P010 must now enter HDR.
+        const auto automaticHdr = llcv::hdr::ResolveInput({}, false);
+        Require(automaticHdr.kind == llcv::hdr::InputKind::Hdr10 && automaticHdr.assumed,
+            "untagged P010 auto policy selects assumed HDR");
+        Check(r.initialize(hwnd, 64, 64, 30, VideoPixelFormat::P010,
+            automaticHdr.kind == llcv::hdr::InputKind::Hdr10, {}, automaticHdr.colorSpace),
+            "automatic P010 HDR policy reaches real renderer");
+        Require(r.hdrOutput, "automatic P010 HDR does not fall through to SDR rendering");
         const auto display = llcv::hdr::QueryDisplay(hwnd);
         Require(g_hdrDisplayState.load() == display.hdr, "physical display state separate from PQ signal");
         Require(r.hdrOverlayBackground == nullptr, "no HDR scratch allocation without UI");
@@ -638,18 +647,25 @@ int main(int argc, char** argv) {
             "HDR-to-SDR reinitialization restores original SDR panel tint");
         ClearUi(r, 1, 1, 1, 1); DrawUi(r); Require(Read(r)[0] == 255, "SDR white unchanged");
         ClearUi(r, 0, 0, 0, 0.5f); Benchmark(r); RequireCleanGpu(r);
-        // Force off does not tone-map unknown P010. Feed a known PQ white to
-        // the actual SDR path and record the encoded SDR result; a darker SDR
-        // preview alone therefore cannot establish the source transfer function.
-        Check(r.initialize(hwnd, 64, 64, 30, VideoPixelFormat::P010, false), "P010 SDR comparison");
-        encodePatch({Pq(203), Pq(203), Pq(203)});
+        // Explicit SDR is still identified, but P010 has no SDR output path.
+        llcv::video::CaptureColorMetadata explicitSdr{};
+        explicitSdr.present = true; explicitSdr.transferFunction = 5;
+        const auto sdrInput = llcv::hdr::ResolveInput(explicitSdr, false);
+        Require(sdrInput.kind == llcv::hdr::InputKind::Sdr, "explicit SDR policy preserved");
+        Require(r.initialize(hwnd, 64, 64, 30, VideoPixelFormat::P010,
+            sdrInput.kind == llcv::hdr::InputKind::Hdr10) == DXGI_ERROR_UNSUPPORTED,
+            "SDR P010 rejected rather than displayed with wrong transfer");
+        Require(!r.device && !r.swapChain && !r.hdrOutput,
+            "rejected SDR P010 creates no GPU output resources");
+        Check(r.initialize(hwnd, 64, 64, 30, VideoPixelFormat::P010,
+            automaticHdr.kind == llcv::hdr::InputKind::Hdr10, {}, automaticHdr.colorSpace),
+            "rejected SDR P010 to untagged P010 restores automatic HDR");
+        encodePatch({Pq(203), Pq(203), Pq(203)}); blit();
+        const auto automaticWhite = Read(r, 400, 250);
+        for (unsigned c : automaticWhite) Near(c, Pq(203)*1023, 2, "automatic HDR keeps absolute PQ white");
+        Check(r.initialize(hwnd, 64, 64, 30, VideoPixelFormat::P010, true), "forced HDR comparison");
         blit();
-        const auto sdrPqWhite = Read(r, 400, 250);
-        VerifyFrameAudit(r, p);
-        for (unsigned c : sdrPqWhite)
-            Near(c, Pq(203)*255, 3, "unknown P010 SDR path does not apply HDR tone mapping");
-        std::printf("Same known 203-nit PQ white with force off -> SDR RGB8 %u; not an HDR-to-SDR tone map\n",
-                    sdrPqWhite[0]);
+        Require(Read(r, 400, 250) == automaticWhite, "automatic and forced HDR produce identical GPU pixels");
         RequireCleanGpu(r);
         Check(r.initialize(hwnd, 64, 64, 30, VideoPixelFormat::P010, true, {},
             DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020), "left-chroma HDR");

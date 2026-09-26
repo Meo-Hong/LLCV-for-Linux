@@ -238,12 +238,14 @@ public:
     std::array<int16_t, 8> samples{1000,2000,3000,4000,5000,6000,7000,8000};
     Media* changed = nullptr;
     long bytes = 16;
+    long capacity = sizeof(samples);
+    HRESULT typeResult = S_OK;
     ULONG refs = 1;
     STDMETHODIMP QueryInterface(REFIID, void**) override { return E_NOINTERFACE; }
     STDMETHODIMP_(ULONG) AddRef() override { return ++refs; }
     STDMETHODIMP_(ULONG) Release() override { return --refs; }
     STDMETHODIMP GetPointer(BYTE** p) override { *p = reinterpret_cast<BYTE*>(samples.data()); return S_OK; }
-    STDMETHODIMP_(long) GetSize() override { return sizeof(samples); }
+    STDMETHODIMP_(long) GetSize() override { return capacity; }
     STDMETHODIMP GetTime(REFERENCE_TIME*, REFERENCE_TIME*) override { return E_NOTIMPL; }
     STDMETHODIMP SetTime(REFERENCE_TIME*, REFERENCE_TIME*) override { return E_NOTIMPL; }
     STDMETHODIMP IsSyncPoint() override { return S_OK; }
@@ -254,6 +256,7 @@ public:
     STDMETHODIMP SetActualDataLength(long n) override { bytes = n; return S_OK; }
     STDMETHODIMP GetMediaType(AM_MEDIA_TYPE** p) override {
         *p = nullptr;
+        if (FAILED(typeResult)) return typeResult;
         if (!changed) return S_FALSE;
         auto* type = static_cast<AM_MEDIA_TYPE*>(CoTaskMemAlloc(sizeof(AM_MEDIA_TYPE)));
         if (!type) return E_OUTOFMEMORY;
@@ -279,7 +282,7 @@ static void CaptureCallback() {
     std::atomic<bool> rejected{false};
     capture::AudioSampleTelemetry telemetry{};
     telemetry.packetFrames = &packet;
-    telemetry.surroundFormatRejected = &rejected;
+    telemetry.formatRejected = &rejected;
     auto* callback = new capture::AudioSampleGrabberCallback(format, ring, telemetry);
     AudioSample sample;
     Check(callback->SampleCB(0, &sample) == S_OK && ring.AvailableFrames() == 1 && packet == 1,
@@ -307,7 +310,67 @@ static void CaptureCallback() {
     std::puts("Real capture callback: 8ch conversion, partial packet and dynamic format guard passed.");
 }
 
+static void StereoCallbackBoundaries() {
+    for (WORD channels : {WORD{1}, WORD{2}}) {
+        for (const auto bits : {WORD{16}, WORD{24}, WORD{32}}) {
+            for (bool floating : {false, true}) {
+                if (floating && bits != 32) continue;
+                Media original(channels, channels == 1 ? 4 : 3, bits, floating);
+                const auto format = capture_audio::Classify(original.type).format;
+                audio::PcmRing ring(100);
+                std::atomic<bool> rejected{false};
+                std::atomic<UINT32> packet{0};
+                capture::AudioSampleTelemetry telemetry{};
+                telemetry.formatRejected = &rejected;
+                telemetry.packetFrames = &packet;
+                auto* callback = new capture::AudioSampleGrabberCallback(format, ring, telemetry);
+                AudioSample sample;
+                sample.bytes = format.blockAlign;
+                Check(callback->SampleCB(0, &sample) == S_OK && ring.AvailableFrames() == 1,
+                    "normal mono/stereo PCM and float packets still pass");
+                ring.Clear(); sample.capacity = sample.bytes - 1; packet = 0;
+                Check(callback->SampleCB(0, &sample) == E_INVALIDARG &&
+                      ring.AvailableFrames() == 0 && packet == 0 && !rejected,
+                    "oversized stereo packet is rejected before copy and telemetry");
+                sample.capacity = sizeof(sample.samples); sample.changed = &original;
+                Check(callback->SampleCB(0, &sample) == S_OK && ring.AvailableFrames() == 1,
+                    "matching media type and recovery after malformed packet pass");
+                ring.Clear();
+                Media changed(channels, channels == 1 ? 4 : 3, 32, !floating);
+                if (!floating && bits == 32) changed.wave.Format.nSamplesPerSec = 44100;
+                sample.changed = &changed;
+                Check(callback->SampleCB(0, &sample) == VFW_E_TYPE_NOT_ACCEPTED &&
+                      rejected && ring.AvailableFrames() == 0,
+                    "changed encoding, width or sample rate never uses old parser");
+                sample.changed = nullptr;
+                Check(callback->SampleCB(0, &sample) == VFW_E_TYPE_NOT_ACCEPTED,
+                    "unlabelled packets remain rejected after format change");
+                callback->Release();
+            }
+        }
+    }
+    Media stereo(2, 3), mono(1, 4), surround(6, 0x60f);
+    const auto stereoFormat = capture_audio::Classify(stereo.type).format;
+    Check(!capture_audio::MatchesFormat(mono.type, stereoFormat) &&
+          !capture_audio::MatchesFormat(surround.type, stereoFormat),
+          "channel count changes rejected in stereo mode");
+    stereo.wave.Format.wFormatTag = WAVE_FORMAT_PCM;
+    stereo.wave.Format.cbSize = 0;
+    stereo.type.cbFormat = sizeof(WAVEFORMATEX);
+    Check(capture_audio::MatchesFormat(stereo.type, stereoFormat),
+          "equivalent plain PCM and extensible stereo do not spuriously stop");
+    audio::PcmRing ring(100);
+    auto* callback = new capture::AudioSampleGrabberCallback(stereoFormat, ring, {});
+    AudioSample sample;
+    sample.typeResult = E_FAIL;
+    Check(callback->SampleCB(0, &sample) == VFW_E_TYPE_NOT_ACCEPTED && !ring.AvailableFrames(),
+          "media type query failure cannot bypass format guard");
+    callback->Release();
+    std::puts("Mono/stereo callback format and buffer boundary regressions passed.");
+}
+
 int main() {
+    StereoCallbackBoundaries();
     FormatsAndMapping(); RingAndResampler(); Gain(); CaptureCallback(); SessionAndConcurrency();
     std::puts("Surround audio tests passed (no capture or playback hardware used).");
 }

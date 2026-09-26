@@ -9,6 +9,11 @@ using Mode = settings::PresentationMode;
 
 constexpr bool UsesVSync(Mode mode) { return mode != Mode::AllowTearing; }
 constexpr bool IsCompatibility(Mode mode) { return mode == Mode::Compatibility; }
+// P010 is HDR-only even when Force HDR10 is off. Audio-only has no video output.
+constexpr bool SupportsCapture(Mode mode, settings::VideoPixelFormat format,
+                               bool audioOnly = false) {
+    return audioOnly || !IsCompatibility(mode) || format != settings::VideoPixelFormat::P010;
+}
 constexpr const wchar_t* PathName(Mode mode) {
     return IsCompatibility(mode) ? L"Blt-discard" : L"Flip-discard";
 }

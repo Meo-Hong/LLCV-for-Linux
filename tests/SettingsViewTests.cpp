@@ -210,7 +210,6 @@ static void TestHelpText() {
     {SettingsHelpTopic::Drift, 754620631u, 3340162937u},
     {SettingsHelpTopic::PcmQueue, 2979267523u, 1200270022u},
     {SettingsHelpTopic::VolumeBoost, 2473238580u, 2846859296u},
-    {SettingsHelpTopic::ForceHdr10, 1978381312u, 295927312u},
     {SettingsHelpTopic::MjpegColor, 1599057429u, 3941322600u},
     };
     for (const auto& entry : golden) for (bool english : {false, true}) {
@@ -222,6 +221,13 @@ static void TestHelpText() {
     for (bool english : {false, true})
         Check(std::wcscmp(SettingsHelpText(SettingsHelpTopic::Presentation, english),
                          llcv::presentation_ui::HelpText(english)) == 0, "presentation help remains centralized");
+    Check(std::wcsstr(SettingsHelpText(SettingsHelpTopic::ForceHdr10, true), L"already defaults") != nullptr &&
+          std::wcsstr(SettingsHelpText(SettingsHelpTopic::ForceHdr10, false), L"기본적으로") != nullptr &&
+          std::wcsstr(SettingsHelpText(SettingsHelpTopic::ForceHdr10, true), L"NV12/YUY2") != nullptr &&
+          std::wcsstr(SettingsHelpText(SettingsHelpTopic::ForceHdr10, false), L"NV12/YUY2") != nullptr &&
+          std::wcsstr(SettingsHelpText(SettingsHelpTopic::ForceHdr10, true), L"Windows HDR") != nullptr &&
+          std::wcsstr(SettingsHelpText(SettingsHelpTopic::ForceHdr10, false), L"Windows HDR") != nullptr,
+          "HDR help explains automatic assumption, SDR alternative and Windows HDR requirement");
 }
 
 static void TestTranslationBoundary() {

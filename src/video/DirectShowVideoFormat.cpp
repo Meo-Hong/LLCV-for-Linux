@@ -1,4 +1,5 @@
 #include "video/DirectShowVideoFormat.h"
+#include "video/HdrPolicy.h"
 
 #include <dvdmedia.h>
 #include <dxva.h>
@@ -281,6 +282,86 @@ bool ExtractDirectShowColorMetadata(
     metadata.transferFunction = DXVA_ExtractExtColorData(
         flags, DXVA_VideoTransFuncMask, DXVA_VideoTransFuncShift);
     return true;
+}
+
+bool ReadVideoSampleFormat(const AM_MEDIA_TYPE* mediaType, int fallbackFps,
+                           VideoSampleFormat& result) {
+    result = {};
+    VideoSampleFormat next{};
+    REFERENCE_TIME duration = 0;
+    if (!VideoFormatDetails(mediaType, next.width, next.height, duration,
+                            next.bytes, &next.format)) return false;
+    next.fps = fallbackFps;
+    if (FAILED(ValidateVideoLayout(mediaType, next.width, next.height, next.format,
+                                  next.bytes, next.stride, next.fps))) return false;
+    const VIDEOINFOHEADER2* info2 = nullptr;
+    if (mediaType->formattype == FORMAT_VideoInfo2)
+        info2 = reinterpret_cast<const VIDEOINFOHEADER2*>(mediaType->pbFormat);
+    else if (mediaType->formattype == FORMAT_MPEG2Video)
+        info2 = &reinterpret_cast<const MPEG2VIDEOINFO*>(mediaType->pbFormat)->hdr;
+    if (info2) {
+        next.source = info2->rcSource; next.target = info2->rcTarget;
+        next.interlace = info2->dwInterlaceFlags;
+        next.aspectX = info2->dwPictAspectRatioX; next.aspectY = info2->dwPictAspectRatioY;
+    } else {
+        const auto* info = reinterpret_cast<const VIDEOINFOHEADER*>(mediaType->pbFormat);
+        next.source = info->rcSource; next.target = info->rcTarget;
+    }
+    const auto normalizeRect = [&](RECT& rect) {
+        if (IsRectEmpty(&rect)) rect = {0, 0, next.width, next.height};
+    };
+    normalizeRect(next.source); normalizeRect(next.target);
+    if (!next.aspectX || !next.aspectY) {
+        next.aspectX = next.width; next.aspectY = next.height;
+    }
+    ExtractDirectShowColorMetadata(mediaType, next.color);
+    next.valid = true;
+    result = next;
+    return true;
+}
+
+bool MatchesVideoSampleFormat(const AM_MEDIA_TYPE* mediaType,
+                              const VideoSampleFormat& expected) {
+    VideoSampleFormat actual{};
+    if (!expected.valid || !ReadVideoSampleFormat(mediaType, expected.fps, actual)) return false;
+    if (actual.format == VideoPixelFormat::P010)
+        actual.color = llcv::hdr::ConnectedMetadata(expected.color, actual.color);
+    else {
+        auto merged = expected.color;
+        MergeDirectShowColorMetadata(merged, actual.color);
+        actual.color = merged;
+    }
+    const auto normalizedColor = [](const VideoSampleFormat& value) {
+        auto color = value.color;
+        if (value.format == VideoPixelFormat::P010) {
+            const auto hdr = llcv::hdr::ResolveInput(color, false);
+            if (hdr.kind == llcv::hdr::InputKind::Hdr10) {
+                // Untagged assumed HDR -> explicitly confirmed identical HDR
+                // is not a format change. Match the production default policy.
+                color.primaries = 9; color.transferFunction = 15;
+                color.transferMatrix = 4; color.nominalRange = 2;
+                color.chromaSubsampling = hdr.colorSpace ==
+                    DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020 ? 5u : 7u;
+            }
+        }
+        return color;
+    };
+    const auto a = normalizedColor(actual);
+    const auto b = normalizedColor(expected);
+    // Ignore allocation hints for MJPEG (individual compressed sizes vary),
+    // diagnostic lighting/reserved flags, and equivalent aspect-ratio spelling.
+    // Unknown fields retain startup's effective metadata, as on connection.
+    // Explicitly changed color declarations must not use stale interpretation.
+    return actual.format == expected.format && actual.width == expected.width &&
+        actual.height == expected.height && actual.fps == expected.fps &&
+        actual.stride == expected.stride &&
+        (IsCompressedVideoFormat(actual.format) || actual.bytes == expected.bytes) &&
+        actual.interlace == expected.interlace &&
+        EqualRect(&actual.source, &expected.source) && EqualRect(&actual.target, &expected.target) &&
+        uint64_t(actual.aspectX) * expected.aspectY == uint64_t(expected.aspectX) * actual.aspectY &&
+        a.chromaSubsampling == b.chromaSubsampling && a.nominalRange == b.nominalRange &&
+        a.transferMatrix == b.transferMatrix && a.primaries == b.primaries &&
+        a.transferFunction == b.transferFunction;
 }
 
 void MergeDirectShowColorMetadata(

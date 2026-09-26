@@ -47,7 +47,7 @@ std::wstring MonikerDisplayName(IMoniker* moniker) {
     return result;
 }
 
-std::wstring MonikerFriendlyName(IMoniker* moniker) {
+std::wstring MonikerProperty(IMoniker* moniker, const wchar_t* property) {
     if (!moniker) return {};
     IPropertyBag* bag = nullptr;
     VARIANT value;
@@ -55,13 +55,17 @@ std::wstring MonikerFriendlyName(IMoniker* moniker) {
     std::wstring result;
     if (SUCCEEDED(moniker->BindToStorage(
             nullptr, nullptr, IID_PPV_ARGS(&bag))) &&
-        SUCCEEDED(bag->Read(L"FriendlyName", &value, nullptr)) &&
+        bag && SUCCEEDED(bag->Read(property, &value, nullptr)) &&
         value.vt == VT_BSTR && value.bstrVal) {
         result = value.bstrVal;
     }
     VariantClear(&value);
     SafeRelease(bag);
     return result;
+}
+
+std::wstring MonikerFriendlyName(IMoniker* moniker) {
+    return MonikerProperty(moniker, L"FriendlyName");
 }
 
 std::vector<DeviceInfo> EnumerateInputDevices(const CLSID& category) {
@@ -161,7 +165,8 @@ int RelatedCaptureAudioScore(
 HRESULT FindVideoCaptureFilter(
     const std::wstring& selectedId, const wchar_t* preferredDeviceName,
     IBaseFilter** output, std::wstring* selectedName,
-    LogCallback logCallback) {
+    LogCallback logCallback, std::wstring* selectedDevicePath) {
+    if (selectedDevicePath) selectedDevicePath->clear();
     if (!output) return E_POINTER;
     *output = nullptr;
 
@@ -233,6 +238,7 @@ HRESULT FindVideoCaptureFilter(
                 Log(logCallback, message);
             }
             if (selectedName) *selectedName = chosenName;
+            if (selectedDevicePath) *selectedDevicePath = MonikerProperty(selectedMoniker, L"DevicePath");
         }
     } else {
         hr = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);

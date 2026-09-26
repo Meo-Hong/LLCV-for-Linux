@@ -56,6 +56,7 @@ AM_MEDIA_TYPE* SelectSupportedType(
 // merely because it is the first audio pin). Returns an owned pin reference.
 HRESULT FindSurroundPin(IBaseFilter* filter, IPin** output);
 bool MatchesSurroundFormat(const AM_MEDIA_TYPE& mediaType, const Format& expected) noexcept;
+bool MatchesFormat(const AM_MEDIA_TYPE& mediaType, const Format& expected) noexcept;
 HRESULT VerifySurroundConnection(IPin* input, const Format& expected);
 HRESULT SuggestCaptureBuffer(IPin* audioPin, WORD blockAlign,
                              int sampleRate, int bufferMs,

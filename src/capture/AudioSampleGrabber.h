@@ -18,7 +18,7 @@ struct AudioSampleTelemetry {
     std::atomic<uint64_t>* lastCallbackMs = nullptr;
     std::atomic<uint64_t>* callbackCount = nullptr;
     std::atomic<uint64_t>* capturedFrames = nullptr;
-    std::atomic<bool>* surroundFormatRejected = nullptr;
+    std::atomic<bool>* formatRejected = nullptr;
 };
 
 class AudioSampleGrabberCallback final : public ISampleGrabberCB {
@@ -49,7 +49,7 @@ private:
     void* trackingContext_ = nullptr;
     std::chrono::steady_clock::time_point previousCallback_{};
     bool hasPreviousCallback_ = false;
-    bool surroundFormatChanged_ = false;
+    bool formatChanged_ = false;
 };
 
 }  // namespace llcv::capture

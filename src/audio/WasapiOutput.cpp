@@ -75,6 +75,38 @@ private:
     std::atomic<uint64_t>* generation_ = nullptr;
 };
 
+// Setup-only retry. A failed alignment initialization still consumes the
+// client's connection; retry on a newly activated client, never the old one.
+HRESULT InitializeExclusiveAligned(IMMDevice* device, IAudioClient*& client,
+                                   WAVEFORMATEX& format, REFERENCE_TIME duration,
+                                   const Host& host) {
+    HRESULT hr = client->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE,
+        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, duration, duration, &format, nullptr);
+    if (hr != AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED) return hr;
+
+    UINT32 frames = 0;
+    hr = client->GetBufferSize(&frames);
+    if (FAILED(hr) || frames == 0 || format.nSamplesPerSec == 0) {
+        if (SUCCEEDED(hr)) hr = E_INVALIDARG;
+        LogHresult(host, L"IAudioClient::GetBufferSize(alignment)", hr);
+        return hr;
+    }
+    duration = static_cast<REFERENCE_TIME>(
+        (10'000'000ULL * frames + format.nSamplesPerSec / 2) / format.nSamplesPerSec);
+    diagnostics::LogMessage(host.log,
+        L"[audio] WASAPI exclusive period aligned: %u frames (%.2f ms)\n",
+        frames, 1000.0 * frames / format.nSamplesPerSec);
+    SafeRelease(client);
+    hr = device->Activate(__uuidof(IAudioClient), CLSCTX_INPROC_SERVER, nullptr,
+                          reinterpret_cast<void**>(&client));
+    if (FAILED(hr)) {
+        LogHresult(host, L"Activate(IAudioClient alignment retry)", hr);
+        return hr;
+    }
+    return client->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE,
+        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, duration, duration, &format, nullptr);
+}
+
 bool IsRunning(const Host& host) {
     return host.running && host.running->load(std::memory_order_acquire);
 }
@@ -369,35 +401,7 @@ RunResult Run(const Configuration& configuration, const Host& host,
                 L"%.2f ms (same-duration event mode)\n",
                 static_cast<double>(duration) / 10'000.0,
                 static_cast<double>(duration) / 10'000.0);
-            hr = client->Initialize(
-                AUDCLNT_SHAREMODE_EXCLUSIVE,
-                AUDCLNT_STREAMFLAGS_EVENTCALLBACK, duration, duration,
-                &format, nullptr);
-            if (hr == AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED) {
-                UINT32 alignedFrames = 0;
-                const HRESULT alignHr =
-                    client->GetBufferSize(&alignedFrames);
-                if (SUCCEEDED(alignHr) && alignedFrames > 0) {
-                    duration = static_cast<REFERENCE_TIME>(
-                        (10'000'000.0 * alignedFrames /
-                         audio_device::kSampleRate) + 0.5);
-                    diagnostics::LogMessage(host.log,
-                        L"[audio] WASAPI exclusive period aligned: %u "
-                        L"frames (%.2f ms)\n",
-                        alignedFrames,
-                        1000.0 * alignedFrames /
-                            audio_device::kSampleRate);
-                    hr = client->Initialize(
-                        AUDCLNT_SHAREMODE_EXCLUSIVE,
-                        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, duration,
-                        duration, &format, nullptr);
-                } else {
-                    LogHresult(
-                        host,
-                        L"WASAPI exclusive GetBufferSize(alignment)",
-                        alignHr);
-                }
-            }
+            hr = InitializeExclusiveAligned(device, client, format, duration, host);
             if (FAILED(hr)) {
                 LogHresult(
                     host,
@@ -525,8 +529,6 @@ RunResult Run(const Configuration& configuration, const Host& host,
         uint64_t requestedFrames = 0;
         uint64_t writtenFrames = 0;
         uint64_t missingFrames = 0;
-        UINT32 minimumPadding = (std::numeric_limits<UINT32>::max)();
-        UINT32 maximumPadding = 0;
         FillResult latestFill{};
         const uint64_t lateThresholdMs = static_cast<uint64_t>(
             std::ceil(
@@ -551,7 +553,7 @@ RunResult Run(const Configuration& configuration, const Host& host,
             diagnostics::LogMessage(host.log,
                 L"[audio][exclusive] 1s: event=%llu, interval avg/max "
                 L"%.2f/%llu ms, late=%llu (threshold %llu ms), "
-                L"timeout=%llu, padding min/max=%u/%u frames, "
+                L"timeout=%llu, event packet=%u frames, "
                 L"write=%llu/%llu frames, missing=%llu, queue=%u frames "
                 L"(target %u), device-clock avg/max=%.2f/%.2f ms, "
                 L"resampler=%s %+d ppm\n",
@@ -560,9 +562,7 @@ RunResult Run(const Configuration& configuration, const Host& host,
                 static_cast<unsigned long long>(lateEventCount),
                 static_cast<unsigned long long>(lateThresholdMs),
                 static_cast<unsigned long long>(waitTimeoutCount),
-                minimumPadding == (std::numeric_limits<UINT32>::max)()
-                    ? 0 : minimumPadding,
-                maximumPadding,
+                bufferFrames,
                 static_cast<unsigned long long>(writtenFrames),
                 static_cast<unsigned long long>(requestedFrames),
                 static_cast<unsigned long long>(missingFrames),
@@ -582,8 +582,6 @@ RunResult Run(const Configuration& configuration, const Host& host,
             requestedFrames = 0;
             writtenFrames = 0;
             missingFrames = 0;
-            minimumPadding = (std::numeric_limits<UINT32>::max)();
-            maximumPadding = 0;
         };
 
         sessionStarted = true;
@@ -662,10 +660,14 @@ RunResult Run(const Configuration& configuration, const Host& host,
             }
 
             UINT32 padding = 0;
-            hr = client->GetCurrentPadding(&padding);
-            if (FAILED(hr)) {
-                LogHresult(host, L"IAudioClient::GetCurrentPadding", hr);
-                break;
+            // Exclusive event mode hands over a whole packet on each signal.
+            // GetCurrentPadding is only needed for Shared's partial writes.
+            if (!exclusive) {
+                hr = client->GetCurrentPadding(&padding);
+                if (FAILED(hr)) {
+                    LogHresult(host, L"IAudioClient::GetCurrentPadding", hr);
+                    break;
+                }
             }
             if (host.paddingChanged) {
                 host.paddingChanged(host.context, padding);
@@ -674,12 +676,8 @@ RunResult Run(const Configuration& configuration, const Host& host,
                 host.outputDeadlineSuspected) {
                 host.outputDeadlineSuspected(host.context, deadline.OverdueSeconds(), false);
             }
-            if (exclusive) {
-                minimumPadding = (std::min)(minimumPadding, padding);
-                maximumPadding = (std::max)(maximumPadding, padding);
-            }
-            const UINT32 writable = bufferFrames > padding
-                ? bufferFrames - padding : 0;
+            const UINT32 writable = exclusive ? bufferFrames :
+                (bufferFrames > padding ? bufferFrames - padding : 0);
             if (!writable) continue;
 
             BYTE* output = nullptr;
