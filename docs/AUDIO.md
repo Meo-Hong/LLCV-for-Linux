@@ -60,6 +60,7 @@ including the master and L/R controls, to move the window; drag an edge to resiz
 it at a fixed aspect ratio. Master and L/R controls highlight on hover while
 remaining draggable.
 The minimum window size follows Windows display scaling to keep text and controls readable in a compact window.
+The chosen size is saved independently of video-mode sizing and restored on the next launch.
 
 ## WASAPI Shared and Exclusive
 
@@ -156,8 +157,10 @@ without adding an audio buffer, but loud signals may clip.
 
 To adjust channels independently, show the meter with `F3` in video mode or
 use the always-visible audio-only view, then scroll over an **L** or **R** card.
-Only that channel changes, in 5% steps. Scrolling over the master area or outside
-the channel cards changes the master volume. Independent L/R gain remains
+Only that channel changes, in 5% steps. In video mode, scrolling over the master
+area or outside the channel cards changes master volume. In audio-only mode,
+the wheel acts only inside master/L/R controls; the header, footer, and gaps
+do not change volume. Independent L/R gain remains
 limited to 100%; the optional 200% boost applies only to the master volume.
 
 Background auto-mute changes output gain only. Capture and WASAPI consumption
