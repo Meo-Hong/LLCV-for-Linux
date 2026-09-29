@@ -113,6 +113,7 @@ struct AppSettings {
     std::vector<ExclusiveEndpointCacheEntry> exclusiveEndpointCache;
     std::wstring asioDriverName;
     bool saveLog = false;
+    bool screenshotClipboard = false;
     bool showDiagnosticConsole = false;
     bool skipStartupSettings = false;
     bool checkForUpdates = true;

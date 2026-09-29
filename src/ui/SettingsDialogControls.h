@@ -55,6 +55,8 @@ inline constexpr int IDC_SETTINGS_DISPLAY_MONITOR = 2043;
 inline constexpr int IDC_SETTINGS_HDR_CHROMA = 2044;
 inline constexpr int IDC_SETTINGS_HDR_CHROMA_HELP = 2045;
 inline constexpr int IDC_SETTINGS_SURROUND51 = 2046;
+inline constexpr int IDC_SETTINGS_SCREENSHOT_CLIPBOARD = 2047;
+inline constexpr int IDC_SETTINGS_SCREENSHOT_FOLDER = 2048;
 } // namespace control_id
 
 // Borrowed for the duration of creation only; no settings/device list copies.

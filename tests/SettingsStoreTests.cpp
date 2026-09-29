@@ -28,6 +28,7 @@ std::wstring TemporaryIniPath() {
 void TestDefaults(const std::wstring& path) {
     DeleteFileW(path.c_str());
     const auto loaded = llcv::settings::LoadFromIni(path);
+    Check(!loaded.settings.screenshotClipboard, "screenshot clipboard is opt-in");
     Check(!loaded.settings.consoleSurround51, "5.1 is opt-in for old and fresh profiles");
     Check(loaded.settings.audioOnlyWidth == 380 && loaded.settings.audioOnlyHeight == 230,
           "audio-only default size preserves old profiles");
@@ -90,6 +91,7 @@ void TestRoundTrip(const std::wstring& path) {
     saved.borderlessWindow = true;
     saved.windowSnap = false;
     saved.saveLog = true;
+    saved.screenshotClipboard = true;
     saved.showDiagnosticConsole = true;
     saved.skipStartupSettings = true;
     saved.checkForUpdates = false;
@@ -144,6 +146,7 @@ void TestRoundTrip(const std::wstring& path) {
           "relative scale version round trip");
     Check(loaded.saveLog && loaded.showDiagnosticConsole,
           "diagnostics round trip");
+    Check(loaded.screenshotClipboard, "screenshot clipboard round trip");
     Check(loaded.skipStartupSettings && !loaded.checkForUpdates &&
               loaded.audioOnly,
           "general settings round trip");

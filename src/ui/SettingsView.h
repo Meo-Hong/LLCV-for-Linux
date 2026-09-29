@@ -24,6 +24,10 @@ struct SettingsControls {
     HWND guideDiagnosticsTitle = nullptr;
     HWND guideDiagnosticsText = nullptr;
     HWND guideLogFolderButton = nullptr;
+    HWND screenshotClipboardCheck = nullptr;
+    HWND screenshotTitle = nullptr;
+    HWND screenshotHelp = nullptr;
+    HWND screenshotFolderButton = nullptr;
     HWND updateTitle = nullptr;
     HWND updateText = nullptr;
     HWND updateNowButton = nullptr;

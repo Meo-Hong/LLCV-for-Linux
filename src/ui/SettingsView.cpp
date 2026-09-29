@@ -78,6 +78,7 @@ void ApplySettingsFont(SettingsControls* state, HWND hwnd,
                          state->videoDisplaySection,
                          state->videoWindowSection,
                          state->guideShortcutsTitle,
+                         state->screenshotTitle,
                          state->guideDiagnosticsTitle}) {
         if (control) {
             SendMessageW(control, WM_SETFONT,
@@ -248,6 +249,12 @@ void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
     PlaceSettingsControl(state->saveLogCheck, 505, 170, 360, 28, dpi);
     PlaceSettingsControl(state->showConsoleCheck, 505, 206, 360, 28, dpi);
     PlaceSettingsControl(state->guideLogFolderButton, 505, 248, 165, 26, dpi);
+    // Video tab's bottom-right section. Global language/startup preferences
+    // occupy the left footer; keep the existing overall dialog size.
+    PlaceSettingsControl(state->screenshotTitle, 505, 470, 380, 20, dpi);
+    PlaceSettingsControl(state->screenshotClipboardCheck, 505, 494, 400, 28, dpi);
+    PlaceSettingsControl(state->screenshotHelp, 705, 530, 200, 36, dpi);
+    PlaceSettingsControl(state->screenshotFolderButton, 505, 530, 185, 28, dpi);
     PlaceSettingsControl(state->updateTitle, 34, 76, 400, 24, dpi);
     PlaceSettingsControl(state->updateText, 34, 110, 760, 64, dpi);
     PlaceSettingsControl(state->checkForUpdatesCheck, 34, 190, 500, 28, dpi);
@@ -367,6 +374,10 @@ void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
     SetSettingsControlVisible(state->guideDiagnosticsTitle, guide);
     SetSettingsControlVisible(state->guideDiagnosticsText, guide);
     SetSettingsControlVisible(state->guideLogFolderButton, guide);
+    SetSettingsControlVisible(state->screenshotTitle, video);
+    SetSettingsControlVisible(state->screenshotClipboardCheck, video);
+    SetSettingsControlVisible(state->screenshotHelp, video);
+    SetSettingsControlVisible(state->screenshotFolderButton, video);
     SetSettingsControlVisible(state->saveLogCheck, guide);
     SetSettingsControlVisible(state->showConsoleCheck, guide);
     SetSettingsControlVisible(state->updateTitle, updates);

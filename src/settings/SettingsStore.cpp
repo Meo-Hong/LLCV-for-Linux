@@ -324,6 +324,7 @@ LoadResult LoadFromIni(const std::wstring& path) {
         settings.monitorDevice = ReadString(path, L"Window", L"Monitor");
     }
     settings.saveLog = ReadBool(path, L"Diagnostics", L"SaveLog");
+    settings.screenshotClipboard = ReadBool(path, L"Screenshot", L"CopyToClipboard");
     settings.showDiagnosticConsole =
         ReadBool(path, L"Diagnostics", L"ShowConsole");
     return result;
@@ -452,6 +453,7 @@ void SaveToIni(const std::wstring& path, const AppSettings& settings) {
     WriteString(path, L"Video", L"DisplayMonitor", settings.preferredDisplayMonitor.c_str());
     WriteInt(path, L"Window", L"Snap", settings.windowSnap ? 1 : 0);
     WriteInt(path, L"Diagnostics", L"SaveLog", settings.saveLog ? 1 : 0);
+    WriteInt(path, L"Screenshot", L"CopyToClipboard", settings.screenshotClipboard ? 1 : 0);
     WriteInt(path, L"Diagnostics", L"ShowConsole",
              settings.showDiagnosticConsole ? 1 : 0);
 }
