@@ -338,6 +338,19 @@ static int TestRawSdr() {
             const double expected[]{rr, gg, bb};
             for (size_t c = 0; c < 3; ++c)
                 Near(actual[c], std::clamp(expected[c], 0.0, 255.0), 3, "SDR matrix/range RGB reference");
+            // Screenshot conversion must agree with the real renderer's
+            // current source interpretation, not a hard-coded 709/limited path.
+            const llcv::screenshot::Description shot{width, height,
+                format == VideoPixelFormat::Nv12 ? llcv::screenshot::Format::Nv12
+                    : llcv::screenshot::Format::Yuy2, color};
+            std::vector<BYTE> packed(llcv::screenshot::PackedSize(shot));
+            std::vector<BYTE> screenshotRow(width * 4);
+            Require(llcv::screenshot::CopyFrame(shot, pixels.data(), pixels.size(), pitch, packed),
+                "screenshot copies padded live-renderer layout");
+            Require(llcv::screenshot::ConvertRows(shot, packed, 100, 1, screenshotRow),
+                "screenshot converts SDR row");
+            for (size_t c = 0; c < 3; ++c)
+                Near(screenshotRow[100*4+2-c], actual[c], 3, "screenshot and GPU matrix/range agree");
             std::printf("4K SDR mode=%u format=%u matrix=%u range=%u: pixel and color reference passed\n",
                 static_cast<unsigned>(mode), static_cast<unsigned>(format), matrix, range);
             RequireCleanGpu(r);

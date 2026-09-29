@@ -11,6 +11,12 @@ const wchar_t* Translate(const wchar_t* korean, bool useEnglish) {
     // This keeps settings files backward-compatible and lets the UI switch
     // language without a second executable or a runtime translation service.
     static const std::unordered_map<std::wstring, std::wstring> english = {
+        {L"스크린샷 저장 시 클립보드에도 복사", L"Also copy screenshots to clipboard"},
+        {L"스크린샷 폴더 열기", L"Open screenshot folder"},
+        {L"입력 해상도 PNG · OSD/화면 필터 제외\r\nHDR은 SDR로 톤 매핑합니다.\r\n사진 폴더의 LowLatencyCaptureViewer에 저장됩니다.\r\n처리 중에는 추가 촬영을 받지 않습니다.",
+         L"Source-resolution PNG; no OSD/display filters.\r\nHDR is tone-mapped to SDR.\r\nSaved in Pictures / LowLatencyCaptureViewer.\r\nNew shots are ignored while processing."},
+        {L"스크린샷 (F12)", L"Screenshots (F12)"},
+        {L"입력 해상도 PNG\r\nHDR → SDR · F1 도움말", L"Source-resolution PNG\r\nHDR to SDR; F1 for help"},
         {L"콘솔 LPCM 5.1 (실험적 · Shared 전용)", L"Console LPCM 5.1 (experimental; Shared only)"},
         {L"콘솔: 5.1 LPCM · 캡처: 6/8채널 PCM 필요\r\n"
          L"Windows 출력 장치도 5.1로 설정하세요.\r\n"

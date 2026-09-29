@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(LowLatencyCaptureViewer VERSION 1.3.0 LANGUAGES CXX)
+project(LowLatencyCaptureViewer VERSION 1.3.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,12 +24,15 @@ add_executable(LowLatencyCaptureViewer
     src/diagnostics/Logger.cpp
     src/diagnostics/AudioErrorHistory.cpp
     src/settings/SettingsStore.cpp
+    src/screenshot/ScreenshotPixels.cpp
+    src/screenshot/ScreenshotService.cpp
     src/ui/AudioOsdLayout.cpp
     src/ui/AudioOnlyView.cpp
     src/ui/PresentationModeUi.cpp
     src/ui/SettingsView.cpp
     src/ui/SettingsDialogControls.cpp
     src/ui/UiText.cpp
+    src/ui/ViewerHelpWindow.cpp
     src/ui/WindowGeometry.cpp
     src/update/UpdateChecker.cpp
     src/video/DirectShowVideoFormat.cpp
@@ -44,6 +47,14 @@ target_include_directories(LowLatencyCaptureViewer PRIVATE
     third_party/asio/host
     third_party/asio/host/pc
 )
+
+# Keep help layout ABI and shared shortcut text current with localized MSVC scans.
+set_property(SOURCE src/ui/AudioOnlyView.cpp src/ui/ViewerHelpWindow.cpp tests/ViewerHelpTests.cpp
+    APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/DarkPalette.h")
+set_property(SOURCE src/main.cpp src/ui/ViewerHelpWindow.cpp src/ui/SettingsDialogControls.cpp
+    APPEND PROPERTY OBJECT_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerHelpWindow.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerShortcuts.h")
 
 option(LLCV_HDR_FRAME_AUDIT "Build a private F8 single-frame HDR diagnostic (not for release)" OFF)
 option(LLCV_HDR_SCRGB_PROTOTYPE "Private direct P010 shader/scRGB comparison (not for release)" OFF)
@@ -92,6 +103,7 @@ target_link_libraries(LowLatencyCaptureViewer PRIVATE
     dxgi
     d2d1
     dwrite
+    dwmapi
     d3dcompiler
     shcore
     comctl32
@@ -101,6 +113,8 @@ target_link_libraries(LowLatencyCaptureViewer PRIVATE
     winhttp
     hid
     setupapi
+    windowscodecs
+    shell32
 )
 
 if (MSVC)
@@ -109,6 +123,30 @@ endif()
 
 include(CTest)
 if (BUILD_TESTING)
+    add_executable(ViewerHelpTests tests/ViewerHelpTests.cpp src/ui/ViewerHelpWindow.cpp)
+    set_property(SOURCE tests/ViewerHelpTests.cpp APPEND PROPERTY OBJECT_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerHelpWindow.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerShortcuts.h")
+    target_include_directories(ViewerHelpTests PRIVATE src)
+    target_compile_definitions(ViewerHelpTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN WINVER=0x0A00 _WIN32_WINNT=0x0A00)
+    target_link_libraries(ViewerHelpTests PRIVATE user32 gdi32 dwmapi gdiplus)
+    set_target_properties(ViewerHelpTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    if (MSVC)
+        target_compile_options(ViewerHelpTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+    endif()
+    add_test(NAME ViewerHelpTests COMMAND ViewerHelpTests)
+    set_tests_properties(ViewerHelpTests PROPERTIES TIMEOUT 30)
+    add_executable(ScreenshotTests tests/ScreenshotTests.cpp tests/HdrScreenshotReference.cpp
+        src/screenshot/ScreenshotPixels.cpp src/screenshot/ScreenshotService.cpp)
+    target_include_directories(ScreenshotTests PRIVATE src)
+    target_compile_definitions(ScreenshotTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(ScreenshotTests PRIVATE ole32 oleaut32 windowscodecs shell32 user32 gdi32 uuid)
+    set_target_properties(ScreenshotTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    if (MSVC)
+        target_compile_options(ScreenshotTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+    endif()
+    add_test(NAME ScreenshotTests COMMAND ScreenshotTests)
+    set_tests_properties(ScreenshotTests PROPERTIES TIMEOUT 60)
     add_executable(MjpegDecoderTests tests/MjpegDecoderTests.cpp src/video/VideoColor.cpp)
     target_include_directories(MjpegDecoderTests PRIVATE src)
     target_compile_definitions(MjpegDecoderTests PRIVATE
@@ -224,7 +262,9 @@ if (BUILD_TESTING)
     # that dependency explicit even when a localized MSVC include scan misses it.
     set_property(SOURCE tests/AudioCallbackTests.cpp tests/HdrPipelineTests.cpp
         tests/MonitorMoveTests.cpp tests/SharedReplayTests.cpp
-        APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+        APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerHelpWindow.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerShortcuts.h")
     get_target_property(audio_callback_sources LowLatencyCaptureViewer SOURCES)
     list(FILTER audio_callback_sources EXCLUDE REGEX "src/(main.cpp|app.rc|audio/AsioOutput.cpp)$")
     add_executable(AudioCallbackTests tests/AudioCallbackTests.cpp ${audio_callback_sources})

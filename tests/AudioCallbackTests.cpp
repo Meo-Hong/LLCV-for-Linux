@@ -809,5 +809,21 @@ int main(int argc, char** argv) {
     llcv::diagnostics::LogMessage(SaveMessage, L"buffer %u frames", 960u);
     Require(savedMessage == L"buffer 960 frames",
             "formatted module diagnostics must reach the supplied log sink");
+    // Modeless help must not inherit the fullscreen auto-hide timer. This
+    // checks integration without hiding the desktop cursor or opening devices.
+    HWND helpOwner=CreateWindowW(L"STATIC",L"Hidden cursor-policy test",WS_POPUP,
+        0,0,640,480,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    Require(helpOwner!=nullptr,"help policy owner");
+    const auto cursorMode=g_settings.fullscreenCursorMode;
+    const bool wasFullscreen=g_fullscreen.load();
+    g_fullscreen.store(true);
+    g_settings.fullscreenCursorMode=FullscreenCursorMode::AutoHide;
+    Require(FullscreenCursorAutoHideActive(),"normal fullscreen auto-hide active");
+    g_viewerHelp.Toggle(helpOwner,false,L"test",SW_HIDE);
+    Require(g_viewerHelp.Handle() && !FullscreenCursorAutoHideActive(),"help suspends fullscreen cursor hiding");
+    g_viewerHelp.Close();
+    Require(FullscreenCursorAutoHideActive(),"closing help restores auto-hide policy");
+    DestroyWindow(helpOwner);
+    g_settings.fullscreenCursorMode=cursorMode; g_fullscreen.store(wasFullscreen);
     return 0;
 }

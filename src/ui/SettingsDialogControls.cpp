@@ -1,4 +1,5 @@
 #include "SettingsDialogControls.h"
+#include "ViewerShortcuts.h"
 #include "PresentationModeUi.h"
 #include "UiText.h"
 #include "capture/DirectShowDevices.h"
@@ -309,15 +310,30 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     state->guideShortcutsTitle = makeLabel(
         text(L"단축키"), 34, 62);
     state->guideText = CreateWindowExW(
-        0, L"STATIC", text(
-            L"F2  설정 다시 열기\r\nF3  오디오 OSD (영상 모드)\r\n"
-            L"F5  Pixel-perfect 크기로 맞추기\r\n"
-            L"F11  보더리스 전체화면 켜기/끄기\r\n"
-            L"Tab  실시간 진단 표시\r\nEsc  전체화면 해제 또는 종료"),
+        0, L"STATIC", viewer_help::Shortcuts(initial.english),
         WS_CHILD | WS_VISIBLE | SS_LEFT,
         34, 84, 400, 220, hwnd, nullptr, instance, nullptr);
     state->guideDiagnosticsTitle = makeLabel(
         text(L"진단 · 문제 해결"), 505, 62);
+    state->screenshotTitle = makeLabel(text(L"스크린샷 (F12)"), 505, 470);
+    state->screenshotClipboardCheck = CreateWindowExW(
+        0, L"BUTTON", text(L"스크린샷 저장 시 클립보드에도 복사"),
+        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
+        505, 494, 400, 28, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SCREENSHOT_CLIPBOARD)),
+        instance, nullptr);
+    SendMessageW(state->screenshotClipboardCheck, BM_SETCHECK,
+        initial.settings.screenshotClipboard ? BST_CHECKED : BST_UNCHECKED, 0);
+    state->screenshotHelp = CreateWindowExW(
+        0, L"STATIC", text(L"입력 해상도 PNG\r\nHDR → SDR · F1 도움말"),
+        WS_CHILD | WS_VISIBLE | SS_LEFT, 705, 530, 200, 36,
+        hwnd, nullptr, instance, nullptr);
+    state->screenshotFolderButton = CreateWindowExW(
+        0, L"BUTTON", text(L"스크린샷 폴더 열기"),
+        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
+        505, 530, 185, 28, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SCREENSHOT_FOLDER)),
+        instance, nullptr);
     state->guideDiagnosticsText = CreateWindowExW(
         0, L"STATIC", text(
             L"문제가 생길 때만 로그 저장을 켜고 같은 문제를 재현하세요.\r\n"

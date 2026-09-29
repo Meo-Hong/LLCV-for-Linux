@@ -55,6 +55,8 @@
 #include "diagnostics/AudioErrorHistory.h"
 #include "settings/AppSettings.h"
 #include "settings/SettingsStore.h"
+#include "screenshot/ScreenshotService.h"
+#include "ui/ViewerHelpWindow.h"
 #include "ui/AudioOsdLayout.h"
 #include "ui/AudioOnlyView.h"
 #include "ui/PresentationModeUi.h"
@@ -93,6 +95,10 @@
 #include <functional>
 #include <cstdarg>
 #include <unordered_map>
+#include <filesystem>
+
+static llcv::screenshot::Service g_screenshots;
+static llcv::viewer_help::Window g_viewerHelp; // Modeless, sectioned help; no capture-thread ownership.
 
 #ifdef LLCV_HDR_FRAME_AUDIT
 #include "diagnostics/HdrFrameAudit.h"
@@ -115,7 +121,7 @@ constexpr wchar_t kVideoPinName[] = L"Video";
 constexpr int kSampleRate = 48000;
 constexpr int kChannels = 2;
 constexpr int kBitsPerSample = 16;
-constexpr wchar_t kAppVersionLabel[] = L"v1.3.0";
+constexpr wchar_t kAppVersionLabel[] = L"v1.3.1";
 
 constexpr int kRecommendedCaptureBufferMs = 20;
 constexpr int kMaximumVolumePercent = 200;
@@ -280,7 +286,9 @@ static std::atomic<int> g_leftVolumePercent{100};
 static std::atomic<int> g_rightVolumePercent{100};
 static std::atomic<bool> g_backgroundAudioMuted{false};
 static std::atomic<uint64_t> g_volumeHudUntilMs{0};
-enum class TransientHudContent { Volume, OneToOne, OneToOneUnavailable };
+enum class TransientHudContent { Volume, OneToOne, OneToOneUnavailable,
+    ScreenshotPending, ScreenshotBusy, ScreenshotSaved, ScreenshotCopied,
+    ScreenshotClipboardFailed, ScreenshotFailed, ScreenshotTimeout };
 static std::atomic<TransientHudContent> g_transientHudContent{
     TransientHudContent::Volume};
 static std::atomic<uint64_t> g_overlayGeneration{1};
@@ -2729,7 +2737,20 @@ struct DirectD3D11Renderer {
         const TransientHudContent hudContent =
             g_transientHudContent.load(std::memory_order_acquire);
         wchar_t volumeText[96]{};
-        if (hudContent == TransientHudContent::OneToOne) {
+        if (hudContent >= TransientHudContent::ScreenshotPending) {
+            const wchar_t* ko = L"스크린샷 실패\n진단 로그 확인";
+            const wchar_t* en = L"Screenshot failed\nCheck diagnostic log";
+            switch (hudContent) {
+            case TransientHudContent::ScreenshotPending: ko=L"스크린샷 처리 중"; en=L"Saving screenshot"; break;
+            case TransientHudContent::ScreenshotBusy: ko=L"촬영 대기 중\n잠시 후 다시 시도"; en=L"Not ready / busy\nPlease try again"; break;
+            case TransientHudContent::ScreenshotSaved: ko=L"PNG 저장 완료"; en=L"PNG saved"; break;
+            case TransientHudContent::ScreenshotCopied: ko=L"PNG 저장 완료\n클립보드 복사 완료"; en=L"PNG saved\nCopied to clipboard"; break;
+            case TransientHudContent::ScreenshotClipboardFailed: ko=L"PNG 저장 완료\n클립보드 복사 실패"; en=L"PNG saved\nClipboard failed"; break;
+            case TransientHudContent::ScreenshotTimeout: ko=L"촬영 시간 초과\n입력 영상 확인"; en=L"Screenshot timed out\nCheck video input"; break;
+            default: break;
+            }
+            wcscpy_s(volumeText, IsEnglishUi() ? en : ko);
+        } else if (hudContent == TransientHudContent::OneToOne) {
             const auto& video = CurrentVideoPreset();
             swprintf_s(volumeText,
                        IsEnglishUi() ? L"1:1 Pixel-perfect\n%d x %d"
@@ -3656,6 +3677,12 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
             llcv::capture::VideoSampleTelemetry{&g_osdTrackingStartMs, &g_videoCapturedFrames,
               &g_videoReplacedFrames});
         auto& latest = *resources.latestVideoSample;
+        const auto screenshotFormat = rendererInputFormat == VideoPixelFormat::P010
+            ? llcv::screenshot::Format::P010 : rendererInputFormat == VideoPixelFormat::Yuy2
+            ? llcv::screenshot::Format::Yuy2 : llcv::screenshot::Format::Nv12;
+        if (!g_screenshots.Start(preset.width, preset.height, screenshotFormat,
+                                llcv::screenshot::DefaultDirectory()))
+            fwprintf(stderr, L"[screenshot] unavailable: buffer/worker/Pictures folder initialization failed.\n");
         callback = new llcv::capture::VideoSampleGrabberCallback(&latest, nullptr, sampleFormat);
         hr = grabber->SetCallback(callback, 0);
         if (FAILED(hr)) break;
@@ -3931,6 +3958,9 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
                         renderer.upload(sampleData,
                                         static_cast<UINT32>(
                                             compressedDecoder.stride()));
+                        g_screenshots.Submit({static_cast<unsigned>(preset.width),
+                            static_cast<unsigned>(preset.height), screenshotFormat, sdrColor, false},
+                            sampleData, current, static_cast<unsigned>(compressedDecoder.stride()));
                     } else if (SUCCEEDED(hr)) {
                         hr = E_FAIL;
                     }
@@ -3940,6 +3970,11 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
                 hr = videoSample->GetPointer(&sampleData);
                 if (SUCCEEDED(hr) && sampleData) {
                     renderer.upload(sampleData, stride);
+                    g_screenshots.Submit({static_cast<unsigned>(preset.width),
+                        static_cast<unsigned>(preset.height), screenshotFormat, sdrColor,
+                        screenshotFormat == llcv::screenshot::Format::P010 &&
+                        hdrColorSpace == DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_TOPLEFT_P2020},
+                        sampleData, static_cast<std::size_t>(std::max(0L, videoSample->GetActualDataLength())), stride);
                 } else if (SUCCEEDED(hr)) {
                     hr = E_POINTER;
                 }
@@ -4007,6 +4042,7 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
             LogFilterPins(audioCapture, L"separate capture audio filter");
         }
     }
+    g_screenshots.Stop();
     resources.Reset();
     renderer.reset();
     compressedDecoder.reset();
@@ -5107,6 +5143,8 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
         }
         g_settings.saveLog = SendMessageW(
             state->saveLogCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
+        g_settings.screenshotClipboard = SendMessageW(
+            state->screenshotClipboardCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
         g_settings.showDiagnosticConsole = SendMessageW(
             state->showConsoleCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
         g_settings.skipStartupSettings = SendMessageW(
@@ -5518,6 +5556,17 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
             StartSettingsUpdateCheck(state, hwnd);
             return 0;
         }
+        if (LOWORD(wParam) == IDC_SETTINGS_SCREENSHOT_FOLDER &&
+            HIWORD(wParam) == BN_CLICKED) {
+            const auto directory = llcv::screenshot::DefaultDirectory();
+            std::error_code error;
+            if (!directory.empty()) std::filesystem::create_directories(directory, error);
+            if (directory.empty() || error || reinterpret_cast<INT_PTR>(ShellExecuteW(
+                    hwnd, L"open", directory.c_str(), nullptr, nullptr, SW_SHOWNORMAL)) <= 32)
+                MessageBoxW(hwnd, IsEnglishUi() ? L"Could not open the screenshot folder."
+                    : L"스크린샷 폴더를 열지 못했습니다.", L"Screenshot", MB_OK | MB_ICONWARNING);
+            return 0;
+        }
         if (LOWORD(wParam) == IDC_SETTINGS_OPEN_LOG_FOLDER &&
             HIWORD(wParam) == BN_CLICKED) {
             // Create it on demand so users can find the stable location even
@@ -5778,6 +5827,7 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
     while (IsWindow(hwnd)) {
         const BOOL result = GetMessageW(&msg, nullptr, 0, 0);
         if (result <= 0) break;
+        if (g_viewerHelp.ProcessMessage(msg, hwnd, IsEnglishUi(), kAppVersionLabel)) continue;
         if (msg.message == WM_MOUSEMOVE && state.tooltipWindow) {
             const HWND target = IsSettingsHelpControl(&state, msg.hwnd)
                 ? msg.hwnd : state.activeTooltipTarget;
@@ -6336,6 +6386,7 @@ static uint64_t g_lastFullscreenCursorActivityMs = 0;
 
 static bool FullscreenCursorAutoHideActive() {
     return g_fullscreen.load(std::memory_order_acquire) &&
+        !g_viewerHelp.Handle() &&
         g_settings.fullscreenCursorMode == FullscreenCursorMode::AutoHide;
 }
 
@@ -7225,6 +7276,21 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
         }
         if (wParam == 1) {
+            llcv::screenshot::Result screenshot;
+            if (g_screenshots.TakeResult(screenshot)) {
+                fwprintf(stderr, L"[screenshot] PNG=0x%08X clipboard-requested=%d clipboard=0x%08X "
+                    L"HDR-to-SDR=%d copy=%.3f ms path=%s\n",
+                    static_cast<unsigned>(screenshot.fileResult), screenshot.clipboardRequested,
+                    static_cast<unsigned>(screenshot.clipboardResult), screenshot.toneMapped,
+                    screenshot.copyMs, screenshot.path.c_str());
+                ShowTransientHud(FAILED(screenshot.fileResult) ? TransientHudContent::ScreenshotFailed
+                    : !screenshot.clipboardRequested ? TransientHudContent::ScreenshotSaved
+                    : screenshot.clipboardResult == S_OK ? TransientHudContent::ScreenshotCopied
+                    : TransientHudContent::ScreenshotClipboardFailed);
+            } else if (g_screenshots.ExpireRequest()) {
+                fwprintf(stderr, L"[screenshot] no valid frame within 3 seconds.\n");
+                ShowTransientHud(TransientHudContent::ScreenshotTimeout);
+            }
             // All display enumeration stays off the capture/render thread.
             // Also catches HDR/SDR white changes for which no resize is sent.
             static ULONGLONG nextHdrDisplayCheck = 0;
@@ -8157,6 +8223,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
 
     MSG m{};
     while (g_running.load() && GetMessageW(&m, nullptr, 0, 0) > 0) {
+        if (g_viewerHelp.ProcessMessage(m, hwnd, IsEnglishUi(), kAppVersionLabel)) {
+            // Help shares the UI thread's cursor, but must not inherit the
+            // fullscreen idle-hide state. Restart the grace period on close.
+            g_lastFullscreenCursorActivityMs = GetTickCount64();
+            if (g_fullscreenCursorHidden) SetFullscreenCursorVisible(true);
+            continue;
+        }
         if (m.message == WM_MOUSEWHEEL) {
             // The message-loop fast path handles wheel volume before normal
             // dispatch, so it must also count as cursor activity.
@@ -8194,11 +8267,19 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
             continue;
         }
 #endif
+        if (m.message == WM_KEYDOWN && m.wParam == llcv::viewer_help::kScreenshotKey) {
+            if (llcv::viewer_help::IsScreenshotRequest(m, g_settings.audioOnly))
+                ShowTransientHud(g_screenshots.Request(g_settings.screenshotClipboard)
+                    ? TransientHudContent::ScreenshotPending : TransientHudContent::ScreenshotBusy);
+            continue;
+        }
         TranslateMessage(&m);
         DispatchMessageW(&m);
     }
 
     g_running.store(false);
+    g_screenshots.CancelPending();
+    g_viewerHelp.Close();
     g_updateCheckTask.CancelAndWait();
 
     if (renderThread.joinable()) renderThread.join();

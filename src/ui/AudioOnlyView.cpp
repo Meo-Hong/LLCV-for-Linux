@@ -1,4 +1,5 @@
 #include "ui/AudioOnlyView.h"
+#include "ui/DarkPalette.h"
 
 #include <algorithm>
 #include <cmath>
@@ -117,13 +118,13 @@ void Paint(HDC dc, const Rect& content, const State& state) {
         return RECT{x(left), y(top), x(right), y(bottom)};
     };
 
-    constexpr COLORREF backgroundColor = RGB(12, 15, 19);
-    constexpr COLORREF cardColor = RGB(23, 28, 34);
-    constexpr COLORREF masterColor = RGB(30, 36, 44);
+    constexpr COLORREF backgroundColor = dark_palette::background;
+    constexpr COLORREF cardColor = dark_palette::card;
+    constexpr COLORREF masterColor = dark_palette::raised;
     constexpr COLORREF hoverColor = RGB(39, 49, 59);
-    constexpr COLORREF textColor = RGB(237, 242, 245);
-    constexpr COLORREF secondaryColor = RGB(162, 178, 188);
-    constexpr COLORREF accentColor = RGB(129, 206, 186);
+    constexpr COLORREF textColor = dark_palette::text;
+    constexpr COLORREF secondaryColor = dark_palette::secondary;
+    constexpr COLORREF accentColor = dark_palette::accent;
     constexpr COLORREF trackColor = RGB(58, 72, 79);
     constexpr COLORREF clipColor = RGB(237, 98, 84);
     constexpr COLORREF boostColor = RGB(226, 176, 117);
@@ -136,7 +137,7 @@ void Paint(HDC dc, const Rect& content, const State& state) {
     HBRUSH master = CreateSolidBrush(masterColor);
     HBRUSH clipping = CreateSolidBrush(state.clipping ? clipColor : accentColor);
     HBRUSH outerEdge = CreateSolidBrush(RGB(59, 70, 80));
-    HPEN cardEdge = CreatePen(PS_SOLID, 1, RGB(48, 58, 67));
+    HPEN cardEdge = CreatePen(PS_SOLID, 1, dark_palette::cardEdge);
     HPEN hoverEdge = CreatePen(PS_SOLID, 1, RGB(109, 155, 145));
     SetBkMode(dc, TRANSPARENT);
     SelectObject(dc, GetStockObject(NULL_PEN));

@@ -26,6 +26,10 @@ static constexpr Member kMembers[] = {
     {&SettingsControls::guideDiagnosticsTitle, "guideDiagnosticsTitle"},
     {&SettingsControls::guideDiagnosticsText, "guideDiagnosticsText"},
     {&SettingsControls::guideLogFolderButton, "guideLogFolderButton"},
+    {&SettingsControls::screenshotClipboardCheck, "screenshotClipboardCheck"},
+    {&SettingsControls::screenshotTitle, "screenshotTitle"},
+    {&SettingsControls::screenshotHelp, "screenshotHelp"},
+    {&SettingsControls::screenshotFolderButton, "screenshotFolderButton"},
     {&SettingsControls::updateTitle, "updateTitle"},
     {&SettingsControls::updateText, "updateText"},
     {&SettingsControls::updateNowButton, "updateNowButton"},
@@ -186,6 +190,10 @@ static constexpr Geometry kGeometry[] = {
     {&SettingsControls::saveLogCheck, "saveLogCheck", 505, 170, 170, 360, 28},
     {&SettingsControls::showConsoleCheck, "showConsoleCheck", 505, 206, 206, 360, 28},
     {&SettingsControls::guideLogFolderButton, "guideLogFolderButton", 505, 248, 248, 165, 26},
+    {&SettingsControls::screenshotTitle, "screenshotTitle", 505, 470, 470, 380, 20},
+    {&SettingsControls::screenshotClipboardCheck, "screenshotClipboardCheck", 505, 494, 494, 400, 28},
+    {&SettingsControls::screenshotHelp, "screenshotHelp", 705, 530, 530, 200, 36},
+    {&SettingsControls::screenshotFolderButton, "screenshotFolderButton", 505, 530, 530, 185, 28},
     {&SettingsControls::updateTitle, "updateTitle", 34, 76, 76, 400, 24},
     {&SettingsControls::updateText, "updateText", 34, 110, 110, 760, 64},
     {&SettingsControls::checkForUpdatesCheck, "checkForUpdatesCheck", 34, 190, 190, 500, 28},
@@ -312,6 +320,8 @@ static void TestActualControlCreation() {
     {&SettingsControls::skipStartupCheck, 2028},
     {&SettingsControls::checkForUpdatesCheck, 2035},
     {&SettingsControls::guideLogFolderButton, 2039},
+    {&SettingsControls::screenshotClipboardCheck, 2047},
+    {&SettingsControls::screenshotFolderButton, 2048},
     {&SettingsControls::updateNowButton, 2038},
     {&SettingsControls::presentationCombo, 2009},
     {&SettingsControls::displayMonitorCombo, 2043},
@@ -370,6 +380,7 @@ static void TestActualControlCreation() {
         settings.audioOnly = !settings.relativeWindowSize;
         settings.consoleSurround51 = profile % 2 != 0;
         settings.saveLog = !settings.borderlessWindow;
+        settings.screenshotClipboard = profile % 2 != 0;
         settings.showDiagnosticConsole = !settings.windowSnap;
         settings.skipStartupSettings = settings.allowVolumeBoost;
         settings.checkForUpdates = settings.pixelPerfect;
@@ -432,6 +443,7 @@ static void TestActualControlCreation() {
             {state.audioOnlyCheck, settings.audioOnly},
             {state.surround51Check, settings.consoleSurround51},
             {state.saveLogCheck, settings.saveLog},
+            {state.screenshotClipboardCheck, settings.screenshotClipboard},
             {state.showConsoleCheck, settings.showDiagnosticConsole},
             {state.skipStartupCheck, settings.skipStartupSettings},
             {state.checkForUpdatesCheck, settings.checkForUpdates},
@@ -451,6 +463,17 @@ static void TestActualControlCreation() {
         Check(SendMessageW(state.tooltipWindow, TTM_GETTOOLCOUNT, 0, 0) == 8, "seven help buttons and display monitor tooltip registered");
         ApplySettingsFont(&state, parent, 96);
         LayoutSettingsControls(&state, 96);
+        wchar_t screenshotCaption[256]{};
+        GetWindowTextW(state.screenshotTitle,screenshotCaption,256);
+        Check(std::wcsstr(screenshotCaption,L"F12")!=nullptr,"video screenshot section advertises F12");
+        HDC screenshotDc=GetDC(state.screenshotHelp);
+        const auto oldScreenshotFont=SelectObject(screenshotDc,
+            reinterpret_cast<HFONT>(SendMessageW(state.screenshotHelp,WM_GETFONT,0,0)));
+        GetWindowTextW(state.screenshotHelp,screenshotCaption,256);
+        RECT screenshotTextRect{0,0,200,0};
+        DrawTextW(screenshotDc,screenshotCaption,-1,&screenshotTextRect,DT_CALCRECT|DT_WORDBREAK|DT_NOPREFIX);
+        Check(screenshotTextRect.bottom<=36,"bilingual screenshot hint fits its bottom section");
+        SelectObject(screenshotDc,oldScreenshotFont); ReleaseDC(state.screenshotHelp,screenshotDc);
         UpdateAdvancedControlVisibility(&state, settings.audioMode == AudioMode::WasapiExclusive,
             VideoPixelFormat::Nv12);
         // Missing ASIO drivers intentionally fall back to Shared in the dialog.
@@ -553,6 +576,23 @@ int main() {
             ExpectVisible(state.relativeSizeWarning, video && pixel && relative);
             ExpectVisible(state.fullscreenCursorHint, video);
             ExpectVisible(state.guideLogFolderButton, tab == SettingsTab::GuideDiagnostics);
+            ExpectVisible(state.screenshotTitle, tab == SettingsTab::VideoWindow);
+            ExpectVisible(state.screenshotClipboardCheck, tab == SettingsTab::VideoWindow);
+            ExpectVisible(state.screenshotHelp, tab == SettingsTab::VideoWindow);
+            ExpectVisible(state.screenshotFolderButton, tab == SettingsTab::VideoWindow);
+            if (video) {
+                for (HWND shot : {state.screenshotTitle,state.screenshotClipboardCheck,
+                                  state.screenshotHelp,state.screenshotFolderButton}) {
+                    const RECT shotRect=ClientRectOf(parent,shot);
+                    for (HWND other : {state.fullscreenCursorHint,state.hdrChromaCombo,
+                        state.languageLabel,state.languageCombo,state.skipStartupCheck,
+                        state.skipStartupHint,state.startButton,state.cancelButton}) {
+                        if (!Visible(other)) continue;
+                        const RECT otherRect=ClientRectOf(parent,other); RECT overlap{};
+                        Check(!IntersectRect(&overlap,&shotRect,&otherRect),"video screenshot section must not overlap footer/controls");
+                    }
+                }
+            }
             ExpectVisible(state.updateNowButton, tab == SettingsTab::Updates);
             for (HWND control : {state.languageCombo, state.skipStartupCheck, state.versionWatermark,
                                  state.startButton, state.cancelButton}) ExpectVisible(control, true);

@@ -123,6 +123,8 @@ See the [audio-only guide](docs/AUDIO.md) for details.
 | `Tab` | Show/hide live diagnostics |
 | `F3` | Show/hide the audio meter over video (audio-only has its own view) |
 | `F5` | Restore pixel-perfect size |
+| `F1` | App information and shortcuts (F1/Esc closes only the help window) |
+| `F12` | Save a source-resolution screenshot (video mode) |
 | `F11` | Toggle borderless fullscreen |
 | `Esc` | Leave F11 fullscreen; close the app in windowed or automatic-fullscreen mode |
 | Mouse wheel over viewer | Change app volume in 5% steps |
@@ -159,6 +161,31 @@ Use **Language** in settings to follow the Windows language or explicitly choose
 Korean or English. The **Updates** tab offers automatic checks after startup
 (enabled by default) and manual checks. It does not install updates
 automatically; accepting the prompt opens the installer link in your browser.
+
+## Screenshots
+
+Press **F12** during video playback to save a PNG in **Pictures / LowLatencyCaptureViewer**.
+The bottom of the **Video & window** tab has **Open screenshot folder** and an opt-in
+**Also copy screenshots to clipboard** setting (off by default).
+
+**F1** opens a modeless guide with the app version, keyboard shortcuts, mouse controls,
+and screenshot information without stopping playback.
+Use F1, Esc, or its Close button to dismiss it; Esc here does not exit the viewer.
+
+- NV12/YUY2 and decoded MJPEG retain the capture resolution and selected SDR color interpretation.
+- P010 HDR10 is converted to **SDR sRGB**, both in the PNG and clipboard image.
+  This is not an HDR-preserving export. Highlights and wide-gamut colors are compressed;
+  appearance will not be identical to HDR playback. Tone mapping uses a fixed 203-nit
+  reference, independent of Windows HDR brightness settings. After gamut conversion,
+  max-RGB levels through 100 nits retain their linear brightness; a smooth shoulder
+  compresses brighter levels instead of dimming the entire range. This fixed export
+  curve is not scene-adaptive or an exact reproduction of OBS's tone mapping.
+- Captures exclude OSD, window borders, scaling, and the Sharp display filter.
+- One request is processed at a time. Source data is copied once into owned memory;
+  conversion, clipboard publication, and PNG encoding run on a lower-priority worker.
+  Clipboard publication precedes file encoding, but conversion still takes time.
+- A busy clipboard does not prevent file saving. Closing the viewer cancels pending work;
+  wait for the completion notice if you need the screenshot. Photos already saved are retained.
 
 ## Troubleshooting
 
