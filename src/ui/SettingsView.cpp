@@ -1,4 +1,5 @@
 #include "SettingsView.h"
+#include "SettingsFonts.h"
 #include "PresentationModeUi.h"
 #include "settings/AppSettings.h"
 
@@ -9,12 +10,64 @@
 namespace llcv::settings_ui {
 using settings::VideoPixelFormat;
 
+void SetSettingsText(HWND control, const wchar_t* text) {
+    if (!control) return;
+    wchar_t current[2048]{};
+    GetWindowTextW(control, current, ARRAYSIZE(current));
+    if (std::wcscmp(current, text) != 0) SetWindowTextW(control, text);
+}
+
 int SettingsPixels(int dips, UINT dpi) {
     return MulDiv(dips, dpi ? dpi : USER_DEFAULT_SCREEN_DPI,
                   USER_DEFAULT_SCREEN_DPI);
 }
 
-static constexpr int kSettingsTabbedClientHeightDip = 630;
+static constexpr int kSettingsTabbedClientHeightDip = 650;
+
+static constexpr SettingsTab kNavigationTabs[] = {
+    SettingsTab::VideoWindow, SettingsTab::Audio, SettingsTab::Window,
+    SettingsTab::GuideDiagnostics, SettingsTab::Updates};
+
+SettingsTab SettingsTabFromNavigationIndex(int index) {
+    return index >= 0 && index < kSettingsNavigationCount
+        ? kNavigationTabs[index] : SettingsTab::VideoWindow;
+}
+
+int SettingsNavigationIndex(SettingsTab tab) {
+    for (int i = 0; i < kSettingsNavigationCount; ++i)
+        if (kNavigationTabs[i] == tab) return i;
+    return 0;
+}
+
+void RefreshSettingsPageHeader(SettingsControls* state) {
+    if (!state) return;
+    const wchar_t* title = L"";
+    const wchar_t* subtitle = L"";
+    switch (state->activeTab) {
+    case SettingsTab::VideoWindow:
+        title = state->english ? L"Video" : L"영상";
+        subtitle = state->english ? L"Capture devices, video formats and display settings." : L"캡처 장치, 영상 형식과 화면 표시를 설정하세요.";
+        break;
+    case SettingsTab::Audio:
+        title = state->english ? L"Audio" : L"오디오";
+        subtitle = state->english ? L"Output devices, volume controls and playback stability." : L"출력 장치, 음량 표시와 재생 안정성을 설정하세요.";
+        break;
+    case SettingsTab::Window:
+        title = state->english ? L"Window" : L"창";
+        subtitle = state->english ? L"Make the viewer fit your desktop." : L"창 이동과 테두리, 전체화면 동작을 설정하세요.";
+        break;
+    case SettingsTab::GuideDiagnostics:
+        title = state->english ? L"Guide & diagnostics" : L"도움말 · 진단";
+        subtitle = state->english ? L"Keyboard shortcuts and diagnostic logs." : L"단축키를 확인하고 진단 로그를 관리하세요.";
+        break;
+    case SettingsTab::Updates:
+        title = state->english ? L"App preferences" : L"앱 설정";
+        subtitle = state->english ? L"Language, startup behavior and updates." : L"언어, 시작 방식과 업데이트를 관리하세요.";
+        break;
+    }
+    SetSettingsText(state->pageTitle, title);
+    SetSettingsText(state->pageSubtitle, subtitle);
+}
 
 int SettingsClientHeightDip(const SettingsControls* state) {
     (void)state;
@@ -35,13 +88,62 @@ SIZE SettingsDialogOuterSize(HWND hwnd, UINT dpi,
     return SIZE{rect.right - rect.left, rect.bottom - rect.top};
 }
 
+SettingsVisualUpdate::SettingsVisualUpdate(HWND owner) {
+    if (owner && IsWindowVisible(owner)) {
+        owner_ = owner;
+        SendMessageW(owner_, WM_SETREDRAW, FALSE, 0);
+    }
+}
+SettingsVisualUpdate::~SettingsVisualUpdate() {
+    if (!owner_ || !IsWindow(owner_)) return;
+    SendMessageW(owner_, WM_SETREDRAW, TRUE, 0);
+    RedrawWindow(owner_, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+}
+
 void PlaceSettingsControl(HWND control, int x, int y, int width,
                                  int height, UINT dpi) {
     if (!control) return;
+    RECT current{};
+    GetWindowRect(control, &current);
+    MapWindowPoints(HWND_DESKTOP, GetParent(control), reinterpret_cast<POINT*>(&current), 2);
+    if (current.left == SettingsPixels(x, dpi) && current.top == SettingsPixels(y, dpi) &&
+        current.right - current.left == SettingsPixels(width, dpi)) {
+        wchar_t name[32]{};
+        GetClassNameW(control, name, ARRAYSIZE(name));
+        const int actualHeight = current.bottom - current.top;
+        if (actualHeight == SettingsPixels(height, dpi) ||
+            (_wcsicmp(name, L"COMBOBOX") == 0 && actualHeight == SettingsPixels(kSettingsComboHeightDip, dpi)))
+            return;
+    }
     SetWindowPos(control, nullptr, SettingsPixels(x, dpi),
                  SettingsPixels(y, dpi), SettingsPixels(width, dpi),
                  SettingsPixels(height, dpi),
                  SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+static void ApplySettingsComboMetrics(HWND control, UINT dpi) {
+    if (!control) return;
+    RECT previous{};
+    GetWindowRect(control, &previous);
+    if (previous.bottom - previous.top == SettingsPixels(kSettingsComboHeightDip, dpi) &&
+        SendMessageW(control, CB_GETITEMHEIGHT, 0, 0) == SettingsPixels(24, dpi)) return;
+    // Both SetWindowPos and CB_SETDROPPEDWIDTH can restore a combo's
+    // font-derived closed height. This must be the LAST layout operation.
+    SendMessageW(control, CB_SETITEMHEIGHT, 0, SettingsPixels(24, dpi));
+    SendMessageW(control, CB_SETITEMHEIGHT, static_cast<WPARAM>(-1),
+                 SettingsPixels(24, dpi));
+    RECT actual{};
+    GetWindowRect(control, &actual);
+    const int itemHeight = static_cast<int>(SendMessageW(
+        control, CB_GETITEMHEIGHT, static_cast<WPARAM>(-1), 0));
+    const int adjustment = SettingsPixels(kSettingsComboHeightDip, dpi) -
+                           (actual.bottom - actual.top);
+    // Native border thickness is not necessarily scaled like our DIPs.
+    // Measure it rather than assuming a fixed six-pixel frame at all DPI.
+    if (itemHeight != CB_ERR && adjustment != 0)
+        SendMessageW(control, CB_SETITEMHEIGHT, static_cast<WPARAM>(-1),
+                     std::max(1, itemHeight + adjustment));
 }
 
 static BOOL CALLBACK SetSettingsChildFont(HWND child, LPARAM fontValue) {
@@ -52,31 +154,50 @@ static BOOL CALLBACK SetSettingsChildFont(HWND child, LPARAM fontValue) {
 void ApplySettingsFont(SettingsControls* state, HWND hwnd,
                               UINT dpi) {
     if (!state || !hwnd) return;
-    HFONT font = CreateFontW(
-        -MulDiv(9, dpi ? dpi : USER_DEFAULT_SCREEN_DPI, 72),
-        0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-        DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    if (!font) return;
-    state->uiFonts.push_back(font);
+    const auto createFont = [dpi, state](int points, int weight) {
+        return CreateFontW(-MulDiv(points, dpi ? dpi : USER_DEFAULT_SCREEN_DPI, 72),
+            0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+            DEFAULT_PITCH | FF_DONTCARE, SettingsFontFamily(weight, state->english));
+    };
+    HFONT font = createFont(kSettingsBodyFontPoints, FW_MEDIUM);
+    HFONT secondaryFont = createFont(kSettingsSecondaryFontPoints, FW_NORMAL);
+    HFONT sectionFont = createFont(kSettingsBodyFontPoints, FW_SEMIBOLD);
+    HFONT titleFont = createFont(kSettingsTitleFontPoints, FW_SEMIBOLD);
+    // Allocate the complete replacement before touching the active set. A
+    // failed allocation must not leave controls pointing at deleted fonts.
+    if (!font || !secondaryFont || !sectionFont || !titleFont) {
+        for (HFONT candidate : {font, secondaryFont, sectionFont, titleFont})
+            if (candidate) DeleteObject(candidate);
+        return;
+    }
+    std::vector<HFONT> previousFonts;
+    previousFonts.swap(state->uiFonts);
+    state->uiFonts = {font, secondaryFont, sectionFont, titleFont};
     EnumChildWindows(hwnd, SetSettingsChildFont,
                      reinterpret_cast<LPARAM>(font));
-
-    // Section labels are deliberately subtle, but bold enough to make the
-    // vertically grouped audio controls scannable at a glance.
-    HFONT sectionFont = CreateFontW(
-        -MulDiv(9, dpi ? dpi : USER_DEFAULT_SCREEN_DPI, 72),
-        0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-        DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    if (!sectionFont) return;
-    state->uiFonts.push_back(sectionFont);
+    // Smaller explanatory copy recedes without making interactive options
+    // harder to read. Labels, fields, navigation and buttons remain 10 pt.
+    for (HWND control : {state->pageSubtitle, state->versionWatermark,
+                         state->audioStatus, state->surround51Hint,
+                         state->captureAudioStatus, state->videoCapabilityStatus,
+                         state->vsrStatus, state->screenshotHelp,
+                         state->relativeSizeWarning, state->fullscreenCursorHint,
+                         state->guideDiagnosticsText, state->guideVideoHint, state->skipStartupHint,
+                         state->updateText, state->updateStatus}) {
+        if (control) SendMessageW(control, WM_SETFONT,
+                                  reinterpret_cast<WPARAM>(secondaryFont), FALSE);
+    }
     for (HWND control : {state->audioOutputSection,
                          state->audioPlaybackSection,
                          state->audioStabilitySection,
                          state->videoCaptureSection,
                          state->videoDisplaySection,
                          state->videoWindowSection,
+                         state->appPreferencesSection,
+                         state->brandLabel,
+                         state->updateTitle,
+                         state->startButton,
                          state->guideShortcutsTitle,
                          state->screenshotTitle,
                          state->guideDiagnosticsTitle}) {
@@ -86,6 +207,16 @@ void ApplySettingsFont(SettingsControls* state, HWND hwnd,
         }
     }
 
+    for (HWND key : state->guideKeys) {
+        if (key) SendMessageW(key, WM_SETFONT, reinterpret_cast<WPARAM>(sectionFont), FALSE);
+    }
+    if (state->pageTitle) {
+        SendMessageW(state->pageTitle, WM_SETFONT,
+                     reinterpret_cast<WPARAM>(titleFont), FALSE);
+    }
+    // Every child now references the replacement set, so monitor transitions
+    // release all four prior resources instead of accumulating GDI objects.
+    for (HFONT previous : previousFonts) DeleteObject(previous);
 }
 
 // Checkbox captions vary substantially between Korean and English.  Measure
@@ -110,246 +241,268 @@ static int SettingsCheckboxWidthDip(HWND checkbox, UINT dpi) {
     // Checkbox glyph plus caption.  Keeping the HWND no wider than this is
     // important: a wide checkbox would overlap a nearby help button and
     // steal its clicks even when the button looks visually separate.
-    return std::min(18 + textWidthDip, 430);
+    return std::min(29 + textWidthDip, 430);
+}
+
+static bool WindowBehaviorWarningNeeded(const SettingsControls* state) {
+    return state->pixelCheck && state->relativeSizeCheck &&
+        SendMessageW(state->pixelCheck, BM_GETCHECK, 0, 0) == BST_CHECKED &&
+        SendMessageW(state->relativeSizeCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
+}
+
+static void LayoutWindowBehaviorControls(SettingsControls* state) {
+    const UINT dpi = state->layoutDpi;
+    const auto place = [dpi](HWND control, int x, int y, int width, int height) {
+        PlaceSettingsControl(control, x, y, width, height, dpi);
+    };
+    // A dedicated note row prevents controls from jumping under the pointer
+    // when Pixel-perfect/relative sizing changes.
+    place(state->videoWindowSection, 184, 112, 792, 20);
+    place(state->relativeSizeCheck, 184, 140, 760, 32);
+    place(state->relativeSizeWarning, 184, 388, 792, 56);
+    place(state->borderlessCheck, 184, 180, 760, 32);
+    place(state->windowSnapCheck, 184, 220, 760, 32);
+    place(state->fullscreenCursorLabel, 184, 276, 376, 20);
+    place(state->fullscreenCursorCombo, 184, 300, 376, 120);
+    place(state->fullscreenCursorHint, 184, 340, 376, 24);
+    if (state->fullscreenCursorHint)
+        SetWindowPos(state->fullscreenCursorHint, HWND_TOP, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    ApplySettingsComboMetrics(state->fullscreenCursorCombo, dpi);
 }
 
 void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
     if (!state) return;
-    // The dialog is deliberately tabbed rather than expanded vertically. This
-    // keeps the startup view small while leaving every setting reachable.
-    PlaceSettingsControl(state->tabControl, 24, 16, 901, 31, dpi);
+    state->layoutDpi = dpi ? dpi : USER_DEFAULT_SCREEN_DPI;
+    const auto place = [dpi](HWND control, int x, int y, int width, int height) {
+        PlaceSettingsControl(control, x, y, width, height, dpi);
+    };
+    // The navigation is deliberately narrow. Labels sit above fields, allowing
+    // full-width device names without making the dialog wider.
+    place(state->brandLabel, 10, 28, 132, 40);
+    place(state->tabControl, 10, 100, 132, 220);
+    SendMessageW(state->tabControl, LB_SETITEMHEIGHT, 0, SettingsPixels(44, dpi));
+    place(state->pageTitle, 184, 24, 792, 40);
+    place(state->pageSubtitle, 184, 66, 792, 24);
+    place(state->versionWatermark, 10, 608, 132, 20);
+    place(state->startButton, 762, 602, 102, 34);
+    place(state->cancelButton, 876, 602, 100, 34);
 
-    // Global preferences remain fixed below every tab, especially direct-start.
-    // Leave a clear visual break after the PCM-buffer group. Language and
-    // quick-start are application preferences, not audio-tuning controls.
-    PlaceSettingsControl(state->languageLabel, 24, 500, 160, 24, dpi);
-    PlaceSettingsControl(state->languageCombo, 195, 496, 280, 120, dpi);
-    PlaceSettingsControl(state->skipStartupCheck, 24, 540, 451, 28, dpi);
-    PlaceSettingsControl(state->skipStartupHint, 44, 568, 500, 22, dpi);
-    PlaceSettingsControl(state->versionWatermark, 24, 602, 260, 20, dpi);
-    PlaceSettingsControl(state->startButton, 745, 568, 80, 30, dpi);
-    PlaceSettingsControl(state->cancelButton, 835, 568, 80, 30, dpi);
+    // Labels share a 64-DIP cadence, with a four-DIP label/field gap. Related
+    // checkboxes stay grouped; the lower timing section gets a 24-DIP break.
+    place(state->audioOutputSection, 184, 112, 376, 20);
+    place(state->audioLabel, 184, 140, 376, 20);
+    place(state->audioCombo, 184, 164, 376, 160);
+    place(state->audioOutputLabel, 184, 204, 376, 20);
+    place(state->audioOutputCombo, 184, 228, 376, 220);
+    place(state->bufferLabel, 184, 268, 376, 20);
+    place(state->bufferCombo, 184, 292, 376, 180);
+    place(state->audioStatus, 184, 332, 376, 48);
+    place(state->exclusiveTestButton, 184, 388, 185, 32);
+    place(state->audioPlaybackSection, 600, 112, 376, 20);
+    place(state->volumeHudLabel, 600, 140, 376, 20);
+    place(state->volumeHudCombo, 600, 164, 376, 160);
+    const int boostWidth = std::min(SettingsCheckboxWidthDip(state->volumeBoostCheck, dpi), 344);
+    place(state->volumeBoostCheck, 600, 204, boostWidth, 32);
+    place(state->volumeBoostHelp, 600 + boostWidth + 8, 208, 24, 24);
+    place(state->muteBackgroundCheck, 600, 244, 376, 32);
+    place(state->audioOnlyCheck, 600, 284, 376, 32);
+    place(state->surround51Check, 600, 336, 376, 32);
+    place(state->surround51Hint, 600, 376, 376, 88);
+    place(state->audioStabilitySection, 184, 488, 792, 20);
+    place(state->driftLabel, 184, 520, 300, 20);
+    place(state->driftHelp, 536, 518, 24, 24);
+    place(state->driftCombo, 184, 544, 376, 120);
+    place(state->pcmQueueLabel, 600, 520, 300, 20);
+    place(state->pcmQueueHelp, 952, 518, 24, 24);
+    place(state->pcmQueueCombo, 600, 544, 376, 140);
 
-    // Audio tab: output choice first, then everyday playback controls, then
-    // the latency/stability controls that usually only need adjustment after
-    // diagnostics report a problem.
-    PlaceSettingsControl(state->audioOutputSection, 34, 58, 200, 20, dpi);
-    PlaceSettingsControl(state->audioLabel, 34, 80, 160, 24, dpi);
-    PlaceSettingsControl(state->audioCombo, 205, 76, 360, 120, dpi);
-    // Exclusive endpoint verification configures the selected output mode,
-    // so keep its explicit recheck action beside that mode instead of making
-    // it look like a generic status-row operation.
-    // Match the visible combobox field (rather than its dropdown height) so
-    // the recheck action reads as part of the output-mode row.
-    PlaceSettingsControl(state->exclusiveTestButton, 575, 76, 185, 22, dpi);
-    PlaceSettingsControl(state->audioOutputLabel, 34, 116, 160, 24, dpi);
-    PlaceSettingsControl(state->audioOutputCombo, 205, 112, 680, 220, dpi);
-    PlaceSettingsControl(state->bufferLabel, 34, 152, 160, 24, dpi);
-    PlaceSettingsControl(state->bufferCombo, 205, 148, 280, 180, dpi);
-    PlaceSettingsControl(state->audioStatus, 34, 188, 580, 24, dpi);
-    PlaceSettingsControl(state->audioPlaybackSection, 34, 222, 250, 20, dpi);
-    PlaceSettingsControl(state->volumeHudLabel, 34, 246, 160, 24, dpi);
-    PlaceSettingsControl(state->volumeHudCombo, 205, 242, 280, 160, dpi);
-    const int volumeBoostWidth = SettingsCheckboxWidthDip(
-        state->volumeBoostCheck, dpi);
-    PlaceSettingsControl(state->volumeBoostCheck, 34, 282, volumeBoostWidth,
-                         28, dpi);
-    PlaceSettingsControl(state->volumeBoostHelp,
-                         34 + volumeBoostWidth + 10,
-                         284, 24, 24, dpi);
-    PlaceSettingsControl(state->muteBackgroundCheck, 34, 318, 500, 28, dpi);
-    PlaceSettingsControl(state->audioOnlyCheck, 34, 354, 500, 28, dpi);
-    PlaceSettingsControl(state->surround51Check, 575, 242, 330, 28, dpi);
-    PlaceSettingsControl(state->surround51Hint, 575, 280, 330, 100, dpi);
-    PlaceSettingsControl(state->audioStabilitySection, 34, 392, 250, 20, dpi);
-    PlaceSettingsControl(state->driftLabel, 34, 416, 160, 24, dpi);
-    PlaceSettingsControl(state->driftHelp, 170, 412, 24, 24, dpi);
-    PlaceSettingsControl(state->driftCombo, 205, 412, 360, 120, dpi);
-    PlaceSettingsControl(state->pcmQueueLabel, 34, 452, 160, 24, dpi);
-    PlaceSettingsControl(state->pcmQueueHelp, 170, 448, 24, 24, dpi);
-    PlaceSettingsControl(state->pcmQueueCombo, 205, 448, 280, 140, dpi);
+    // Video: preserve the detected-format summary instead of hiding capability
+    // information behind another interaction.
+    place(state->videoCaptureSection, 184, 112, 268, 20);
+    place(state->videoRefreshButton, 476, 108, 84, 28);
+    place(state->captureDeviceLabel, 184, 140, 376, 20);
+    place(state->captureDeviceCombo, 184, 164, 376, 220);
+    place(state->captureAudioDeviceLabel, 184, 204, 376, 20);
+    place(state->captureAudioDeviceCombo, 184, 228, 376, 220);
+    place(state->captureAudioStatus, 184, 228, 376, 30);
+    place(state->videoLabel, 184, 268, 180, 20);
+    place(state->videoCombo, 184, 292, 180, 120);
+    place(state->frameRateLabel, 380, 268, 180, 20);
+    place(state->frameRateCombo, 380, 292, 180, 200);
+    SendMessageW(state->frameRateCombo, CB_SETDROPPEDWIDTH, SettingsPixels(342, dpi), 0);
+    SendMessageW(state->captureDeviceCombo, CB_SETDROPPEDWIDTH, SettingsPixels(560, dpi), 0);
+    SendMessageW(state->captureAudioDeviceCombo, CB_SETDROPPEDWIDTH, SettingsPixels(560, dpi), 0);
+    SendMessageW(state->audioOutputCombo, CB_SETDROPPEDWIDTH, SettingsPixels(560, dpi), 0);
+    place(state->pixelFormatLabel, 184, 332, 376, 20);
+    place(state->pixelFormatCombo, 184, 356, 376, 160);
+    place(state->videoCapabilityStatus, 184, 392, 376, 84);
+    place(state->forceHdr10Check, 184, 480, 344, 40);
+    place(state->forceHdr10Help, 536, 488, 24, 24);
+    place(state->hdrChromaLabel, 184, 528, 322, 20);
+    place(state->hdrChromaCombo, 184, 552, 344, 150);
+    place(state->hdrChromaHelp, 536, 555, 24, 24);
+    place(state->mjpegColorLabel, 184, 488, 322, 20);
+    place(state->mjpegColorCombo, 184, 512, 344, 150);
+    place(state->mjpegColorHelp, 536, 515, 24, 24);
 
-    // Video & window tab: capture format on the left; how it is shown and
-    // how the viewer window behaves on the right. HDR stays last because it
-    // is an experimental override rather than a normal display choice.
-    // Leave a real breathing gap below each section heading.  The previous
-    // first-row placement was inherited from the no-heading layout and made
-    // headings read like part of the option label.
-    PlaceSettingsControl(state->captureDeviceLabel, 34, 84, 140, 24, dpi);
-    PlaceSettingsControl(state->videoCaptureSection, 34, 58, 140, 20, dpi);
-    PlaceSettingsControl(state->captureDeviceCombo, 190, 80, 270, 220, dpi);
-    PlaceSettingsControl(state->captureAudioDeviceLabel, 34, 124, 140, 24, dpi);
-    PlaceSettingsControl(state->captureAudioDeviceCombo, 190, 120, 270, 220, dpi);
-    PlaceSettingsControl(state->captureAudioStatus, 190, 124, 300, 24, dpi);
-    PlaceSettingsControl(state->videoLabel, 34, 164, 140, 24, dpi);
-    PlaceSettingsControl(state->videoCombo, 190, 160, 270, 120, dpi);
-    PlaceSettingsControl(state->pixelFormatLabel, 34, 204, 140, 24, dpi);
-    PlaceSettingsControl(state->pixelFormatCombo, 190, 200, 270, 160, dpi);
-    PlaceSettingsControl(state->frameRateLabel, 34, 244, 140, 24, dpi);
-    PlaceSettingsControl(state->frameRateCombo, 190, 240, 270, 200, dpi);
-    PlaceSettingsControl(state->videoCapabilityStatus, 34, 278, 430, 90, dpi);
-    PlaceSettingsControl(state->presentationLabel, 505, 84, 95, 24, dpi);
-    PlaceSettingsControl(state->videoDisplaySection, 505, 58, 140, 20, dpi);
-    PlaceSettingsControl(state->presentationHelp, 604, 80, 24, 24, dpi);
-    PlaceSettingsControl(state->presentationCombo, 630, 80, 255, 120, dpi);
-    PlaceSettingsControl(state->displayMonitorLabel, 505, 124, 120, 24, dpi);
-    PlaceSettingsControl(state->displayMonitorCombo, 630, 120, 255, 180, dpi);
-    if (state->displayMonitorCombo)
-        SendMessageW(state->displayMonitorCombo, CB_SETDROPPEDWIDTH, SettingsPixels(560, dpi), 0);
-    PlaceSettingsControl(state->pixelCheck, 505, 160, 380, 28, dpi);
-    PlaceSettingsControl(state->scalingLabel, 505, 200, 120, 24, dpi);
-    PlaceSettingsControl(state->scalingCombo, 630, 196, 255, 120, dpi);
-    // The controls from here onward affect the viewer window itself rather
-    // than captured video format or rendering policy.  When Pixel-perfect is
-    // enabled the scaling row is hidden, so pull this section up by one grid
-    // row instead of leaving an arbitrary empty gap.
-    const bool pixelPerfect = state->pixelCheck &&
-        SendMessageW(state->pixelCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    const int windowSectionY = pixelPerfect ? 208 : 244;
-    const int windowOptionY = windowSectionY + 24;
-    PlaceSettingsControl(state->videoWindowSection, 505, windowSectionY,
-                         140, 20, dpi);
-    PlaceSettingsControl(state->relativeSizeCheck, 505, windowOptionY,
-                         400, 28, dpi);
-    PlaceSettingsControl(state->relativeSizeWarning, 525, windowOptionY + 28,
-                         370, 28, dpi);
-    PlaceSettingsControl(state->borderlessCheck, 505, windowOptionY + 68,
-                         400, 28, dpi);
-    PlaceSettingsControl(state->windowSnapCheck, 505, windowOptionY + 104,
-                         400, 28, dpi);
-    PlaceSettingsControl(state->fullscreenCursorLabel, 505,
-                         windowOptionY + 144, 120, 24, dpi);
-    PlaceSettingsControl(state->fullscreenCursorCombo, 630,
-                         windowOptionY + 140, 255, 120, dpi);
-    PlaceSettingsControl(state->fullscreenCursorHint, 630,
-                         windowOptionY + 172, 255, 24, dpi);
-    // The combo's configured height includes its drop-down list rectangle.
-    // Keep the adjacent hint above that sibling after every relayout so a
-    // Pixel-perfect redraw cannot paint over it while the list is closed.
-    if (state->fullscreenCursorHint) {
-        SetWindowPos(state->fullscreenCursorHint, HWND_TOP, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    place(state->videoDisplaySection, 600, 112, 376, 20);
+    place(state->presentationLabel, 600, 140, 300, 20);
+    place(state->presentationHelp, 952, 138, 24, 24);
+    place(state->presentationCombo, 600, 164, 376, 120);
+    place(state->displayMonitorLabel, 600, 204, 376, 20);
+    place(state->displayMonitorCombo, 600, 228, 376, 180);
+    SendMessageW(state->displayMonitorCombo, CB_SETDROPPEDWIDTH, SettingsPixels(560, dpi), 0);
+    place(state->pixelCheck, 600, 332, 376, 32);
+    place(state->scalingLabel, 600, 268, 376, 20);
+    place(state->scalingCombo, 600, 292, 376, 120);
+    // Keep equal eight-DIP gaps between cards and above the footer, without
+    // changing the dialog size or shrinking interactive targets.
+    place(state->vsrCheck, 600, 376, 264, 32);
+    place(state->vsrGuideButton, 876, 376, 100, 32);
+    place(state->vsrCaptureLabel, 600, 412, 172, 30);
+    place(state->vsrCaptureCombo, 786, 412, 190, 150);
+    place(state->vsrStatus, 600, 448, 376, 20);
+    place(state->screenshotTitle, 600, 492, 376, 20);
+    place(state->screenshotClipboardCheck, 600, 516, 182, 24);
+    place(state->screenshotFolderButton, 600, 544, 182, 28);
+    place(state->screenshotHelp, 794, 542, 182, 32);
+
+    // Window behavior has its own page, avoiding a packed video/options wall.
+    LayoutWindowBehaviorControls(state);
+
+    place(state->guideShortcutsTitle, 204, 132, 336, 20);
+    for (size_t i = 0; i < state->guideKeys.size(); ++i) {
+        const int y = 168 + static_cast<int>(i) * 36;
+        place(state->guideKeys[i], 214, y + 3, 40, 23);
+        place(state->guideDescriptions[i], 276, y, 264, 29);
     }
-    // P010 and MJPEG use the same final capture-format row. Only the control
-    // relevant to the selected input format is made visible.
-    PlaceSettingsControl(state->forceHdr10Check, 34, 374, 360, 28, dpi);
-    PlaceSettingsControl(state->forceHdr10Help, 402, 370, 24, 24, dpi);
-    PlaceSettingsControl(state->hdrChromaLabel, 34, 414, 140, 24, dpi);
-    PlaceSettingsControl(state->hdrChromaCombo, 190, 410, 240, 150, dpi);
-    PlaceSettingsControl(state->hdrChromaHelp, 438, 410, 24, 24, dpi);
-    PlaceSettingsControl(state->mjpegColorLabel, 34, 374, 140, 24, dpi);
-    PlaceSettingsControl(state->mjpegColorCombo, 190, 370, 240, 150, dpi);
-    PlaceSettingsControl(state->mjpegColorHelp, 438, 370, 24, 24, dpi);
+    place(state->guideVideoHint, 204, 501, 336, 36);
+    place(state->guideDiagnosticsTitle, 600, 132, 376, 20);
+    place(state->guideDiagnosticsText, 600, 160, 376, 32);
+    place(state->saveLogCheck, 600, 208, 376, 32);
+    place(state->showConsoleCheck, 600, 248, 376, 32);
+    place(state->guideLogFolderButton, 600, 296, 185, 32);
 
-    // Guide and update tabs.
-    PlaceSettingsControl(state->guideShortcutsTitle, 34, 58, 280, 20, dpi);
-    PlaceSettingsControl(state->guideText, 34, 84, 400, 220, dpi);
-    PlaceSettingsControl(state->guideDiagnosticsTitle, 505, 58, 320, 20, dpi);
-    PlaceSettingsControl(state->guideDiagnosticsText, 505, 84, 360, 70, dpi);
-    PlaceSettingsControl(state->saveLogCheck, 505, 170, 360, 28, dpi);
-    PlaceSettingsControl(state->showConsoleCheck, 505, 206, 360, 28, dpi);
-    PlaceSettingsControl(state->guideLogFolderButton, 505, 248, 165, 26, dpi);
-    // Video tab's bottom-right section. Global language/startup preferences
-    // occupy the left footer; keep the existing overall dialog size.
-    PlaceSettingsControl(state->screenshotTitle, 505, 470, 380, 20, dpi);
-    PlaceSettingsControl(state->screenshotClipboardCheck, 505, 494, 400, 28, dpi);
-    PlaceSettingsControl(state->screenshotHelp, 705, 530, 200, 36, dpi);
-    PlaceSettingsControl(state->screenshotFolderButton, 505, 530, 185, 28, dpi);
-    PlaceSettingsControl(state->updateTitle, 34, 76, 400, 24, dpi);
-    PlaceSettingsControl(state->updateText, 34, 110, 760, 64, dpi);
-    PlaceSettingsControl(state->checkForUpdatesCheck, 34, 190, 500, 28, dpi);
-    PlaceSettingsControl(state->updateNowButton, 34, 230, 185, 30, dpi);
-    PlaceSettingsControl(state->updateStatus, 235, 234, 650, 24, dpi);
+    // App-wide preferences no longer dominate every page.
+    place(state->appPreferencesSection, 184, 112, 792, 20);
+    place(state->languageLabel, 184, 140, 376, 20);
+    place(state->languageCombo, 184, 164, 376, 120);
+    place(state->themeLabel, 600, 140, 376, 20);
+    place(state->themeCombo, 600, 164, 376, 120);
+    place(state->skipStartupCheck, 184, 212, 760, 32);
+    place(state->skipStartupHint, 212, 252, 732, 28);
+    place(state->updateTitle, 184, 312, 792, 24);
+    place(state->updateText, 184, 344, 730, 56);
+    place(state->checkForUpdatesCheck, 184, 412, 760, 32);
+    place(state->updateNowButton, 184, 456, 185, 32);
+    place(state->updateStatus, 184, 500, 792, 48);
+    for (HWND combo : {state->audioCombo, state->audioOutputCombo,
+                        state->bufferCombo, state->volumeHudCombo,
+                        state->driftCombo, state->pcmQueueCombo,
+                        state->captureDeviceCombo, state->captureAudioDeviceCombo,
+                        state->videoCombo, state->vsrCaptureCombo, state->frameRateCombo,
+                        state->pixelFormatCombo, state->presentationCombo,
+                        state->displayMonitorCombo, state->scalingCombo,
+                        state->hdrChromaCombo, state->mjpegColorCombo,
+                        state->fullscreenCursorCombo, state->languageCombo, state->themeCombo})
+        ApplySettingsComboMetrics(combo, dpi);
 }
 
-void SetSettingsControlVisible(HWND control, bool visible) {
+void SetSettingsControlVisible(HWND control, bool visible, bool enabled) {
     if (!control) return;
-    ShowWindow(control, visible ? SW_SHOW : SW_HIDE);
-    EnableWindow(control, visible ? TRUE : FALSE);
+    const bool wasVisible = (GetWindowLongPtrW(control, GWL_STYLE) & WS_VISIBLE) != 0;
+    if (wasVisible != visible) ShowWindow(control, visible ? SW_SHOWNA : SW_HIDE);
+    const bool shouldEnable = visible && enabled;
+    if ((IsWindowEnabled(control) != FALSE) != shouldEnable) EnableWindow(control, shouldEnable);
 }
 
 void UpdateScalingControlVisibility(SettingsControls* state) {
     if (!state) return;
     const bool pixelPerfect = state->pixelCheck &&
         SendMessageW(state->pixelCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    const bool visible = state->activeTab == SettingsTab::VideoWindow &&
-                         !pixelPerfect;
-    SetSettingsControlVisible(state->scalingLabel, visible);
-    SetSettingsControlVisible(state->scalingCombo, visible);
+    const bool vsr = SendMessageW(state->vsrCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    const bool visible = state->activeTab == SettingsTab::VideoWindow;
+    SetSettingsControlVisible(state->scalingLabel, visible, !pixelPerfect || vsr);
+    SetSettingsControlVisible(state->scalingCombo, visible, !pixelPerfect || vsr);
 }
 
 void UpdateWindowBehaviorVisibility(SettingsControls* state) {
     if (!state) return;
-    const bool pixelPerfect = state->pixelCheck &&
-        SendMessageW(state->pixelCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    const bool relativeSize = state->relativeSizeCheck &&
-        SendMessageW(state->relativeSizeCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
 
     // These are everyday window-behavior preferences, not advanced tuning.
     // Only show the caveat when the currently selected combination needs it.
-    const bool visible = state->activeTab == SettingsTab::VideoWindow;
+    const bool visible = state->activeTab == SettingsTab::Window;
+    SetSettingsControlVisible(state->videoWindowSection, visible);
+    SetSettingsControlVisible(state->windowSnapCheck, visible);
     SetSettingsControlVisible(state->relativeSizeCheck, visible);
     SetSettingsControlVisible(state->borderlessCheck, visible);
     SetSettingsControlVisible(state->fullscreenCursorLabel, visible);
     SetSettingsControlVisible(state->fullscreenCursorCombo, visible);
     SetSettingsControlVisible(state->fullscreenCursorHint, visible);
     SetSettingsControlVisible(state->relativeSizeWarning,
-                              visible && pixelPerfect && relativeSize);
+                              visible && WindowBehaviorWarningNeeded(state));
 }
 
 void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
-                                            settings::VideoPixelFormat selectedFormat) {
+                                            settings::VideoPixelFormat selectedFormat,
+                                            SettingsAvailability availability) {
     if (!state) return;
     const bool audio = state->activeTab == SettingsTab::Audio;
     const bool video = state->activeTab == SettingsTab::VideoWindow;
     const bool guide = state->activeTab == SettingsTab::GuideDiagnostics;
     const bool updates = state->activeTab == SettingsTab::Updates;
-    for (HWND control : {state->tabControl, state->languageLabel,
-                         state->languageCombo, state->skipStartupCheck,
-                         state->skipStartupHint, state->versionWatermark,
-                         state->startButton, state->cancelButton}) {
+    RefreshSettingsPageHeader(state);
+    for (HWND control : {state->tabControl, state->brandLabel,
+                         state->pageTitle, state->pageSubtitle,
+                         state->versionWatermark,
+                         state->cancelButton}) {
         SetSettingsControlVisible(control, true);
     }
+    SetSettingsControlVisible(state->startButton, true, availability.start);
+    for (HWND control : {state->languageLabel, state->languageCombo,
+                         state->themeLabel, state->themeCombo,
+                         state->skipStartupCheck, state->skipStartupHint,
+                         state->appPreferencesSection})
+        SetSettingsControlVisible(control, updates);
     for (HWND control : {state->audioOutputSection,
                          state->audioPlaybackSection,
                          state->audioStabilitySection,
                          state->audioLabel, state->audioCombo,
                          state->audioOutputLabel, state->audioOutputCombo,
-                         state->bufferLabel, state->bufferCombo,
+                         state->bufferLabel,
                          state->audioStatus,
                          state->volumeHudLabel, state->volumeHudCombo,
                          state->volumeBoostCheck, state->volumeBoostHelp,
                          state->muteBackgroundCheck, state->audioOnlyCheck,
-                         state->surround51Check, state->surround51Hint,
                          state->driftLabel, state->driftHelp, state->driftCombo,
                          state->pcmQueueLabel, state->pcmQueueHelp,
                          state->pcmQueueCombo}) {
         SetSettingsControlVisible(control, audio);
     }
+    SetSettingsControlVisible(state->bufferCombo, audio, availability.audioBuffer);
     // The endpoint recheck belongs only to WASAPI Exclusive.  In Shared and
     // ASIO modes it is both irrelevant and misleading, even on the Audio tab.
     SetSettingsControlVisible(state->exclusiveTestButton,
-                              audio && exclusive);
+                              audio && exclusive, availability.exclusiveProbe);
     const bool shared = SendMessageW(state->audioCombo, CB_GETCURSEL, 0, 0) == 0;
-    EnableWindow(state->surround51Check, audio && shared);
-    EnableWindow(state->surround51Hint, audio && shared);
+    SetSettingsControlVisible(state->surround51Check, audio, shared);
+    SetSettingsControlVisible(state->surround51Hint, audio, shared);
     for (HWND control : {state->videoCaptureSection,
+                         state->videoRefreshButton,
                          state->videoDisplaySection,
-                         state->videoWindowSection,
                          state->presentationLabel, state->presentationHelp,
                          state->presentationCombo, state->displayMonitorLabel,
                          state->displayMonitorCombo, state->captureDeviceLabel,
-                         state->captureDeviceCombo,
                          state->captureAudioDeviceLabel, state->videoLabel,
                          state->videoCombo, state->pixelFormatLabel,
-                         state->pixelFormatCombo, state->frameRateLabel,
-                         state->frameRateCombo, state->videoCapabilityStatus,
-                         state->pixelCheck, state->windowSnapCheck,
-                         state->fullscreenCursorLabel,
-                         state->fullscreenCursorCombo,
-                         state->fullscreenCursorHint}) {
+                         state->frameRateLabel, state->videoCapabilityStatus,
+                         state->pixelCheck}) {
         SetSettingsControlVisible(control, video);
     }
+    SetSettingsControlVisible(state->captureDeviceCombo, video, availability.captureDevice);
+    SetSettingsControlVisible(state->pixelFormatCombo, video, availability.formats);
+    SetSettingsControlVisible(state->frameRateCombo, video, availability.formats);
     // This row has two mutually exclusive controls: the device picker for a
     // separate capture endpoint, or the short "built-in audio" status. Keep
     // its existing video-tab choice intact; hide both together off-tab.
@@ -370,11 +523,28 @@ void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
     SetSettingsControlVisible(state->mjpegColorCombo, video && mjpegSelected);
     SetSettingsControlVisible(state->mjpegColorHelp, video && mjpegSelected);
     SetSettingsControlVisible(state->guideShortcutsTitle, guide);
-    SetSettingsControlVisible(state->guideText, guide);
+    SetSettingsControlVisible(state->guideVideoHint, guide);
+    for (HWND key : state->guideKeys) SetSettingsControlVisible(key, guide);
+    for (HWND description : state->guideDescriptions) SetSettingsControlVisible(description, guide);
     SetSettingsControlVisible(state->guideDiagnosticsTitle, guide);
     SetSettingsControlVisible(state->guideDiagnosticsText, guide);
     SetSettingsControlVisible(state->guideLogFolderButton, guide);
     SetSettingsControlVisible(state->screenshotTitle, video);
+    SetSettingsControlVisible(state->vsrCheck, video);
+    SetSettingsControlVisible(state->vsrGuideButton, video);
+    SetSettingsControlVisible(state->vsrStatus, video);
+    const bool vsr = SendMessageW(state->vsrCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    SetSettingsControlVisible(state->vsrCaptureLabel, video, vsr);
+    SetSettingsControlVisible(state->vsrCaptureCombo, video, vsr);
+    SetSettingsText(state->videoLabel, vsr
+        ? (state->english ? L"Display resolution" : L"표시 해상도")
+        : (state->english ? L"Capture resolution" : L"캡처 해상도"));
+    SetSettingsText(state->pixelCheck, vsr
+        ? (state->english ? L"Lock display size" : L"표시 크기 고정")
+        : L"Pixel-perfect (1:1)");
+    SetSettingsText(state->vsrStatus, state->english
+        ? L"NV12 / MJPEG SDR · F6 toggles the effect"
+        : L"NV12 / MJPEG SDR · F6 효과만 전환");
     SetSettingsControlVisible(state->screenshotClipboardCheck, video);
     SetSettingsControlVisible(state->screenshotHelp, video);
     SetSettingsControlVisible(state->screenshotFolderButton, video);

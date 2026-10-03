@@ -58,9 +58,13 @@
 #include "screenshot/ScreenshotService.h"
 #include "ui/ViewerHelpWindow.h"
 #include "ui/AudioOsdLayout.h"
+#include "ui/OverlayStyle.h"
 #include "ui/AudioOnlyView.h"
 #include "ui/PresentationModeUi.h"
 #include "ui/SettingsView.h"
+#include "ui/SettingsTheme.h"
+#include <dwmapi.h>
+#include "ui/SettingsModeCache.h"
 #include "ui/SettingsDialogControls.h"
 #include "ui/UiText.h"
 #include "video/OutputTransitionState.h"
@@ -109,6 +113,11 @@ static std::wstring g_hdrFrameAuditDirectory;
 #include "video/ScrgbPrototype.h"
 static bool g_useScrgbPrototype = false;
 #endif
+#ifdef LLCV_VSR_FEATURE
+#include "video/VsrExperiment.h"
+// UI publishes intent only; the capture/render thread owns all D3D calls.
+static std::atomic<llcv::vsr::Mode> g_vsrMode{llcv::vsr::Mode::Disabled};
+#endif
 
 // -----------------------------------------------------------------------------
 // User-tested settings.
@@ -121,7 +130,11 @@ constexpr wchar_t kVideoPinName[] = L"Video";
 constexpr int kSampleRate = 48000;
 constexpr int kChannels = 2;
 constexpr int kBitsPerSample = 16;
-constexpr wchar_t kAppVersionLabel[] = L"v1.3.1";
+#ifdef LLCV_VSR_EXPERIMENT
+constexpr wchar_t kAppVersionLabel[] = L"v2.0.0-vsr-test";
+#else
+constexpr wchar_t kAppVersionLabel[] = L"v2.0.0";
+#endif
 
 constexpr int kRecommendedCaptureBufferMs = 20;
 constexpr int kMaximumVolumePercent = 200;
@@ -183,8 +196,11 @@ using DirectShowColorMetadata = llcv::video::CaptureColorMetadata;
 
 using llcv::settings::VideoPresetInfo;
 
+static constexpr VideoPresetInfo kDefaultVideoPreset =
+    {VideoPreset::R1920x1080, 1920, 1080, 120, L"1920 x 1080"};
 static constexpr VideoPresetInfo kVideoPresets[] = {
-    {VideoPreset::R1920x1080, 1920, 1080, 120, L"1920 x 1080"},
+    {VideoPreset::R1280x720, 1280, 720, 60, L"1280 x 720"},
+    kDefaultVideoPreset,
     {VideoPreset::R2560x1440, 2560, 1440, 120, L"2560 x 1440"},
     {VideoPreset::R3840x2160, 3840, 2160, 60, L"3840 x 2160"},
 };
@@ -288,7 +304,27 @@ static std::atomic<bool> g_backgroundAudioMuted{false};
 static std::atomic<uint64_t> g_volumeHudUntilMs{0};
 enum class TransientHudContent { Volume, OneToOne, OneToOneUnavailable,
     ScreenshotPending, ScreenshotBusy, ScreenshotSaved, ScreenshotCopied,
-    ScreenshotClipboardFailed, ScreenshotFailed, ScreenshotTimeout };
+    ScreenshotClipboardFailed, ScreenshotFailed, ScreenshotTimeout
+#ifdef LLCV_VSR_FEATURE
+    , VsrPending, VsrOn, VsrOff, VsrUnavailable, VsrRejected, VsrFailed
+#endif
+};
+static void ShowTransientHud(TransientHudContent content);
+#ifdef LLCV_VSR_FEATURE
+static bool HandleVsrTestKey(WPARAM key, LPARAM flags) {
+    if (key != VK_F6) return false;
+    if ((flags & (LPARAM{1} << 30)) != 0 || g_settings.audioOnly) return true;
+    const auto current = g_vsrMode.load(std::memory_order_acquire);
+    g_settings.vsrEnabled = current != llcv::vsr::Mode::On;
+    // Publish pending before the request, so a fast render-thread acknowledgement
+    // cannot be overwritten by a late UI "pending" status.
+    ShowTransientHud(TransientHudContent::VsrPending);
+    g_vsrMode.store(current == llcv::vsr::Mode::On ? llcv::vsr::Mode::Off
+                                                 : llcv::vsr::Mode::On,
+                    std::memory_order_release);
+    return true;
+}
+#endif
 static std::atomic<TransientHudContent> g_transientHudContent{
     TransientHudContent::Volume};
 static std::atomic<uint64_t> g_overlayGeneration{1};
@@ -666,17 +702,41 @@ static int RunExclusiveCompatibilityProbeCli(bool allEndpoints) {
     return passed == static_cast<int>(targets.size()) ? 0 : 3;
 }
 
-static const VideoPresetInfo& CurrentVideoPreset() {
+static bool g_resolutionPlanLatched = false;
+static bool g_vsrResolutionPlan = false;
+static VideoPreset g_capturePreset = VideoPreset::R1920x1080;
+
+static const VideoPresetInfo& VideoPresetDetails(VideoPreset preset) {
     for (const auto& info : kVideoPresets) {
-        if (info.preset == g_settings.videoPreset) return info;
+        if (info.preset == preset) return info;
     }
-    return kVideoPresets[0];
+    return kDefaultVideoPreset;
+}
+
+static const VideoPresetInfo& CurrentVideoPreset() {
+    return VideoPresetDetails(g_settings.videoPreset);
+}
+
+static const VideoPresetInfo& CurrentCapturePreset() {
+    return VideoPresetDetails(g_resolutionPlanLatched ? g_capturePreset :
+        (g_settings.vsrEnabled && !g_settings.audioOnly ? g_settings.vsrCapturePreset : g_settings.videoPreset));
+}
+
+static void LatchVideoResolutionPlan() {
+    g_vsrResolutionPlan = g_settings.vsrEnabled && !g_settings.audioOnly;
+    g_capturePreset = g_vsrResolutionPlan ? g_settings.vsrCapturePreset : g_settings.videoPreset;
+    g_resolutionPlanLatched = true;
+}
+
+static bool SourcePixelPerfect() {
+    return g_settings.pixelPerfect &&
+        (!g_vsrResolutionPlan || CurrentCapturePreset().preset == CurrentVideoPreset().preset);
 }
 
 static int RequestedVideoFrameRate() {
     return g_settings.videoFrameRate > 0
                ? g_settings.videoFrameRate
-               : CurrentVideoPreset().framerate;
+               : CurrentCapturePreset().framerate;
 }
 
 static constexpr int kRelativeScaleUnit = 1'000'000;
@@ -700,13 +760,13 @@ static int LegacyRelativeScaleForMonitor(HMONITOR monitor) {
                       kRelativeScaleUnit / 4, kRelativeScaleUnit);
 }
 
-static int RelativeScaleForMonitor(HMONITOR monitor) {
+static int RelativeScaleForMonitor(HMONITOR monitor, bool capture = false) {
     MONITORINFO info{sizeof(info)};
     if (!monitor || !GetMonitorInfoW(monitor, &info)) return 0;
     const int monitorWidth = info.rcMonitor.right - info.rcMonitor.left;
     const int monitorHeight = info.rcMonitor.bottom - info.rcMonitor.top;
     if (monitorWidth <= 0 || monitorHeight <= 0) return 0;
-    const auto& video = CurrentVideoPreset();
+    const auto& video = capture ? CurrentCapturePreset() : CurrentVideoPreset();
     const int widthScale = static_cast<int>(
         static_cast<int64_t>(video.width) * kRelativeScaleUnit /
         monitorWidth);
@@ -1716,15 +1776,17 @@ static HRESULT GetActiveVideoPinFormat(
     return llcv::video::GetActiveVideoPinFormat(videoPin, mediaType);
 }
 
-#ifdef LLCV_GPU_DIAGNOSTICS
+#if defined(LLCV_GPU_DIAGNOSTICS) || defined(LLCV_SETTINGS_MODE_TEST)
 // Hardware-free settings integration tests; absent from production builds.
 static std::vector<PixelFormatSupport> (*g_testVideoCapabilityProbe)(
     const std::wstring&, int, int, HRESULT*) = nullptr;
 #endif
+static std::mutex g_settingsCaptureProbeMutex;
 static std::vector<PixelFormatSupport> ProbePixelFormats(
     const std::wstring& captureDeviceId, int width, int height, HRESULT* queryStatus = nullptr) {
+    std::lock_guard captureLock(g_settingsCaptureProbeMutex);
     if (queryStatus) *queryStatus = S_OK;
-#ifdef LLCV_GPU_DIAGNOSTICS
+#if defined(LLCV_GPU_DIAGNOSTICS) || defined(LLCV_SETTINGS_MODE_TEST)
     if (g_testVideoCapabilityProbe)
         return g_testVideoCapabilityProbe(captureDeviceId, width, height, queryStatus);
 #endif
@@ -1756,6 +1818,7 @@ static std::vector<PixelFormatSupport> ProbePixelFormats(
 // graph, so it cannot add capture-time latency or steady-state overhead.
 static InternalCaptureAudioProbe ProbeInternalCaptureAudio(
     const std::wstring& captureDeviceId) {
+    std::lock_guard captureLock(g_settingsCaptureProbeMutex);
     InternalCaptureAudioProbe probe{};
     HRESULT initHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     const bool uninitialize = SUCCEEDED(initHr);
@@ -1792,7 +1855,7 @@ static InternalCaptureAudioProbe ProbeInternalCaptureAudio(
 static void UpdateConfiguredVideoTitle(HWND videoHost, int configuredFps) {
     HWND root = GetAncestor(videoHost, GA_ROOT);
     if (!root) return;
-    const auto& video = CurrentVideoPreset();
+    const auto& video = CurrentCapturePreset();
     const wchar_t* audioLabel =
         g_settings.audioMode == AudioMode::WasapiExclusive
             ? L"WASAPI Exclusive"
@@ -1852,8 +1915,10 @@ struct DirectD3D11Renderer {
     ID2D1RenderTarget* audioCacheTarget = nullptr;
     ID2D1SolidColorBrush* osdCacheBackgroundBrush = nullptr;
     ID2D1SolidColorBrush* osdCacheTextBrush = nullptr;
+    ID2D1SolidColorBrush* osdCacheEdgeBrush = nullptr;
     ID2D1SolidColorBrush* volumeCacheBackgroundBrush = nullptr;
     ID2D1SolidColorBrush* volumeCacheTextBrush = nullptr;
+    ID2D1SolidColorBrush* volumeCacheBoostBrush = nullptr;
     ID2D1SolidColorBrush* volumeCacheBarBackgroundBrush = nullptr;
     ID2D1SolidColorBrush* volumeCacheBarBrush = nullptr;
     ID2D1SolidColorBrush* audioCacheBackgroundBrush = nullptr;
@@ -1862,6 +1927,10 @@ struct DirectD3D11Renderer {
     ID2D1SolidColorBrush* audioCacheBarBrush = nullptr;
     ID2D1SolidColorBrush* audioCacheHighlightBrush = nullptr;
     ID2D1SolidColorBrush* audioCacheClipBrush = nullptr;
+    ID2D1SolidColorBrush* audioCacheBoostBrush = nullptr;
+    ID2D1SolidColorBrush* audioCacheCardBrush = nullptr;
+    ID2D1SolidColorBrush* audioCacheEdgeBrush = nullptr;
+    ID2D1SolidColorBrush* audioCacheSecondaryBrush = nullptr;
     ID3D11Texture2D* osdOverlayTexture = nullptr;
     ID3D11Texture2D* volumeOverlayTexture = nullptr;
     ID3D11Texture2D* audioOverlayTexture = nullptr;
@@ -1877,11 +1946,16 @@ struct DirectD3D11Renderer {
     ID3D11ShaderResourceView* hdrOverlayBackgroundView = nullptr;
     ID3D11Buffer* hdrOverlayConstants = nullptr;
     IDWriteFactory* dwriteFactory = nullptr;
+    llcv::overlay_ui::Fonts overlayFonts;
     IDWriteTextFormat* osdTextFormat = nullptr;
     IDWriteTextFormat* volumeTextFormat = nullptr;
     IDWriteTextFormat* audioTextFormat = nullptr;
+    IDWriteTextFormat* audioValueFormat = nullptr;
+    IDWriteTextFormat* audioSmallFormat = nullptr;
     IDWriteTextLayout* osdTextLayout = nullptr;
     IDWriteTextLayout* volumeTextLayout = nullptr;
+    float volumePanelHeight = 82.0f;
+    float volumePanelTop = 0.0f;
     UINT outputWidth = 0;
     UINT outputHeight = 0;
     bool pixelPerfectFullscreen = false;
@@ -1905,6 +1979,91 @@ struct DirectD3D11Renderer {
     double diagnosticPresentUs = 0;
 #endif
     llcv::video_color::Configuration sdrColor{};
+#ifdef LLCV_VSR_FEATURE
+    llcv::vsr::State vsrState = llcv::vsr::State::Untouched;
+    llcv::vsr::Timing vsrTiming;
+    llcv::vsr::Mode vsrAppliedMode = llcv::vsr::Mode::Disabled;
+    bool vsrEligible = false;
+    UINT vsrInputWidth = 0, vsrInputHeight = 0;
+    UINT vsrDisplayWidth = 0, vsrDisplayHeight = 0;
+    std::wstring vsrOsdLine() const {
+        const bool english = IsEnglishUi();
+        const wchar_t* status = english ? L"OFF requested" : L"요청 OFF";
+        switch (vsrState) {
+        case llcv::vsr::State::Requested:
+            status = english ? L"ON requested (activation unverified)" : L"요청 ON (실제 활성 미확인)"; break;
+        case llcv::vsr::State::Bypassed:
+            status = english ? L"Unavailable" : L"적용 불가"; break;
+        case llcv::vsr::State::Rejected:
+            status = english ? L"Rejected / OFF" : L"요청 거부 / OFF"; break;
+        case llcv::vsr::State::Unknown:
+            status = english ? L"Request failed / state unknown" : L"요청 실패 / 상태 미확인"; break;
+        default: break;
+        }
+        wchar_t line[192]{};
+        swprintf_s(line, L"VSR           %s · %u×%u → %u×%u\n", status,
+            vsrInputWidth, vsrInputHeight, vsrDisplayWidth, vsrDisplayHeight);
+        return line;
+    }
+    unsigned vsrWarmupFrames = 0;
+    void reportVsrTiming() {
+#ifdef LLCV_VSR_EXPERIMENT
+        if (vsrState == llcv::vsr::State::Untouched) return;
+        const auto data = vsrTiming.Snapshot();
+        fwprintf(stderr, L"[vsr-test] summary state=%s; CPU metrics only, not GPU completion/display latency\n",
+            llcv::vsr::StateName(vsrState));
+        auto print = [](const wchar_t* name, const llcv::vsr::Distribution& d) {
+            fwprintf(stderr, L"[vsr-test] %s n=%llu mean=%.3f p95<=%.3f p99<=%.3f max=%.3f ms\n",
+                name, d.count, d.Mean(), d.Percentile(.95), d.Percentile(.99), d.maximum);
+        };
+        print(L"CPU VideoProcessorBlt call", data.cpuBlt);
+        print(L"capture callback -> Present return (not HDMI latency)", data.captureToPresent);
+#endif
+    }
+    HRESULT applyVsrMode(bool initializing = false) {
+        const auto requested = g_vsrMode.load(std::memory_order_acquire);
+        if (!initializing && requested == vsrAppliedMode) return S_OK;
+        cachedOverlayGeneration = 0; // invalidate once on the render owner, not every frame
+        reportVsrTiming();
+        vsrTiming.Reset();
+        vsrAppliedMode = requested;
+        if (requested == llcv::vsr::Mode::Disabled) {
+            vsrState = llcv::vsr::State::Untouched;
+            // Default launch must keep UI-free frames (especially HDR) free
+            // of overlay scratch copies. Show status only after an opt-in.
+            return S_OK;
+        }
+        if (!vsrEligible) {
+            vsrState = llcv::vsr::State::Bypassed;
+            ShowTransientHud(TransientHudContent::VsrUnavailable);
+        } else {
+            const bool enable = requested == llcv::vsr::Mode::On;
+            const HRESULT requestHr = llcv::vsr::SetRequest(videoContext, processor, enable);
+            vsrState = enable ? llcv::vsr::State::Requested : llcv::vsr::State::Off;
+            if (requestHr != S_OK) {
+                fwprintf(stderr, L"[vsr-test] request rejected: 0x%08X\n", static_cast<unsigned>(requestHr));
+                const HRESULT offHr = llcv::vsr::SetRequest(videoContext, processor, false);
+                if (offHr != S_OK) {
+                    // Unknown state must not be presented as a successful OFF.
+                    vsrState = llcv::vsr::State::Unknown;
+                    ShowTransientHud(TransientHudContent::VsrFailed);
+                    return FAILED(offHr) ? offHr : E_FAIL;
+                }
+                vsrState = llcv::vsr::State::Rejected;
+            }
+#ifdef LLCV_VSR_EXPERIMENT
+            vsrTiming.Initialize(device, vsrWarmupFrames);
+#endif
+            ShowTransientHud(vsrState == llcv::vsr::State::Requested ? TransientHudContent::VsrOn
+                : vsrState == llcv::vsr::State::Off ? TransientHudContent::VsrOff
+                : TransientHudContent::VsrRejected);
+        }
+        fwprintf(stderr, L"[vsr-test] F6: %s; no capture restart/output rebuild; "
+            L"quality/activation depend on NVIDIA settings; measurement warmup restarted.\n",
+            llcv::vsr::StateName(vsrState));
+        return S_OK;
+    }
+#endif
 #ifdef LLCV_HDR_SCRGB_PROTOTYPE
     bool scrgbOutput = false;
     llcv::scrgb::Pipeline scrgbPipeline;
@@ -1952,6 +2111,17 @@ struct DirectD3D11Renderer {
 #endif
 
     void reset() {
+        volumePanelHeight = 82.0f;
+        volumePanelTop = 0.0f;
+#ifdef LLCV_VSR_FEATURE
+        reportVsrTiming();
+        vsrTiming.Reset();
+        vsrState = llcv::vsr::State::Untouched;
+        vsrAppliedMode = llcv::vsr::Mode::Disabled;
+        vsrEligible = false;
+        vsrInputWidth = vsrInputHeight = vsrDisplayWidth = vsrDisplayHeight = 0;
+        vsrWarmupFrames = 0;
+#endif
 #ifdef LLCV_HDR_SCRGB_PROTOTYPE
         scrgbPipeline.Reset();
         scrgbOutput = false;
@@ -1975,6 +2145,10 @@ struct DirectD3D11Renderer {
         SafeRelease(volumeOverlayTexture);
         SafeRelease(osdOverlayTexture);
         SafeRelease(audioCacheClipBrush);
+        SafeRelease(audioCacheBoostBrush);
+        SafeRelease(audioCacheCardBrush);
+        SafeRelease(audioCacheEdgeBrush);
+        SafeRelease(audioCacheSecondaryBrush);
         SafeRelease(audioCacheHighlightBrush);
         SafeRelease(audioCacheTextBrush);
         SafeRelease(audioCacheBackgroundBrush);
@@ -1983,8 +2157,10 @@ struct DirectD3D11Renderer {
         SafeRelease(volumeCacheBarBrush);
         SafeRelease(volumeCacheBarBackgroundBrush);
         SafeRelease(volumeCacheTextBrush);
+        SafeRelease(volumeCacheBoostBrush);
         SafeRelease(volumeCacheBackgroundBrush);
         SafeRelease(osdCacheTextBrush);
+        SafeRelease(osdCacheEdgeBrush);
         SafeRelease(osdCacheBackgroundBrush);
         SafeRelease(audioCacheTarget);
         SafeRelease(volumeCacheTarget);
@@ -1993,7 +2169,10 @@ struct DirectD3D11Renderer {
         SafeRelease(osdTextLayout);
         SafeRelease(volumeTextFormat);
         SafeRelease(audioTextFormat);
+        SafeRelease(audioValueFormat);
+        SafeRelease(audioSmallFormat);
         SafeRelease(osdTextFormat);
+        overlayFonts.Reset(); // Release layouts/formats before unregistering fonts.
         SafeRelease(dwriteFactory);
         SafeRelease(d2dFactory);
         SafeRelease(outputView);
@@ -2088,7 +2267,7 @@ struct DirectD3D11Renderer {
         outputHeight = static_cast<UINT>((std::max)(
             1L, clientRect.bottom - clientRect.top));
         pixelPerfectFullscreen =
-            g_settings.pixelPerfect &&
+            SourcePixelPerfect() &&
             g_fullscreen.load(std::memory_order_acquire);
         outputConfigurationGeneration = configurationGeneration;
         UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT |
@@ -2486,85 +2665,51 @@ struct DirectD3D11Renderer {
             DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
             reinterpret_cast<IUnknown**>(&dwriteFactory));
         if (FAILED(hr)) return hr;
-        hr = dwriteFactory->CreateTextFormat(
-            L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
-            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 16.0f,
-            IsEnglishUi() ? L"en-US" : L"ko-KR", &osdTextFormat);
+        // The private GDI fonts used by settings need a DirectWrite collection
+        // here. Fallback fonts preserve rendering on older DirectWrite versions.
+        (void)overlayFonts.Initialize(dwriteFactory);
+        hr = overlayFonts.CreateFormat(dwriteFactory, DWRITE_FONT_WEIGHT_MEDIUM,
+            15.0f, IsEnglishUi(), &osdTextFormat);
+        if (SUCCEEDED(hr)) hr = overlayFonts.CreateFormat(dwriteFactory,
+            DWRITE_FONT_WEIGHT_SEMI_BOLD, 22.0f, IsEnglishUi(), &volumeTextFormat);
+        if (SUCCEEDED(hr)) hr = overlayFonts.CreateFormat(dwriteFactory,
+            DWRITE_FONT_WEIGHT_MEDIUM, 16.0f, IsEnglishUi(), &audioTextFormat);
+        if (SUCCEEDED(hr)) hr = overlayFonts.CreateFormat(dwriteFactory,
+            DWRITE_FONT_WEIGHT_SEMI_BOLD, 22.0f, IsEnglishUi(), &audioValueFormat);
+        if (SUCCEEDED(hr)) hr = overlayFonts.CreateFormat(dwriteFactory,
+            DWRITE_FONT_WEIGHT_MEDIUM, 13.0f, IsEnglishUi(), &audioSmallFormat);
         if (FAILED(hr)) return hr;
-        hr = dwriteFactory->CreateTextFormat(
-            L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
-            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 22.0f,
-            IsEnglishUi() ? L"en-US" : L"ko-KR", &volumeTextFormat);
-        if (FAILED(hr)) return hr;
-        hr = dwriteFactory->CreateTextFormat(
-            L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
-            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 16.0f,
-            IsEnglishUi() ? L"en-US" : L"ko-KR", &audioTextFormat);
-        if (FAILED(hr)) return hr;
-        if (SUCCEEDED(hr)) {
-            // HDR diagnostics: neutral black, 90% opaque (10% scene light).
-            // Keep the SDR theme and text luminance unchanged. A tinted brush
-            // adds UI-white-dependent light even over a black HDR scene.
-            hr = osdCacheTarget->CreateSolidColorBrush(
-                hdrOutput ? D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.90f)
-                          : D2D1::ColorF(0.055f, 0.063f, 0.078f, 0.90f),
-                &osdCacheBackgroundBrush);
-        }
-        if (SUCCEEDED(hr)) {
-            hr = osdCacheTarget->CreateSolidColorBrush(
-                D2D1::ColorF(0.91f, 0.93f, 0.95f, 1.0f),
-                &osdCacheTextBrush);
-        }
-        if (SUCCEEDED(hr)) {
-            hr = volumeCacheTarget->CreateSolidColorBrush(
-                D2D1::ColorF(0.055f, 0.063f, 0.078f, 0.90f),
-                &volumeCacheBackgroundBrush);
-        }
-        if (SUCCEEDED(hr)) {
-            hr = volumeCacheTarget->CreateSolidColorBrush(
-                D2D1::ColorF(0.91f, 0.93f, 0.95f, 1.0f),
-                &volumeCacheTextBrush);
-        }
-        if (SUCCEEDED(hr)) {
-            hr = volumeCacheTarget->CreateSolidColorBrush(
-                D2D1::ColorF(0.20f, 0.22f, 0.25f, 1.0f),
-                &volumeCacheBarBackgroundBrush);
-        }
-        if (SUCCEEDED(hr)) {
-            hr = volumeCacheTarget->CreateSolidColorBrush(
-                D2D1::ColorF(0.25f, 0.78f, 0.48f, 1.0f),
-                &volumeCacheBarBrush);
-        }
-        if (SUCCEEDED(hr)) {
-            hr = audioCacheTarget->CreateSolidColorBrush(
-                D2D1::ColorF(0.055f, 0.063f, 0.078f, hdrOutput ? 0.90f : 0.92f),
-                &audioCacheBackgroundBrush);
-        }
-        if (SUCCEEDED(hr)) {
-            hr = audioCacheTarget->CreateSolidColorBrush(
-                D2D1::ColorF(0.91f, 0.93f, 0.95f, 1.0f),
-                &audioCacheTextBrush);
-        }
-        if (SUCCEEDED(hr)) {
-            hr = audioCacheTarget->CreateSolidColorBrush(
-                D2D1::ColorF(0.20f, 0.22f, 0.25f, 1.0f),
-                &audioCacheBarBackgroundBrush);
-        }
-        if (SUCCEEDED(hr)) {
-            hr = audioCacheTarget->CreateSolidColorBrush(
-                D2D1::ColorF(0.25f, 0.78f, 0.48f, 1.0f),
-                &audioCacheBarBrush);
-        }
-        if (SUCCEEDED(hr)) {
-            hr = audioCacheTarget->CreateSolidColorBrush(
-                D2D1::ColorF(0.21f, 0.36f, 0.45f, 0.95f),
-                &audioCacheHighlightBrush);
-        }
-        if (SUCCEEDED(hr)) {
-            hr = audioCacheTarget->CreateSolidColorBrush(
-                D2D1::ColorF(0.93f, 0.34f, 0.29f, 1.0f),
-                &audioCacheClipBrush);
-        }
+        audioTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        audioValueFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        audioSmallFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        osdTextFormat->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, 20.0f, 15.0f);
+        // Grayscale avoids colored fringes on transparent overlay textures.
+        for (auto* target : {osdCacheTarget, volumeCacheTarget, audioCacheTarget})
+            target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        const auto& theme = llcv::overlay_ui::kPalette;
+        const auto overlayColor = [](COLORREF value) { return llcv::overlay_ui::Color(value); };
+        const auto brush = [&](ID2D1RenderTarget* target, D2D1_COLOR_F value,
+                               ID2D1SolidColorBrush** output) {
+            if (SUCCEEDED(hr)) hr = target->CreateSolidColorBrush(value, output);
+        };
+        brush(osdCacheTarget, llcv::overlay_ui::Background(hdrOutput), &osdCacheBackgroundBrush);
+        brush(osdCacheTarget, overlayColor(theme.kText), &osdCacheTextBrush);
+        brush(osdCacheTarget, overlayColor(theme.kEdge), &osdCacheEdgeBrush);
+        brush(volumeCacheTarget, llcv::overlay_ui::Background(hdrOutput), &volumeCacheBackgroundBrush);
+        brush(volumeCacheTarget, overlayColor(theme.kText), &volumeCacheTextBrush);
+        brush(volumeCacheTarget, overlayColor(theme.kWarning), &volumeCacheBoostBrush);
+        brush(volumeCacheTarget, overlayColor(theme.kEdge), &volumeCacheBarBackgroundBrush);
+        brush(volumeCacheTarget, overlayColor(theme.kAccent), &volumeCacheBarBrush);
+        brush(audioCacheTarget, llcv::overlay_ui::Background(hdrOutput, 0.92f), &audioCacheBackgroundBrush);
+        brush(audioCacheTarget, overlayColor(theme.kText), &audioCacheTextBrush);
+        brush(audioCacheTarget, overlayColor(theme.kEdge), &audioCacheBarBackgroundBrush);
+        brush(audioCacheTarget, overlayColor(theme.kAccent), &audioCacheBarBrush);
+        brush(audioCacheTarget, overlayColor(theme.kHover), &audioCacheHighlightBrush);
+        brush(audioCacheTarget, overlayColor(theme.kDanger), &audioCacheClipBrush);
+        brush(audioCacheTarget, overlayColor(theme.kWarning), &audioCacheBoostBrush);
+        brush(audioCacheTarget, overlayColor(theme.kControl), &audioCacheCardBrush);
+        brush(audioCacheTarget, overlayColor(theme.kEdge), &audioCacheEdgeBrush);
+        brush(audioCacheTarget, overlayColor(theme.kSecondary), &audioCacheSecondaryBrush);
         if (FAILED(hr)) return hr;
 
         RECT sourceRect{0, 0, width, height};
@@ -2650,7 +2795,20 @@ struct DirectD3D11Renderer {
                                                         &sourceRect);
         const bool scaled = videoRect.right - videoRect.left != width ||
                             videoRect.bottom - videoRect.top != height;
-        if (scaled && !g_settings.pixelPerfect &&
+#ifdef LLCV_VSR_FEATURE
+        vsrInputWidth = static_cast<UINT>(width);
+        vsrInputHeight = static_cast<UINT>(height);
+        vsrDisplayWidth = static_cast<UINT>(videoRect.right - videoRect.left);
+        vsrDisplayHeight = static_cast<UINT>(videoRect.bottom - videoRect.top);
+        vsrEligible = llcv::vsr::Eligible(adapterDesc.VendorId, inputFormat,
+            hdrOutput, static_cast<UINT>(width), static_cast<UINT>(height),
+            static_cast<UINT>(videoRect.right - videoRect.left),
+            static_cast<UINT>(videoRect.bottom - videoRect.top));
+        vsrWarmupFrames = static_cast<unsigned>(fps) * 5u;
+        hr = applyVsrMode(true);
+        if (FAILED(hr)) return hr;
+#endif
+        if (scaled && !SourcePixelPerfect() &&
             g_settings.scalingMode == ScalingMode::Sharp) {
             D3D11_VIDEO_PROCESSOR_FILTER_RANGE sharpness{};
             if (SUCCEEDED(enumerator->GetVideoProcessorFilterRange(
@@ -2729,14 +2887,48 @@ struct DirectD3D11Renderer {
         HRESULT hr = E_FAIL;
         osdText = BuildRuntimeOsdText(
             static_cast<int>(outputWidth), static_cast<int>(outputHeight));
+#ifdef LLCV_VSR_FEATURE
+        // Keep VSR beside Input/Display. These are applied renderer state and
+        // actual video rectangles, not UI intent or a claim of driver activation.
+        size_t videoEnd = 0;
+        for (int line = 0; line < 5; ++line) {
+            const auto end = osdText.find(L'\n', videoEnd);
+            if (end == std::wstring::npos) break;
+            videoEnd = end + 1;
+        }
+        osdText.insert(videoEnd, vsrOsdLine());
+#endif
         hr = dwriteFactory->CreateTextLayout(
             osdText.c_str(), static_cast<UINT32>(osdText.size()),
             osdTextFormat, kOsdTextWidth, kOsdTextHeight, &osdTextLayout);
         if (FAILED(hr)) return hr;
+        const auto headingEnd = osdText.find(L'\n');
+        if (headingEnd != std::wstring::npos) {
+            osdTextLayout->SetFontWeight(DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                DWRITE_TEXT_RANGE{0, static_cast<UINT32>(headingEnd)});
+        }
 
         const TransientHudContent hudContent =
             g_transientHudContent.load(std::memory_order_acquire);
+        const int overlayMaster = g_volumePercent.load(std::memory_order_acquire);
+        const bool masterBoosted = g_settings.allowVolumeBoost && overlayMaster > 100;
         wchar_t volumeText[96]{};
+#ifdef LLCV_VSR_FEATURE
+        if (hudContent >= TransientHudContent::VsrPending) {
+            const wchar_t* ko = L"VSR 비교: F6\n현재: 기본 출력";
+            const wchar_t* en = L"VSR compare: F6\nOriginal output";
+            switch (hudContent) {
+            case TransientHudContent::VsrPending: ko=L"VSR 전환 대기"; en=L"VSR switch pending"; break;
+            case TransientHudContent::VsrOn: ko=L"VSR ON 요청\nF6: 끄기"; en=L"VSR ON requested\nF6: OFF"; break;
+            case TransientHudContent::VsrOff: ko=L"VSR OFF\nF6: 켜기"; en=L"VSR OFF\nF6: ON"; break;
+            case TransientHudContent::VsrUnavailable: ko=L"VSR 적용 불가\n입력·표시 조건 확인"; en=L"VSR unavailable\nCheck format / size"; break;
+            case TransientHudContent::VsrRejected: ko=L"VSR 요청 거부\nOFF로 복귀"; en=L"VSR rejected\nBack to OFF"; break;
+            case TransientHudContent::VsrFailed: ko=L"VSR 전환 실패\n진단 로그 확인"; en=L"VSR switch failed\nSee diagnostic log"; break;
+            default: break;
+            }
+            wcscpy_s(volumeText, IsEnglishUi() ? en : ko);
+        } else
+#endif
         if (hudContent >= TransientHudContent::ScreenshotPending) {
             const wchar_t* ko = L"스크린샷 실패\n진단 로그 확인";
             const wchar_t* en = L"Screenshot failed\nCheck diagnostic log";
@@ -2751,7 +2943,7 @@ struct DirectD3D11Renderer {
             }
             wcscpy_s(volumeText, IsEnglishUi() ? en : ko);
         } else if (hudContent == TransientHudContent::OneToOne) {
-            const auto& video = CurrentVideoPreset();
+            const auto& video = CurrentCapturePreset();
             swprintf_s(volumeText,
                        IsEnglishUi() ? L"1:1 Pixel-perfect\n%d x %d"
                                      : L"1:1 Pixel-perfect\n%d x %d",
@@ -2763,12 +2955,27 @@ struct DirectD3D11Renderer {
                                    : L"1:1 표시 불가\n현재 모니터보다 큼");
         } else {
             swprintf_s(volumeText, UI_TEXT(L"음량  %d%%"),
-                       g_volumePercent.load(std::memory_order_acquire));
+                       overlayMaster);
         }
         hr = dwriteFactory->CreateTextLayout(
             volumeText, static_cast<UINT32>(wcslen(volumeText)),
             volumeTextFormat, 228.0f, 62.0f, &volumeTextLayout);
         if (FAILED(hr)) return hr;
+        if (hudContent != TransientHudContent::Volume)
+            volumeTextLayout->SetFontSize(20.0f,
+                DWRITE_TEXT_RANGE{0, static_cast<UINT32>(wcslen(volumeText))});
+        // Keep the existing GPU texture/quad; only the painted panel follows
+        // the cached text height. Volume retains space for its gain bar.
+        DWRITE_TEXT_METRICS hudMetrics{};
+        hr = volumeTextLayout->GetMetrics(&hudMetrics);
+        if (FAILED(hr)) return hr;
+        volumePanelHeight = hudContent == TransientHudContent::Volume ? 82.0f
+            : std::clamp(std::ceil(hudMetrics.height) + 20.0f, 40.0f, 82.0f);
+        const bool bottomHud = g_settings.volumeHudPosition == VolumeHudPosition::BottomLeft ||
+            g_settings.volumeHudPosition == VolumeHudPosition::BottomRight;
+        // Bottom notifications keep the same screen-edge margin even when
+        // shorter. Unused texture rows are transparent, never stretched.
+        volumePanelTop = bottomHud ? 82.0f - volumePanelHeight : 0.0f;
 
         osdCacheTarget->BeginDraw();
         osdCacheTarget->Clear(D2D1::ColorF(0, 0.0f));
@@ -2777,8 +2984,12 @@ struct DirectD3D11Renderer {
                                   0.0f, 0.0f,
                                   static_cast<float>(kOsdOverlayWidth),
                                   static_cast<float>(kOsdOverlayHeight)),
-                              8.0f, 8.0f),
+                              12.0f, 12.0f),
             osdCacheBackgroundBrush);
+        osdCacheTarget->DrawRoundedRectangle(
+            D2D1::RoundedRect(D2D1::RectF(0.5f, 0.5f,
+                kOsdOverlayWidth - 0.5f, kOsdOverlayHeight - 0.5f), 12, 12),
+            osdCacheEdgeBrush, 1.0f);
         osdCacheTarget->DrawTextLayout(
             D2D1::Point2F(16.0f, 12.0f), osdTextLayout,
             osdCacheTextBrush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
@@ -2788,27 +2999,34 @@ struct DirectD3D11Renderer {
         volumeCacheTarget->BeginDraw();
         volumeCacheTarget->Clear(D2D1::ColorF(0, 0.0f));
         volumeCacheTarget->FillRoundedRectangle(
-            D2D1::RoundedRect(D2D1::RectF(0.0f, 0.0f, 260.0f, 82.0f),
-                              8.0f, 8.0f),
+            D2D1::RoundedRect(D2D1::RectF(0.0f, volumePanelTop, 260.0f, volumePanelTop + volumePanelHeight),
+                              12.0f, 12.0f),
             volumeCacheBackgroundBrush);
+        volumeCacheTarget->DrawRoundedRectangle(
+            D2D1::RoundedRect(D2D1::RectF(0.5f, volumePanelTop + 0.5f,
+                259.5f, volumePanelTop + volumePanelHeight - 0.5f), 12, 12),
+            volumeCacheBarBackgroundBrush, 1.0f);
         volumeCacheTarget->DrawTextLayout(
-            D2D1::Point2F(16.0f, 6.0f), volumeTextLayout,
-            volumeCacheTextBrush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            D2D1::Point2F(16.0f, volumePanelTop +
+                (hudContent == TransientHudContent::Volume ? 6.0f : 10.0f)), volumeTextLayout,
+            hudContent == TransientHudContent::Volume && masterBoosted
+                ? volumeCacheBoostBrush : volumeCacheTextBrush,
+            D2D1_DRAW_TEXT_OPTIONS_CLIP);
         if (hudContent == TransientHudContent::Volume) {
             const D2D1_RECT_F volumeBarBackground =
                 D2D1::RectF(16.0f, 57.0f, 244.0f, 66.0f);
-            volumeCacheTarget->FillRectangle(
-                volumeBarBackground, volumeCacheBarBackgroundBrush);
+            volumeCacheTarget->FillRoundedRectangle(
+                D2D1::RoundedRect(volumeBarBackground, 4, 4), volumeCacheBarBackgroundBrush);
             D2D1_RECT_F volumeBar = volumeBarBackground;
             const int volumeBarMaximum = g_settings.allowVolumeBoost
                 ? kMaximumVolumePercent : 100;
             volumeBar.right = volumeBar.left +
                 (volumeBarBackground.right - volumeBarBackground.left) *
-                    g_volumePercent.load(std::memory_order_acquire) /
+                    overlayMaster /
                     static_cast<float>(volumeBarMaximum);
             if (volumeBar.right > volumeBar.left) {
-                volumeCacheTarget->FillRectangle(volumeBar,
-                                                 volumeCacheBarBrush);
+                volumeCacheTarget->FillRoundedRectangle(D2D1::RoundedRect(volumeBar, 4, 4),
+                                                       volumeCacheBarBrush);
             }
         }
         hr = volumeCacheTarget->EndDraw();
@@ -2818,7 +3036,7 @@ struct DirectD3D11Renderer {
             const int maximum = g_settings.allowVolumeBoost
                 ? kMaximumVolumePercent : 100;
             constexpr int channelMaximum = 100;
-            const int master = g_volumePercent.load(std::memory_order_acquire);
+            const int master = overlayMaster;
             const int left = g_leftVolumePercent.load(std::memory_order_acquire);
             const int right = g_rightVolumePercent.load(std::memory_order_acquire);
             const int hovered = g_audioOsdHoverTarget.load(
@@ -2832,68 +3050,72 @@ struct DirectD3D11Renderer {
 
             audioCacheTarget->BeginDraw();
             audioCacheTarget->Clear(D2D1::ColorF(0, 0.0f));
-            audioCacheTarget->FillRoundedRectangle(
-                D2D1::RoundedRect(D2D1::RectF(0.0f, 0.0f,
-                                               static_cast<float>(kAudioOsdWidth),
-                                               static_cast<float>(kAudioOsdHeight)),
-                                  8.0f, 8.0f),
-                audioCacheBackgroundBrush);
-            const wchar_t* title = IsEnglishUi() ? L"Audio" : L"오디오";
-            audioCacheTarget->DrawTextW(title, static_cast<UINT32>(wcslen(title)),
-                                         audioTextFormat,
-                                         D2D1::RectF(16, 10, 120, 34),
-                                         audioCacheTextBrush);
-            wchar_t masterText[48]{};
-            swprintf_s(masterText, IsEnglishUi() ? L"Master  %d%%" : L"마스터  %d%%",
-                       master);
-            audioCacheTarget->DrawTextW(masterText,
-                                         static_cast<UINT32>(wcslen(masterText)),
-                                         audioTextFormat,
-                                         D2D1::RectF(16, 38, 310, 62),
-                                         audioCacheTextBrush);
-            const D2D1_RECT_F masterBar = D2D1::RectF(16, 64, 320, 71);
-            audioCacheTarget->FillRectangle(masterBar, audioCacheBarBackgroundBrush);
-            D2D1_RECT_F masterFill = masterBar;
-            masterFill.right = masterFill.left +
-                (masterBar.right - masterBar.left) * master / maximum;
-            if (masterFill.right > masterFill.left) {
-                audioCacheTarget->FillRectangle(masterFill, audioCacheBarBrush);
-            }
+            const auto panel = D2D1::RoundedRect(D2D1::RectF(0.5f, 0.5f,
+                kAudioOsdWidth - 0.5f, kAudioOsdHeight - 0.5f), 12, 12);
+            audioCacheTarget->FillRoundedRectangle(panel, audioCacheBackgroundBrush);
+            audioCacheTarget->DrawRoundedRectangle(panel, audioCacheEdgeBrush, 1);
+            const auto text = [&](const wchar_t* value, IDWriteTextFormat* format,
+                                  D2D1_RECT_F rect, ID2D1Brush* brush) {
+                audioCacheTarget->DrawTextW(value, static_cast<UINT32>(wcslen(value)),
+                    format, rect, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            };
+            const auto bar = [&](D2D1_RECT_F rect, int percent, int max) {
+                audioCacheTarget->FillRoundedRectangle(D2D1::RoundedRect(rect, 3, 3),
+                    audioCacheBarBackgroundBrush);
+                rect.right = rect.left + (rect.right - rect.left) *
+                    std::clamp(percent, 0, max) / static_cast<float>(max);
+                if (rect.right > rect.left)
+                    audioCacheTarget->FillRoundedRectangle(D2D1::RoundedRect(rect, 3, 3),
+                        audioCacheBarBrush);
+            };
+            text(IsEnglishUi() ? L"Audio" : L"오디오", audioTextFormat,
+                D2D1::RectF(16, 4, 130, 30), audioCacheTextBrush);
+            // Setting-dependent limit is visible without consuming another row.
+            audioSmallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+            text(maximum > 100 ? (IsEnglishUi() ? L"MAX 200% · F3" : L"최대 200% · F3") : L"F3",
+                audioSmallFormat, D2D1::RectF(164, 4, 320, 30), audioCacheSecondaryBrush);
+            audioSmallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+            const auto masterCard = D2D1::RoundedRect(D2D1::RectF(16, 32, 320, 72), 8, 8);
+            audioCacheTarget->FillRoundedRectangle(masterCard,
+                hovered == 3 ? audioCacheHighlightBrush : audioCacheCardBrush);
+            text(IsEnglishUi() ? L"Master" : L"마스터 음량", audioTextFormat,
+                D2D1::RectF(28, 33, 200, 62), audioCacheTextBrush);
+            wchar_t masterText[32]{};
+            swprintf_s(masterText, L"%d%%", master);
+            audioValueFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+            text(masterText, audioValueFormat, D2D1::RectF(220, 33, 308, 62),
+                masterBoosted ? audioCacheBoostBrush : audioCacheTextBrush);
+            bar(D2D1::RectF(28, 64, 308, 68), master, maximum);
 
             const auto drawChannel = [&](int channel, const wchar_t* label,
-                                         int percent, double peakDb,
-                                         float x0, float x1) {
-                const D2D1_ROUNDED_RECT card = D2D1::RoundedRect(
-                    D2D1::RectF(x0, 84, x1, 168), 6.0f, 6.0f);
-                if (hovered == channel) {
-                    audioCacheTarget->FillRoundedRectangle(card,
-                                                            audioCacheHighlightBrush);
-                }
-                audioCacheTarget->DrawRoundedRectangle(card,
-                                                       audioCacheTextBrush, 1.0f);
-                wchar_t text[96]{};
-                swprintf_s(text, L"%s\n%d%%\n%.1f dBFS", label, percent, peakDb);
-                audioCacheTarget->DrawTextW(text, static_cast<UINT32>(wcslen(text)),
-                                             audioTextFormat,
-                                             D2D1::RectF(x0 + 14, 92, x1 - 12, 157),
-                                             audioCacheTextBrush);
-                const D2D1_RECT_F bar = D2D1::RectF(x0 + 14, 157, x1 - 14, 163);
-                audioCacheTarget->FillRectangle(bar, audioCacheBarBackgroundBrush);
-                D2D1_RECT_F fill = bar;
-                fill.right = fill.left + (bar.right - bar.left) * percent /
-                    channelMaximum;
-                if (fill.right > fill.left) audioCacheTarget->FillRectangle(
-                    fill, audioCacheBarBrush);
+                                         int percent, double peakDb, float x0, float x1) {
+                const auto card = D2D1::RoundedRect(D2D1::RectF(x0, 84, x1, 168), 8, 8);
+                audioCacheTarget->FillRoundedRectangle(card,
+                    hovered == channel ? audioCacheHighlightBrush : audioCacheCardBrush);
+                audioCacheTarget->DrawRoundedRectangle(card, audioCacheEdgeBrush, 1);
+                text(label, audioTextFormat, D2D1::RectF(x0 + 12, 90, x0 + 42, 123),
+                    audioCacheTextBrush);
+                wchar_t percentText[24]{}, levelText[32]{};
+                swprintf_s(percentText, L"%d%%", percent);
+                swprintf_s(levelText, L"%.1f dBFS", peakDb);
+                text(percentText, audioValueFormat, D2D1::RectF(x0 + 44, 90, x1 - 12, 123),
+                    audioCacheTextBrush);
+                text(levelText, audioSmallFormat, D2D1::RectF(x0 + 12, 127, x1 - 12, 149),
+                    audioCacheSecondaryBrush);
+                // Preserve the existing gain bar semantics and hit regions.
+                bar(D2D1::RectF(x0 + 12, 156, x1 - 12, 162), percent, channelMaximum);
             };
-            drawChannel(1, L"L", left, leftDb, 16.0f, 160.0f);
-            drawChannel(2, L"R", right, rightDb, 176.0f, 320.0f);
-            const wchar_t* clipText = clipping
-                ? (IsEnglishUi() ? L"CLIP" : L"클리핑")
-                : (IsEnglishUi() ? L"No clipping" : L"클리핑 없음");
-            audioCacheTarget->DrawTextW(
-                clipText, static_cast<UINT32>(wcslen(clipText)), audioTextFormat,
-                D2D1::RectF(16, 172, 320, 192),
-                clipping ? audioCacheClipBrush : audioCacheTextBrush);
+            drawChannel(1, L"L", left, leftDb, 16, 160);
+            drawChannel(2, L"R", right, rightDb, 176, 320);
+            audioValueFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+            text(clipping ? (IsEnglishUi() ? L"CLIP" : L"클리핑")
+                          : (IsEnglishUi() ? L"No clipping" : L"클리핑 없음"),
+                audioSmallFormat, D2D1::RectF(16, 171, 111, 193),
+                clipping ? audioCacheClipBrush : audioCacheSecondaryBrush);
+            audioSmallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+            text(IsEnglishUi() ? L"Wheel · Double-click reset" : L"휠 조절 · 두 번 클릭 초기화",
+                audioSmallFormat, D2D1::RectF(112, 171, 320, 193), audioCacheSecondaryBrush);
+            audioSmallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             hr = audioCacheTarget->EndDraw();
         }
         return hr;
@@ -3043,6 +3265,12 @@ struct DirectD3D11Renderer {
     }
 
     HRESULT presentUploaded() {
+#ifdef LLCV_VSR_FEATURE
+        // Apply on the render owner immediately before processing the next
+        // frame. Never call D3D from the UI thread or rebuild for an F6 press.
+        const HRESULT vsrHr = applyVsrMode();
+        if (FAILED(vsrHr)) return vsrHr;
+#endif
         if (occluded) {
             const uint64_t nowMs = GetTickCount64();
             if (nowMs < nextOcclusionTestMs) return DXGI_STATUS_OCCLUDED;
@@ -3073,12 +3301,18 @@ struct DirectD3D11Renderer {
         const auto diagnosticStart = std::chrono::steady_clock::now();
 #endif
         HRESULT hr;
+#ifdef LLCV_VSR_EXPERIMENT
+        vsrTiming.Begin(context);
+#endif
 #ifdef LLCV_HDR_SCRGB_PROTOTYPE
         if (scrgbOutput) hr = scrgbPipeline.Draw(context, backBufferRenderTarget,
                                                outputWidth, outputHeight, activeUploadSurface);
         else
 #endif
         hr = videoContext->VideoProcessorBlt(processor, outputView, 0, 1, &stream);
+#ifdef LLCV_VSR_EXPERIMENT
+        vsrTiming.End(context, SUCCEEDED(hr));
+#endif
 #ifdef LLCV_GPU_DIAGNOSTICS
         const auto diagnosticVideoEnd = std::chrono::steady_clock::now();
         diagnosticVideoUs = std::chrono::duration<double, std::micro>(
@@ -3326,7 +3560,7 @@ static HRESULT ValidateCaptureLayout(const wchar_t* stage, const AM_MEDIA_TYPE* 
 }
 
 static bool UnifiedCaptureRenderLoop(HWND host) {
-    const auto& preset = CurrentVideoPreset();
+    const auto& preset = CurrentCapturePreset();
     g_hdrFailureDetail.store(nullptr, std::memory_order_release);
     g_captureFailureHr.store(S_OK, std::memory_order_release);
     g_captureVideoRejected.store(false, std::memory_order_release);
@@ -4008,6 +4242,9 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
             const int64_t presentedUs =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::steady_clock::now().time_since_epoch()).count();
+#ifdef LLCV_VSR_EXPERIMENT
+            renderer.vsrTiming.AddCaptureToPresent(static_cast<double>(presentedUs - arrivalUs) / 1000.0);
+#endif
             if (OsdTrackingActive()) {
                 g_videoAppLatencyUs.store(presentedUs - arrivalUs,
                                           std::memory_order_release);
@@ -4064,6 +4301,7 @@ constexpr UINT WM_UPDATE_CHECK_COMPLETE = WM_APP + 77;
 constexpr UINT WM_SETTINGS_UPDATE_CHECK_COMPLETE = WM_APP + 78;
 constexpr UINT WM_EXCLUSIVE_ENDPOINT_PROBE_COMPLETE = WM_APP + 79;
 constexpr UINT WM_EXCLUSIVE_SCAN_COMPLETE = WM_APP + 80;
+constexpr UINT WM_SETTINGS_VIDEO_MODES_READY = WM_APP + 81;
 
 using llcv::settings_ui::SettingsPixels;
 using llcv::settings_ui::SettingsClientHeightDip;
@@ -4072,6 +4310,7 @@ using llcv::settings_ui::PlaceSettingsControl;
 using llcv::settings_ui::ApplySettingsFont;
 using llcv::settings_ui::LayoutSettingsControls;
 using llcv::settings_ui::SetSettingsControlVisible;
+using llcv::settings_ui::SetSettingsText;
 using llcv::settings_ui::UpdateScalingControlVisibility;
 using llcv::settings_ui::UpdateWindowBehaviorVisibility;
 using llcv::settings_ui::TrackSettingsTooltip;
@@ -4083,7 +4322,15 @@ using llcv::settings_ui::kSettingsClientWidthDip;
 
 using UpdateCheckResult = llcv::update::CheckResult;
 
+struct SettingsVideoModes {
+    std::vector<PixelFormatSupport> formats;
+    HRESULT status = S_OK;
+};
 struct SettingsDialogState : llcv::settings_ui::SettingsControls {
+    std::unique_ptr<llcv::settings_ui::SettingsModeCache<SettingsVideoModes>> videoModeCache;
+    std::optional<llcv::settings_ui::ModeQueryKey> appliedVideoModeKey;
+    bool videoModesPending = false;
+    llcv::settings_ui::SettingsTheme theme;
     std::vector<llcv::display::MonitorChoice> displayMonitors;
     std::thread probeThread;
     llcv::update::UpdateCheckTask updateCheckTask;
@@ -4121,12 +4368,20 @@ static VideoPixelFormat SelectedPixelFormat(
     const SettingsDialogState* state);
 static bool SettingsUsesExclusiveMode(
     const SettingsDialogState* state);
+static bool SettingsUsesAsioMode(const SettingsDialogState* state);
+static bool SettingsCanStart(const SettingsDialogState* state);
 
 // The view consumes selections, not device/probe state.
 static void UpdateAdvancedControlVisibility(SettingsDialogState* state) {
     if (!state) return;
     llcv::settings_ui::UpdateAdvancedControlVisibility(
-        state, SettingsUsesExclusiveMode(state), SelectedPixelFormat(state));
+        state, SettingsUsesExclusiveMode(state), SelectedPixelFormat(state),
+        {SettingsCanStart(state),
+         !state->videoModesPending && !state->pixelFormats.empty(),
+         !state->captureAudioProbeThread.joinable() ||
+             state->captureAudioProbeReady.load(std::memory_order_acquire),
+         !state->exclusiveScanRunning.load(std::memory_order_acquire),
+         !SettingsUsesAsioMode(state)});
 }
 
 static void SetSettingsUpdateStatus(SettingsDialogState* state,
@@ -4179,7 +4434,7 @@ static void PopulateAudioOutputCombo(SettingsDialogState* state) {
         state->audioOutputCombo, CB_GETCURSEL, 0, 0);
     SendMessageW(state->audioOutputCombo, CB_RESETCONTENT, 0, 0);
     if (SettingsUsesAsioMode(state)) {
-        SetWindowTextW(state->audioOutputLabel, UI_TEXT(L"ASIO 출력 드라이버"));
+        SetSettingsText(state->audioOutputLabel, UI_TEXT(L"ASIO 출력 드라이버"));
         LRESULT selected = 0;
         for (size_t i = 0; i < state->asioDrivers.size(); ++i) {
             const std::wstring name = AsioDriverNameWide(
@@ -4193,7 +4448,7 @@ static void PopulateAudioOutputCombo(SettingsDialogState* state) {
         return;
     }
 
-    SetWindowTextW(state->audioOutputLabel, UI_TEXT(L"오디오 출력 장치"));
+    SetSettingsText(state->audioOutputLabel, UI_TEXT(L"오디오 출력 장치"));
     std::wstring defaultLabel = UI_TEXT(L"Windows 기본 출력 장치 따라가기 (권장)");
     if (SettingsUsesExclusiveMode(state)) {
         const auto defaultIt = std::find_if(
@@ -4373,24 +4628,24 @@ static void PopulateSettingsBufferCombo(SettingsDialogState* state) {
 static void UpdateAudioClient3Status(SettingsDialogState* state) {
     if (!state || !state->audioStatus) return;
     if (SettingsUsesAsioMode(state)) {
-        SetWindowTextW(state->audioStatus, UI_TEXT(
+        SetSettingsText(state->audioStatus, UI_TEXT(
             L"ASIO 출력 · 드라이버 기본 버퍼 사용 · 앱 클록 보정 가능"));
         return;
     }
     if (SettingsUsesExclusiveMode(state)) {
-        SetWindowTextW(state->audioStatus, UI_TEXT(
-            L"WASAPI Exclusive 이벤트 진단 · 장치 독점 · IAudioClient3 미사용"));
+        // Exclusive verification owns this row; never flash a generic status
+        // between the previous mode and the current scan/verdict.
         return;
     }
     if (state->surround51Check && SendMessageW(state->surround51Check,
             BM_GETCHECK, 0, 0) == BST_CHECKED) {
-        SetWindowTextW(state->audioStatus, IsEnglishUi()
+        SetSettingsText(state->audioStatus, IsEnglishUi()
             ? L"Console 5.1: output period is negotiated on start; actual value in Tab diagnostics."
             : L"콘솔 5.1: 출력 주기는 시작 시 협상 · 실제 값은 Tab 진단에서 확인");
         return;
     }
     if (!state->probeReady.load(std::memory_order_acquire)) {
-        SetWindowTextW(state->audioStatus, UI_TEXT(L"Shared 저지연 지원 확인 중…"));
+        SetSettingsText(state->audioStatus, UI_TEXT(L"Shared 저지연 지원 확인 중…"));
         return;
     }
 
@@ -4407,7 +4662,7 @@ static void UpdateAudioClient3Status(SettingsDialogState* state) {
         swprintf_s(status, UI_TEXT(
             L"Shared 기본 모드 · 저지연 API 미지원"));
     }
-    SetWindowTextW(state->audioStatus, status);
+    SetSettingsText(state->audioStatus, status);
 }
 
 static void UpdateExclusiveProbeControl(SettingsDialogState* state) {
@@ -4420,11 +4675,9 @@ static void UpdateExclusiveProbeControl(SettingsDialogState* state) {
     // Handle mode changes directly as well as tab changes.  Otherwise a
     // button hidden while Shared was selected can remain hidden after the
     // user switches to Exclusive without leaving the tab.
-    SetSettingsControlVisible(state->exclusiveTestButton, visible);
+    SetSettingsControlVisible(state->exclusiveTestButton, visible, !running);
     if (!visible) return;
-    EnableWindow(state->exclusiveTestButton,
-                 supportedMode && !running ? TRUE : FALSE);
-    SetWindowTextW(state->exclusiveTestButton,
+    SetSettingsText(state->exclusiveTestButton,
                    UI_TEXT(running ? L"장치 검사 중…" :
                                      L"전체 장치 다시 검사"));
 }
@@ -4518,18 +4771,26 @@ static bool HasExclusiveVerificationForSelection(
            state->selectedBufferMs >= verifiedBufferMs;
 }
 
+static bool SettingsCanStart(const SettingsDialogState* state) {
+    if (!state) return false;
+    const bool audioOnly = state->audioOnlyCheck &&
+        SendMessageW(state->audioOnlyCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    return (audioOnly || (!state->videoModesPending && !state->pixelFormats.empty())) &&
+        HasExclusiveVerificationForSelection(state);
+}
+
 static void UpdateExclusiveVerificationUi(SettingsDialogState* state) {
     if (!state || !state->startButton) return;
     const bool running = state->exclusiveScanRunning.load(
         std::memory_order_acquire);
     if (!SettingsUsesExclusiveMode(state)) {
         // Shared/ASIO must not be blocked by a diagnostic scan that is only
-        // relevant to Exclusive. The scan is stopped when the mode changes.
-        EnableWindow(state->startButton, TRUE);
+        // relevant to Exclusive. Its results can arrive after a mode change.
+        EnableWindow(state->startButton, SettingsCanStart(state));
         return;
     }
     const bool verified = HasExclusiveVerificationForSelection(state);
-    EnableWindow(state->startButton, verified ? TRUE : FALSE);
+    EnableWindow(state->startButton, SettingsCanStart(state));
     if (state->audioStatus) {
         const auto* selectedResult = FindExclusiveVerification(
             state, EffectiveSelectedAudioEndpointId(state));
@@ -4541,28 +4802,28 @@ static void UpdateExclusiveVerificationUi(SettingsDialogState* state) {
             swprintf_s(status, UI_TEXT(
                 L"Exclusive 출력 장치 검사 중… %zu/%zu 완료"),
                 state->exclusiveScanCompleted, state->audioEndpoints.size());
-            SetWindowTextW(state->audioStatus, status);
+            SetSettingsText(state->audioStatus, status);
         } else if (verified) {
             wchar_t status[160]{};
             swprintf_s(status, UI_TEXT(
                 L"Exclusive 사용 가능 · 현재 출력 장치 · %d ms 이상"),
                 ExclusiveVerifiedBufferForSelection(state));
-            SetWindowTextW(state->audioStatus, status);
+            SetSettingsText(state->audioStatus, status);
         } else if (selectedResult &&
                    selectedResult->state == ExclusiveEndpointState::Supported) {
             wchar_t status[160]{};
             swprintf_s(status, UI_TEXT(
                 L"Exclusive 사용 가능 · %d ms 이상 선택 필요"),
                 selectedResult->recommendedBufferMs);
-            SetWindowTextW(state->audioStatus, status);
+            SetSettingsText(state->audioStatus, status);
         } else if (selectedResult &&
                    selectedResult->state == ExclusiveEndpointState::Unsupported) {
             // Other endpoints may still be running, but this selected one has
             // a conclusive result already and should say so immediately.
-            SetWindowTextW(state->audioStatus, UI_TEXT(
+            SetSettingsText(state->audioStatus, UI_TEXT(
                 L"Exclusive 사용 불가 · 현재 출력 장치"));
         } else {
-            SetWindowTextW(state->audioStatus, UI_TEXT(
+            SetSettingsText(state->audioStatus, UI_TEXT(
                 L"Exclusive 검사 필요 · 현재 출력 장치"));
         }
     }
@@ -4652,15 +4913,18 @@ static void StartExclusiveEndpointScan(SettingsDialogState* state, HWND hwnd,
     state->exclusiveScanCompleted = completed;
     state->exclusiveProbeStop.store(false, std::memory_order_release);
     state->exclusiveScanRunning.store(true, std::memory_order_release);
-    PopulateAudioOutputCombo(state);
-    const int initialRecommendedBufferMs =
-        ExclusiveVerifiedBufferForSelection(state);
-    if (IsExclusiveLowLatencyBuffer(initialRecommendedBufferMs)) {
-        state->selectedBufferMs = initialRecommendedBufferMs;
-        PopulateSettingsBufferCombo(state);
+    {
+        llcv::settings_ui::SettingsVisualUpdate visualUpdate(hwnd);
+        PopulateAudioOutputCombo(state);
+        const int initialRecommendedBufferMs =
+            ExclusiveVerifiedBufferForSelection(state);
+        if (IsExclusiveLowLatencyBuffer(initialRecommendedBufferMs)) {
+            state->selectedBufferMs = initialRecommendedBufferMs;
+            PopulateSettingsBufferCombo(state);
+        }
+        UpdateExclusiveProbeControl(state);
+        UpdateExclusiveVerificationUi(state);
     }
-    UpdateExclusiveProbeControl(state);
-    UpdateExclusiveVerificationUi(state);
 
     const std::vector<AudioEndpointInfo> endpoints = state->audioEndpoints;
     std::vector<size_t> scanOrder;
@@ -4747,7 +5011,7 @@ static void UpdateCaptureAudioSelectionUi(SettingsDialogState* state) {
             ? state->captureAudioProbe.state
             : InternalCaptureAudioState::Checking;
 
-    SetWindowTextW(state->captureAudioDeviceLabel,
+    llcv::settings_ui::SetSettingsText(state->captureAudioDeviceLabel,
                    UI_TEXT(L"캡처 오디오 장치"));
     if (explicitSeparateDevice ||
         probeState == InternalCaptureAudioState::SeparateDeviceNeeded ||
@@ -4760,10 +5024,10 @@ static void UpdateCaptureAudioSelectionUi(SettingsDialogState* state) {
     SetSettingsControlVisible(state->captureAudioDeviceCombo, false);
     SetSettingsControlVisible(state->captureAudioStatus, onVideoTab);
     if (probeState == InternalCaptureAudioState::Available) {
-        SetWindowTextW(state->captureAudioStatus,
+        llcv::settings_ui::SetSettingsText(state->captureAudioStatus,
                        UI_TEXT(L"영상 장치 내부 오디오 감지됨 · 자동 사용"));
     } else {
-        SetWindowTextW(state->captureAudioStatus,
+        llcv::settings_ui::SetSettingsText(state->captureAudioStatus,
                        UI_TEXT(L"내부 오디오 확인 중…"));
     }
 }
@@ -4804,7 +5068,7 @@ static VideoPixelFormat SelectedPixelFormat(
 static void UpdateVideoCapabilityStatus(SettingsDialogState* state) {
     if (!state) return;
 
-    const bool supported = !state->pixelFormats.empty();
+    const bool supported = !state->videoModesPending && !state->pixelFormats.empty();
     const bool audioOnly = state->audioOnlyCheck &&
         SendMessageW(state->audioOnlyCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
     if (state->pixelFormatCombo) {
@@ -4814,18 +5078,20 @@ static void UpdateVideoCapabilityStatus(SettingsDialogState* state) {
         EnableWindow(state->frameRateCombo, supported ? TRUE : FALSE);
     }
     if (state->startButton) {
-        EnableWindow(state->startButton, (supported || audioOnly) ? TRUE : FALSE);
+        EnableWindow(state->startButton, SettingsCanStart(state));
     }
     if (!state->videoCapabilityStatus) return;
 
     std::wstring message;
     if (audioOnly) {
         message = UI_TEXT(L"오디오 only: 영상 형식 확인 안 함");
+    } else if (state->videoModesPending) {
+        message = IsEnglishUi() ? L"Checking this capture resolution…" : L"선택한 캡처 해상도 확인 중…";
     } else if (!supported && FAILED(state->videoCapabilityQueryStatus)) {
         wchar_t failure[256]{};
         swprintf_s(failure, IsEnglishUi()
-            ? L"Device mode query failed (0x%08X). Reselect the device or resolution to retry."
-            : L"장치 모드 조회 실패 (0x%08X). 장치 또는 해상도를 다시 선택해 재시도하세요.",
+            ? L"Device mode query failed (0x%08X). Use Refresh to retry."
+            : L"장치 모드 조회 실패 (0x%08X). 새로고침을 눌러 다시 확인하세요.",
             static_cast<unsigned>(state->videoCapabilityQueryStatus));
         message = failure;
     } else if (!supported) {
@@ -4861,7 +5127,7 @@ static void UpdateVideoCapabilityStatus(SettingsDialogState* state) {
             firstFormat = false;
         }
     }
-    SetWindowTextW(state->videoCapabilityStatus, message.c_str());
+    llcv::settings_ui::SetSettingsText(state->videoCapabilityStatus, message.c_str());
 }
 
 static void PopulateFrameRateCombo(SettingsDialogState* state) {
@@ -4889,7 +5155,7 @@ static void PopulateFrameRateCombo(SettingsDialogState* state) {
     }
     const LRESULT autoIndex = SendMessageW(
         state->frameRateCombo, CB_ADDSTRING, 0,
-        reinterpret_cast<LPARAM>(UI_TEXT(L"자동 선택 (권장 프레임)")));
+        reinterpret_cast<LPARAM>(IsEnglishUi() ? L"Auto (recommended)" : L"자동 (권장)"));
     SendMessageW(state->frameRateCombo, CB_SETITEMDATA,
                  static_cast<WPARAM>(autoIndex), 0);
     LRESULT selectedIndex = autoIndex;
@@ -4924,18 +5190,40 @@ static void PopulatePixelFormatCombo(SettingsDialogState* state) {
     if (!state || !state->pixelFormatCombo || !state->frameRateCombo ||
         !state->videoCombo) return;
     const LRESULT videoIndex = SendMessageW(
-        state->videoCombo, CB_GETCURSEL, 0, 0);
+        SendMessageW(state->vsrCheck, BM_GETCHECK, 0, 0) == BST_CHECKED
+            ? state->vsrCaptureCombo : state->videoCombo, CB_GETCURSEL, 0, 0);
     if (videoIndex < 0 || videoIndex >=
                             static_cast<LRESULT>(ARRAYSIZE(kVideoPresets))) {
         return;
     }
     const auto& preset = kVideoPresets[videoIndex];
+    const llcv::settings_ui::ModeQueryKey key{SelectedCaptureDeviceId(state), preset.width, preset.height};
+    // Display-only changes, repeated notifications and completed stale queries
+    // must not reset the lists or re-open a capture device.
+    if (state->appliedVideoModeKey == key && !state->videoModesPending) return;
+    if (!state->videoModeCache) {
+        const HWND owner = GetParent(state->videoCombo);
+        state->videoModeCache = std::make_unique<llcv::settings_ui::SettingsModeCache<SettingsVideoModes>>(
+            [](const llcv::settings_ui::ModeQueryKey& request) {
+                SettingsVideoModes result;
+                result.formats = ProbePixelFormats(request.device, request.width, request.height, &result.status);
+                return result;
+            }, [owner] { PostMessageW(owner, WM_SETTINGS_VIDEO_MODES_READY, 0, 0); });
+    }
+    const auto modes = state->videoModeCache->Request(key);
+    if (!modes) {
+        state->videoModesPending = true;
+        UpdateVideoCapabilityStatus(state);
+        return;
+    }
+    state->videoModesPending = false;
+    state->appliedVideoModeKey = key;
     VideoPixelFormat desiredFormat = g_settings.pixelFormat;
     if (SendMessageW(state->pixelFormatCombo, CB_GETCOUNT, 0, 0) > 0) {
         desiredFormat = SelectedPixelFormat(state);
     }
-    state->pixelFormats = ProbePixelFormats(
-        SelectedCaptureDeviceId(state), preset.width, preset.height, &state->videoCapabilityQueryStatus);
+    state->pixelFormats = modes->formats;
+    state->videoCapabilityQueryStatus = modes->status;
     SendMessageW(state->pixelFormatCombo, CB_RESETCONTENT, 0, 0);
     if (state->pixelFormats.empty()) {
         const LRESULT noModeIndex = SendMessageW(
@@ -4993,6 +5281,9 @@ static void PopulatePixelFormatCombo(SettingsDialogState* state) {
 
 static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool accepted) {
     if (!state) return;
+    // Enter/IDOK and direct commands must obey the same guard as mouse clicks.
+    if (accepted && (!state->startButton || !IsWindowEnabled(state->startButton) ||
+                     !SettingsCanStart(state))) return;
 
     if (accepted) {
         const VideoPreset previousVideoPreset = g_settings.videoPreset;
@@ -5041,6 +5332,8 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
         if (languageIndex >= 0 && languageIndex <= 2) {
             g_settings.uiLanguage = static_cast<UiLanguage>(languageIndex);
         }
+        g_settings.settingsLightTheme =
+            SendMessageW(state->themeCombo, CB_GETCURSEL, 0, 0) == 1;
         if (audioIndex == 1) {
             g_settings.audioMode = AudioMode::WasapiExclusive;
         } else if (audioIndex == 2 && state->asioAvailable) {
@@ -5060,6 +5353,9 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
         if (videoIndex >= 0 && videoIndex < static_cast<LRESULT>(ARRAYSIZE(kVideoPresets))) {
             g_settings.videoPreset = kVideoPresets[videoIndex].preset;
         }
+        const LRESULT vsrCaptureIndex = SendMessageW(state->vsrCaptureCombo, CB_GETCURSEL, 0, 0);
+        if (vsrCaptureIndex >= 0 && vsrCaptureIndex < static_cast<LRESULT>(ARRAYSIZE(kVideoPresets)))
+            g_settings.vsrCapturePreset = kVideoPresets[vsrCaptureIndex].preset;
         const LRESULT monitorIndex = SendMessageW(state->displayMonitorCombo, CB_GETCURSEL, 0, 0);
         if (monitorIndex == 0) g_settings.preferredDisplayMonitor.clear();
         else if (monitorIndex > 0 && static_cast<size_t>(monitorIndex) <= state->displayMonitors.size())
@@ -5145,6 +5441,8 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
             state->saveLogCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
         g_settings.screenshotClipboard = SendMessageW(
             state->screenshotClipboardCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
+        g_settings.vsrEnabled = SendMessageW(
+            state->vsrCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
         g_settings.showDiagnosticConsole = SendMessageW(
             state->showConsoleCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
         g_settings.skipStartupSettings = SendMessageW(
@@ -5242,6 +5540,11 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
     }
 
+    LRESULT themedResult = 0;
+    if (state && state->theme.HandleMessage(msg, wParam, lParam, themedResult)) {
+        return themedResult;
+    }
+
     switch (msg) {
     case WM_CTLCOLORSTATIC:
         if (state && reinterpret_cast<HWND>(lParam) ==
@@ -5287,6 +5590,7 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
         UpdateAsioControlVisibility(state);
         UpdateExclusiveProbeControl(state);
         UpdateExclusiveVerificationUi(state);
+        state->theme.Attach(hwnd, state);
         RedrawWindow(hwnd, nullptr, nullptr,
                      RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN |
                          RDW_UPDATENOW);
@@ -5306,6 +5610,7 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
     }
 
     case WM_DPICHANGED: {
+        llcv::settings_ui::SettingsVisualUpdate visualUpdate(hwnd);
         const RECT* suggested = reinterpret_cast<const RECT*>(lParam);
         SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
                      suggested->right - suggested->left,
@@ -5313,9 +5618,7 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
                      SWP_NOZORDER | SWP_NOACTIVATE);
         ApplySettingsFont(state, hwnd, HIWORD(wParam));
         LayoutSettingsControls(state, HIWORD(wParam));
-        RedrawWindow(hwnd, nullptr, nullptr,
-                     RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN |
-                         RDW_UPDATENOW);
+        state->theme.RefreshControls();
         return 0;
     }
 
@@ -5329,30 +5632,27 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
 
     case WM_ACTIVATE:
         if (LOWORD(wParam) != WA_INACTIVE) {
-            RedrawWindow(hwnd, nullptr, nullptr,
-                         RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN |
-                             RDW_UPDATENOW);
+            InvalidateRect(hwnd, nullptr, FALSE);
         }
         break;
 
-    case WM_AUDIOCLIENT3_PROBE_COMPLETE:
-        // The endpoint's Shared-mode capability probe still runs in the
-        // background after an output-device change, but it must not overwrite
-        // the meaningful Exclusive compatibility result shown to the user.
-        if (SettingsUsesExclusiveMode(state)) {
-            UpdateExclusiveVerificationUi(state);
-        } else {
-            UpdateAudioClient3Status(state);
-        }
-        if (SettingsUsesSharedMode(state)) {
-            RememberCurrentBufferChoice(state);
-            PopulateSettingsBufferCombo(state);
-        }
+    case WM_AUDIOCLIENT3_PROBE_COMPLETE: {
+        // A late Shared result has no visible effect in Exclusive/ASIO.
+        if (!SettingsUsesSharedMode(state)) return 0;
+        llcv::settings_ui::SettingsVisualUpdate visualUpdate(hwnd);
+        UpdateAudioClient3Status(state);
+        RememberCurrentBufferChoice(state);
+        PopulateSettingsBufferCombo(state);
         return 0;
+    }
 
     case WM_EXCLUSIVE_ENDPOINT_PROBE_COMPLETE: {
         if (!state) return 0;
         ConsumeExclusiveEndpointProbeResults(state);
+        // Cache late results without rebuilding the currently active Shared/
+        // ASIO controls or replacing their selected buffer.
+        if (!SettingsUsesExclusiveMode(state)) return 0;
+        llcv::settings_ui::SettingsVisualUpdate visualUpdate(hwnd);
         PopulateAudioOutputCombo(state);
         const int recommendedBufferMs =
             ExclusiveVerifiedBufferForSelection(state);
@@ -5382,16 +5682,26 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
                        state->audioEndpoints.size()) {
                 PersistCompletedExclusiveEndpointResults(state);
             }
-            PopulateAudioOutputCombo(state);
-            UpdateExclusiveProbeControl(state);
-            UpdateExclusiveVerificationUi(state);
+            if (SettingsUsesExclusiveMode(state)) {
+                llcv::settings_ui::SettingsVisualUpdate visualUpdate(hwnd);
+                PopulateAudioOutputCombo(state);
+                UpdateExclusiveProbeControl(state);
+                UpdateExclusiveVerificationUi(state);
+            }
         }
         return 0;
 
     case WM_CAPTURE_AUDIO_PROBE_COMPLETE:
         if (state) {
-            EnableWindow(state->captureDeviceCombo, TRUE);
+            EnableWindow(state->captureDeviceCombo, state->activeTab == SettingsTab::VideoWindow);
             UpdateCaptureAudioSelectionUi(state);
+        }
+        return 0;
+
+    case WM_SETTINGS_VIDEO_MODES_READY:
+        if (state) {
+            PopulatePixelFormatCombo(state);
+            UpdateAdvancedControlVisibility(state);
         }
         return 0;
 
@@ -5477,50 +5787,74 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
         return 0;
     }
 
-    case WM_NOTIFY: {
-        const auto* header = reinterpret_cast<const NMHDR*>(lParam);
-        if (state && header && header->idFrom == IDC_SETTINGS_TAB &&
-            header->code == TCN_SELCHANGE) {
-            const int index = TabCtrl_GetCurSel(state->tabControl);
-            if (index >= static_cast<int>(SettingsTab::Audio) &&
-                index <= static_cast<int>(SettingsTab::Updates)) {
-                state->activeTab = static_cast<SettingsTab>(index);
-                const UINT dpi = GetDpiForWindow(hwnd);
-                LayoutSettingsControls(state, dpi);
+    case WM_COMMAND:
+        if (state && LOWORD(wParam) == IDOK) {
+            // This is a normal HWND rather than a dialog-template window.
+            // IsDialogMessage can use IDOK even when a non-default push button
+            // owns focus. Preserve Enter on Cancel/help/action buttons.
+            const HWND focused = GetFocus();
+            wchar_t className[32]{};
+            GetClassNameW(focused, className, ARRAYSIZE(className));
+            const LONG_PTR type = GetWindowLongPtrW(focused, GWL_STYLE) & BS_TYPEMASK;
+            if (GetParent(focused) == hwnd && IsWindowEnabled(focused) &&
+                _wcsicmp(className, L"BUTTON") == 0 &&
+                (type == BS_PUSHBUTTON || type == BS_DEFPUSHBUTTON) &&
+                GetDlgCtrlID(focused) != IDOK) {
+                SendMessageW(hwnd, WM_COMMAND,
+                    MAKEWPARAM(GetDlgCtrlID(focused), BN_CLICKED),
+                    reinterpret_cast<LPARAM>(focused));
+                return 0;
+            }
+        }
+        if (state && LOWORD(wParam) == IDC_SETTINGS_TAB && HIWORD(wParam) == LBN_SELCHANGE) {
+            const int index = static_cast<int>(SendMessageW(state->tabControl, LB_GETCURSEL, 0, 0));
+            if (index != LB_ERR) {
+                const auto nextTab = llcv::settings_ui::SettingsTabFromNavigationIndex(index);
+                if (nextTab == state->activeTab) {
+                    // No page repaint, but keep capability-dependent gates
+                    // correct even if a completion changed the current state.
+                    UpdateAdvancedControlVisibility(state);
+                    return 0;
+                }
+                llcv::settings_ui::SettingsVisualUpdate visualUpdate(hwnd);
+                state->activeTab = nextTab;
                 UpdateAdvancedControlVisibility(state);
                 UpdateCaptureAudioSelectionUi(state);
-                RedrawWindow(hwnd, nullptr, nullptr,
-                             RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN |
-                                 RDW_UPDATENOW);
             }
             return 0;
         }
-        break;
-    }
-
-    case WM_COMMAND:
+        if (LOWORD(wParam) == IDC_SETTINGS_VSR_GUIDE && HIWORD(wParam) == BN_CLICKED && state) {
+            // This is guidance, not a hardware capability/activation check.
+            // Request acceptance alone cannot establish NVIDIA's active state.
+            MessageBoxW(hwnd, llcv::ui_text::VsrSetupGuide(IsEnglishUi()),
+                IsEnglishUi() ? L"NVIDIA VSR — Setup guide" : L"NVIDIA VSR — 설정 안내",
+                MB_OK | MB_ICONINFORMATION);
+            return 0;
+        }
         if (LOWORD(wParam) == IDC_SETTINGS_SURROUND51 && HIWORD(wParam) == BN_CLICKED) {
             UpdateAudioClient3Status(state);
             return 0;
         }
         if (LOWORD(wParam) == IDC_SETTINGS_AUDIO &&
             HIWORD(wParam) == CBN_SELCHANGE) {
+            llcv::settings_ui::SettingsVisualUpdate visualUpdate(hwnd);
             RememberCurrentBufferChoice(state);
             PopulateAudioOutputCombo(state);
             PopulateSettingsBufferCombo(state);
+            if (SettingsUsesExclusiveMode(state)) {
+                StartExclusiveEndpointScan(state, hwnd);
+            }
             UpdateAsioControlVisibility(state);
             UpdateAdvancedControlVisibility(state);
             UpdateAudioClient3Status(state);
             UpdateExclusiveProbeControl(state);
             UpdateExclusiveVerificationUi(state);
-            if (SettingsUsesExclusiveMode(state)) {
-                StartExclusiveEndpointScan(state, hwnd);
-            }
             return 0;
         }
         if (LOWORD(wParam) == IDC_SETTINGS_AUDIO_OUTPUT &&
             HIWORD(wParam) == CBN_SELCHANGE) {
             if (state->probeThread.joinable()) state->probeThread.join();
+            llcv::settings_ui::SettingsVisualUpdate visualUpdate(hwnd);
             state->probeReady.store(false, std::memory_order_release);
             UpdateAudioClient3Status(state);
             const std::wstring endpointId = SelectedAudioEndpointId(state);
@@ -5592,8 +5926,16 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
             StartCaptureAudioProbe(state, hwnd);
             return 0;
         }
-        if (LOWORD(wParam) == IDC_SETTINGS_VIDEO &&
-            HIWORD(wParam) == CBN_SELCHANGE) {
+        if (LOWORD(wParam) == IDC_SETTINGS_VIDEO_REFRESH && HIWORD(wParam) == BN_CLICKED && state) {
+            if (state->videoModeCache) state->videoModeCache->Invalidate();
+            state->appliedVideoModeKey.reset();
+            PopulatePixelFormatCombo(state);
+            UpdateAdvancedControlVisibility(state);
+            return 0;
+        }
+        if (((LOWORD(wParam) == IDC_SETTINGS_VIDEO || LOWORD(wParam) == IDC_SETTINGS_VSR_CAPTURE) &&
+             HIWORD(wParam) == CBN_SELCHANGE) ||
+            (LOWORD(wParam) == IDC_SETTINGS_VSR && HIWORD(wParam) == BN_CLICKED)) {
             PopulatePixelFormatCombo(state);
             UpdateAdvancedControlVisibility(state);
             return 0;
@@ -5610,30 +5952,22 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
         }
         if (LOWORD(wParam) == IDC_SETTINGS_PIXEL &&
             HIWORD(wParam) == BN_CLICKED) {
-            LayoutSettingsControls(state, GetDpiForWindow(hwnd));
             UpdateScalingControlVisibility(state);
             UpdateWindowBehaviorVisibility(state);
-            RedrawWindow(hwnd, nullptr, nullptr,
-                         RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN |
-                             RDW_UPDATENOW);
+            InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         }
         if (LOWORD(wParam) == IDC_SETTINGS_RELATIVE_SIZE &&
             HIWORD(wParam) == BN_CLICKED) {
-            LayoutSettingsControls(state, GetDpiForWindow(hwnd));
             UpdateWindowBehaviorVisibility(state);
-            RedrawWindow(hwnd, nullptr, nullptr,
-                         RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN |
-                             RDW_UPDATENOW);
+            InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         }
         if (LOWORD(wParam) == IDC_SETTINGS_PIXEL_FORMAT &&
             HIWORD(wParam) == CBN_SELCHANGE) {
             PopulateFrameRateCombo(state);
             UpdateAdvancedControlVisibility(state);
-            RedrawWindow(hwnd, nullptr, nullptr,
-                         RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN |
-                             RDW_UPDATENOW);
+            InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         }
         if (LOWORD(wParam) == IDC_SETTINGS_PRESENTATION_HELP &&
@@ -5690,11 +6024,11 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
                 UI_TEXT(L"클록 드리프트 보정"), MB_OK | MB_ICONINFORMATION);
             return 0;
         }
-        if (LOWORD(wParam) == IDC_SETTINGS_START) {
+        if (LOWORD(wParam) == IDC_SETTINGS_START || LOWORD(wParam) == IDOK) {
             FinishSettingsDialog(hwnd, state, true);
             return 0;
         }
-        if (LOWORD(wParam) == IDC_SETTINGS_CANCEL) {
+        if (LOWORD(wParam) == IDC_SETTINGS_CANCEL || LOWORD(wParam) == IDCANCEL) {
             FinishSettingsDialog(hwnd, state, false);
             return 0;
         }
@@ -5726,6 +6060,7 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
     }
 
     SettingsDialogState state{};
+    state.activeTab = g_settings.audioOnly ? SettingsTab::Audio : SettingsTab::VideoWindow;
     state.displayMonitors = llcv::display::EnumerateMonitors(IsEnglishUi());
     state.captureDevices = EnumerateCaptureDevices();
     state.captureAudioDevices = EnumerateCaptureAudioDevices();
@@ -5785,8 +6120,10 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
         settingsDpiX = GetDpiForSystem();
     }
     const UINT settingsDpi = settingsDpiX;
-    const DWORD settingsStyle = WS_CAPTION | WS_SYSMENU | WS_VISIBLE;
-    const DWORD settingsExStyle = WS_EX_DLGMODALFRAME;
+    // Parent repaint must not temporarily erase native child fields.
+    const DWORD settingsStyle =
+        WS_CAPTION | WS_SYSMENU | WS_VISIBLE | WS_CLIPCHILDREN;
+    const DWORD settingsExStyle = WS_EX_DLGMODALFRAME | WS_EX_CONTROLPARENT;
     RECT settingsRect{0, 0,
                       SettingsPixels(kSettingsClientWidthDip, settingsDpi),
                       SettingsPixels(SettingsClientHeightDip(&state), settingsDpi)};
@@ -5827,7 +6164,8 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
     while (IsWindow(hwnd)) {
         const BOOL result = GetMessageW(&msg, nullptr, 0, 0);
         if (result <= 0) break;
-        if (g_viewerHelp.ProcessMessage(msg, hwnd, IsEnglishUi(), kAppVersionLabel)) continue;
+        if (g_viewerHelp.ProcessMessage(msg, hwnd, IsEnglishUi(), kAppVersionLabel,
+                SendMessageW(state.themeCombo, CB_GETCURSEL, 0, 0) == 1)) continue;
         if (msg.message == WM_MOUSEMOVE && state.tooltipWindow) {
             const HWND target = IsSettingsHelpControl(&state, msg.hwnd)
                 ? msg.hwnd : state.activeTooltipTarget;
@@ -5840,6 +6178,7 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
                              reinterpret_cast<LPARAM>(state.tooltipWindow));
             }
         }
+        if (IsDialogMessageW(hwnd, &msg)) continue;
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
@@ -5852,6 +6191,7 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
     if (state.captureAudioProbeThread.joinable()) {
         state.captureAudioProbeThread.join();
     }
+    state.videoModeCache.reset(); // join once, after the dialog closes, never on an option click
     for (HFONT font : state.uiFonts) DeleteObject(font);
     return state.accepted;
 }
@@ -5871,7 +6211,6 @@ static RECT g_lastWindowedRect{};
 static bool g_haveLastWindowedRect = false;
 static bool g_windowPositionPersisted = false;
 static constexpr int kWindowSnapDistanceDip = 20;
-static constexpr int kWindowSnapReleaseDip = 20;
 
 enum class HorizontalSnapEdge { None, Left, Right };
 enum class VerticalSnapEdge { None, Top, Bottom };
@@ -5881,6 +6220,8 @@ struct WindowSnapState {
     VerticalSnapEdge vertical = VerticalSnapEdge::None;
     int horizontalCursorAnchor = 0;
     int verticalCursorAnchor = 0;
+    int horizontalEdgeOffset = 0;
+    int verticalEdgeOffset = 0;
     int horizontalSnapCoordinate = 0;
     int verticalSnapCoordinate = 0;
     bool suppressHorizontal = false;
@@ -5945,6 +6286,8 @@ static SIZE DesiredClientPixelsForMonitor(HMONITOR monitor) {
 
 static SIZE InitialClientPixelsForMonitor(HMONITOR monitor) {
     const auto& video = CurrentVideoPreset();
+    // Explicit display selection wins at startup; F6 never changes this plan.
+    if (g_vsrResolutionPlan) return SIZE{video.width, video.height};
     // Monitor-relative sizing is independent from Pixel-perfect. When it is
     // enabled, restore the same monitor-relative scale that was used before
     // shutdown, including when the saved monitor is a smaller display.
@@ -6205,18 +6548,36 @@ static void ApplyWindowEdgeSnap(HWND hwnd, RECT& movingRect) {
     const int snapDistance =
         (std::max)(1, MulDiv(kWindowSnapDistanceDip, dpi,
                             USER_DEFAULT_SCREEN_DPI));
-    const int releaseDistance =
-        (std::max)(1, MulDiv(kWindowSnapReleaseDip, dpi,
-                            USER_DEFAULT_SCREEN_DPI));
     const int width = movingRect.right - movingRect.left;
     const int height = movingRect.bottom - movingRect.top;
     const RECT work = monitorInfo.rcWork;
+    // A latch belongs to an actual work-area edge, not the previous monitor.
+    if ((g_windowSnapState.horizontal == HorizontalSnapEdge::Left &&
+         g_windowSnapState.horizontalSnapCoordinate != work.left) ||
+        (g_windowSnapState.horizontal == HorizontalSnapEdge::Right &&
+         g_windowSnapState.horizontalSnapCoordinate != work.right)) {
+        g_windowSnapState.horizontal = HorizontalSnapEdge::None;
+        g_windowSnapState.suppressHorizontal = false;
+    }
+    if ((g_windowSnapState.vertical == VerticalSnapEdge::Top &&
+         g_windowSnapState.verticalSnapCoordinate != work.top) ||
+        (g_windowSnapState.vertical == VerticalSnapEdge::Bottom &&
+         g_windowSnapState.verticalSnapCoordinate != work.bottom)) {
+        g_windowSnapState.vertical = VerticalSnapEdge::None;
+        g_windowSnapState.suppressVertical = false;
+    }
+    // Preserve the unsnapped edge offset when entering the attraction zone.
+    // Using only travel since latching adds a second dead zone (up to twice
+    // the snap distance). Both entry and exit now use the same edge distance.
     bool horizontalReleased = false;
     if (g_windowSnapState.horizontal == HorizontalSnapEdge::Left) {
         const int cursorDelta =
             cursor.x - g_windowSnapState.horizontalCursorAnchor;
-        const bool release = std::abs(cursorDelta) >= releaseDistance;
+        const int edgeOffset = g_windowSnapState.horizontalEdgeOffset + cursorDelta;
+        const bool release = std::abs(edgeOffset) > snapDistance;
         if (release) {
+            movingRect.left = g_windowSnapState.horizontalSnapCoordinate + edgeOffset;
+            movingRect.right = movingRect.left + width;
             g_windowSnapState.horizontal = HorizontalSnapEdge::None;
             g_windowSnapState.suppressHorizontal = true;
             horizontalReleased = true;
@@ -6227,8 +6588,11 @@ static void ApplyWindowEdgeSnap(HWND hwnd, RECT& movingRect) {
     } else if (g_windowSnapState.horizontal == HorizontalSnapEdge::Right) {
         const int cursorDelta =
             cursor.x - g_windowSnapState.horizontalCursorAnchor;
-        const bool release = std::abs(cursorDelta) >= releaseDistance;
+        const int edgeOffset = g_windowSnapState.horizontalEdgeOffset + cursorDelta;
+        const bool release = std::abs(edgeOffset) > snapDistance;
         if (release) {
+            movingRect.right = g_windowSnapState.horizontalSnapCoordinate + edgeOffset;
+            movingRect.left = movingRect.right - width;
             g_windowSnapState.horizontal = HorizontalSnapEdge::None;
             g_windowSnapState.suppressHorizontal = true;
             horizontalReleased = true;
@@ -6248,12 +6612,14 @@ static void ApplyWindowEdgeSnap(HWND hwnd, RECT& movingRect) {
             }
         } else if (!horizontalReleased) {
             if (std::abs(movingRect.left - work.left) <= snapDistance) {
+                g_windowSnapState.horizontalEdgeOffset = movingRect.left - work.left;
                 movingRect.left = work.left;
                 movingRect.right = movingRect.left + width;
                 g_windowSnapState.horizontal = HorizontalSnapEdge::Left;
                 g_windowSnapState.horizontalCursorAnchor = cursor.x;
                 g_windowSnapState.horizontalSnapCoordinate = work.left;
             } else if (std::abs(movingRect.right - work.right) <= snapDistance) {
+                g_windowSnapState.horizontalEdgeOffset = movingRect.right - work.right;
                 movingRect.right = work.right;
                 movingRect.left = movingRect.right - width;
                 g_windowSnapState.horizontal = HorizontalSnapEdge::Right;
@@ -6267,8 +6633,11 @@ static void ApplyWindowEdgeSnap(HWND hwnd, RECT& movingRect) {
     if (g_windowSnapState.vertical == VerticalSnapEdge::Top) {
         const int cursorDelta =
             cursor.y - g_windowSnapState.verticalCursorAnchor;
-        const bool release = std::abs(cursorDelta) >= releaseDistance;
+        const int edgeOffset = g_windowSnapState.verticalEdgeOffset + cursorDelta;
+        const bool release = std::abs(edgeOffset) > snapDistance;
         if (release) {
+            movingRect.top = g_windowSnapState.verticalSnapCoordinate + edgeOffset;
+            movingRect.bottom = movingRect.top + height;
             g_windowSnapState.vertical = VerticalSnapEdge::None;
             g_windowSnapState.suppressVertical = true;
             verticalReleased = true;
@@ -6279,8 +6648,11 @@ static void ApplyWindowEdgeSnap(HWND hwnd, RECT& movingRect) {
     } else if (g_windowSnapState.vertical == VerticalSnapEdge::Bottom) {
         const int cursorDelta =
             cursor.y - g_windowSnapState.verticalCursorAnchor;
-        const bool release = std::abs(cursorDelta) >= releaseDistance;
+        const int edgeOffset = g_windowSnapState.verticalEdgeOffset + cursorDelta;
+        const bool release = std::abs(edgeOffset) > snapDistance;
         if (release) {
+            movingRect.bottom = g_windowSnapState.verticalSnapCoordinate + edgeOffset;
+            movingRect.top = movingRect.bottom - height;
             g_windowSnapState.vertical = VerticalSnapEdge::None;
             g_windowSnapState.suppressVertical = true;
             verticalReleased = true;
@@ -6300,12 +6672,14 @@ static void ApplyWindowEdgeSnap(HWND hwnd, RECT& movingRect) {
             }
         } else if (!verticalReleased) {
             if (std::abs(movingRect.top - work.top) <= snapDistance) {
+                g_windowSnapState.verticalEdgeOffset = movingRect.top - work.top;
                 movingRect.top = work.top;
                 movingRect.bottom = movingRect.top + height;
                 g_windowSnapState.vertical = VerticalSnapEdge::Top;
                 g_windowSnapState.verticalCursorAnchor = cursor.y;
                 g_windowSnapState.verticalSnapCoordinate = work.top;
             } else if (std::abs(movingRect.bottom - work.bottom) <= snapDistance) {
+                g_windowSnapState.verticalEdgeOffset = movingRect.bottom - work.bottom;
                 movingRect.bottom = work.bottom;
                 movingRect.top = movingRect.bottom - height;
                 g_windowSnapState.vertical = VerticalSnapEdge::Bottom;
@@ -6488,11 +6862,11 @@ static void ToggleFullscreen(HWND hwnd, bool automaticStartup = false,
     EndOutputTransition(updateOutput);
 }
 
-static bool SelectedResolutionMatchesMonitor(HMONITOR monitor) {
+static bool SelectedResolutionMatchesMonitor(HMONITOR monitor, bool capture = false) {
     MONITORINFO monitorInfo{sizeof(monitorInfo)};
     if (!monitor || !GetMonitorInfoW(monitor, &monitorInfo)) return false;
 
-    const auto& video = CurrentVideoPreset();
+    const auto& video = capture ? CurrentCapturePreset() : CurrentVideoPreset();
     const int monitorWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
     const int monitorHeight = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
     return video.width == monitorWidth && video.height == monitorHeight;
@@ -6517,7 +6891,7 @@ static void ShowTransientHud(TransientHudContent content) {
 
 static void RestoreOneToOneWindow(HWND hwnd) {
     if (!hwnd) return;
-    const auto& video = CurrentVideoPreset();
+    const auto& video = CurrentCapturePreset();
     const HMONITOR monitor =
         MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitorInfo{sizeof(monitorInfo)};
@@ -6540,10 +6914,10 @@ static void RestoreOneToOneWindow(HWND hwnd) {
     // A capture that exactly matches the monitor is already the ideal 1:1
     // fullscreen case. Prefer true fullscreen even when a borderless window
     // would happen to fit an auto-hidden-taskbar work area.
-    if (SelectedResolutionMatchesMonitor(monitor)) {
+    if (SelectedResolutionMatchesMonitor(monitor, true)) {
         if (g_settings.relativeWindowSize) {
             g_settings.relativeWindowScalePpm =
-                RelativeScaleForMonitor(monitor);
+                RelativeScaleForMonitor(monitor, true);
         }
         if (!fullscreen) ToggleFullscreen(hwnd);
         ShowTransientHud(TransientHudContent::OneToOne);
@@ -6560,7 +6934,7 @@ static void RestoreOneToOneWindow(HWND hwnd) {
             // F5 establishes this monitor's 1:1 window as the new relative
             // baseline as well, so subsequent monitor moves preserve it.
             g_settings.relativeWindowScalePpm =
-                RelativeScaleForMonitor(monitor);
+                RelativeScaleForMonitor(monitor, true);
         }
         if (fullscreen) ToggleFullscreen(hwnd, false, false);
         const int x = monitorInfo.rcWork.left + (workWidth - outer.cx) / 2;
@@ -6617,7 +6991,7 @@ static void FormatAudioErrorAge(uint64_t lastErrorMs, uint64_t nowMs,
 }
 
 static std::wstring BuildRuntimeOsdText(int outputWidth, int outputHeight) {
-    const auto& preset = CurrentVideoPreset();
+    const auto& preset = CurrentCapturePreset();
     const std::wstring& captureName = g_activeCaptureDeviceName;
     const std::wstring outputName = ActiveAudioOutputName();
     const VideoPixelFormat activeFormat = static_cast<VideoPixelFormat>(
@@ -6867,7 +7241,8 @@ static std::wstring BuildRuntimeOsdText(int outputWidth, int outputHeight) {
                    static_cast<unsigned long long>(clipEvents));
     }
 
-    const wchar_t* scaleText =
+    const wchar_t* scaleText = g_vsrResolutionPlan
+        ? (IsEnglishUi() ? L"VSR display size" : L"VSR 표시 크기") :
         g_settings.pixelPerfect && g_settings.relativeWindowSize
             ? UI_TEXT(L"Pixel-perfect 시작 · Monitor-relative 이동")
             : g_settings.pixelPerfect
@@ -7095,10 +7470,23 @@ static void UpdateBackgroundAudioMute(bool appActive) {
 
 // Audio-only owns its presentation; it shares only the underlying audio state
 // and volume controls with the video overlay.
+static bool g_audioOnlyHighContrast = false;
+static void RefreshAudioOnlyTheme(HWND hwnd) {
+    g_audioOnlyHighContrast = llcv::ui::HighContrastEnabled();
+    const auto palette = llcv::ui::ResolvePalette(g_settings.settingsLightTheme, g_audioOnlyHighContrast);
+    const BOOL dark = !g_audioOnlyHighContrast && !g_settings.settingsLightTheme;
+    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+    const COLORREF caption = g_audioOnlyHighContrast ? DWMWA_COLOR_DEFAULT : palette.kBackground;
+    const COLORREF text = g_audioOnlyHighContrast ? DWMWA_COLOR_DEFAULT : palette.kText;
+    DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, &caption, sizeof(caption));
+    DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, &text, sizeof(text));
+}
 static void PaintAudioOnlyView(HDC dc,
                                const llcv::audio_only_view::Rect& content) {
     llcv::audio_only_view::State state{};
     state.english = IsEnglishUi();
+    state.lightTheme = g_settings.settingsLightTheme;
+    state.highContrast = g_audioOnlyHighContrast;
     state.allowBoost = g_settings.allowVolumeBoost;
     state.hoveredTarget = g_audioOsdHoverTarget.load(std::memory_order_acquire);
     state.outputLabel = g_settings.audioMode == AudioMode::WasapiExclusive
@@ -7164,6 +7552,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         g_audioOnlyResizePending = false;
         g_audioOnlyDragPending = false;
         g_audioOnlyPaintBuffer.Release();
+        if (g_settings.audioOnly) RefreshAudioOnlyTheme(hwnd);
         g_relativeMoveMonitor = nullptr;
         if (!g_settings.audioOnly) {
             g_videoHost = CreateWindowExW(
@@ -7211,12 +7600,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             const int panelHeight = panel.bottom - panel.top;
             const bool buffered = paintPanel && g_audioOnlyPaintBuffer.Ensure(
                 dc, panelWidth, panelHeight);
-            const HBRUSH black =
-                reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+            const auto palette = llcv::ui::ResolvePalette(g_settings.settingsLightTheme, g_audioOnlyHighContrast);
+            const HBRUSH background = static_cast<HBRUSH>(GetStockObject(DC_BRUSH));
+            SetDCBrushColor(dc, palette.kBackground);
             if (buffered) {
                 HDC backDc = g_audioOnlyPaintBuffer.dc;
                 const RECT localPanel{0, 0, panelWidth, panelHeight};
-                FillRect(backDc, &localPanel, black);
+                SetDCBrushColor(backDc, palette.kBackground);
+                FillRect(backDc, &localPanel, background);
                 SetViewportOrgEx(backDc, -panel.left, -panel.top, nullptr);
                 PaintAudioOnlyView(backDc, panel);
                 SetViewportOrgEx(backDc, 0, 0, nullptr);
@@ -7228,16 +7619,16 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 if (savedDc != 0) {
                     ExcludeClipRect(dc, panel.left, panel.top,
                                     panel.right, panel.bottom);
-                    FillRect(dc, &paint.rcPaint, black);
+                    FillRect(dc, &paint.rcPaint, background);
                     RestoreDC(dc, savedDc);
                 } else {
-                    FillRect(dc, &paint.rcPaint, black);
+                    FillRect(dc, &paint.rcPaint, background);
                 }
                 BitBlt(dc, panel.left, panel.top,
                        panelWidth, panelHeight,
                        backDc, 0, 0, SRCCOPY);
             } else {
-                FillRect(dc, &paint.rcPaint, black);
+                FillRect(dc, &paint.rcPaint, background);
                 if (paintPanel) PaintAudioOnlyView(dc, panel);
             }
             EndPaint(hwnd, &paint);
@@ -7247,6 +7638,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
     case WM_ERASEBKGND:
         if (g_settings.audioOnly) return 1;
+        break;
+
+    case WM_SETTINGCHANGE: case WM_THEMECHANGED: case WM_SYSCOLORCHANGE:
+        if (g_settings.audioOnly) {
+            RefreshAudioOnlyTheme(hwnd);
+            InvalidateRect(hwnd, nullptr, FALSE);
+        }
         break;
 
     case WM_SIZING:
@@ -7575,6 +7973,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         break;
 
     case WM_KEYDOWN:
+#ifdef LLCV_VSR_FEATURE
+        if (HandleVsrTestKey(wParam, lParam)) return 0;
+#endif
         if (wParam == VK_F2) {
             SendMessageW(hwnd, WM_OPEN_SETTINGS, 0, 0);
             return 0;
@@ -7720,6 +8121,10 @@ static void RelaunchWithSettings() {
     std::wstring commandLine = L"\"";
     commandLine += executable;
     commandLine += L"\" --force-settings";
+#ifdef LLCV_VSR_EXPERIMENT
+    if (g_vsrMode == llcv::vsr::Mode::On) commandLine += L" --vsr-test on";
+    else if (g_vsrMode == llcv::vsr::Mode::Off) commandLine += L" --vsr-test off";
+#endif
 #ifdef LLCV_HDR_SCRGB_PROTOTYPE
     commandLine += g_useScrgbPrototype ? L" --hdr-output scrgb" : L" --hdr-output hdr10";
 #endif
@@ -7772,7 +8177,21 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
 #ifdef LLCV_HDR_FRAME_AUDIT
     g_suppressSettingsSave = true;
 #endif
+#ifdef LLCV_VSR_EXPERIMENT
+    // A private executable must not migrate or overwrite the user's settings.
+    g_suppressSettingsSave = true;
+    const auto vsrOption = CommandLineOptionValue(L"--vsr-test");
+    if (vsrOption == L"on") g_vsrMode = llcv::vsr::Mode::On;
+    else if (vsrOption == L"off") g_vsrMode = llcv::vsr::Mode::Off;
+    else if (!vsrOption.empty()) {
+        MessageBoxW(nullptr, L"Use --vsr-test on or --vsr-test off.", L"VSR experiment", MB_OK | MB_ICONERROR);
+        return 2;
+    }
+#endif
     LoadSettings();
+#ifdef LLCV_VSR_EXPERIMENT
+    if (!vsrOption.empty()) g_settings.vsrEnabled = vsrOption == L"on";
+#endif
 #ifdef LLCV_HDR_SCRGB_PROTOTYPE
     g_useScrgbPrototype = CommandLineOptionValue(L"--hdr-output") != L"hdr10";
 #endif
@@ -7800,7 +8219,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
         wcsstr(commandLine, L"--exclusive-probe") != nullptr;
     const bool exclusiveProbe = exclusiveProbeAll || exclusiveProbeSelected;
     g_suppressSettingsSave = smokeTest || exclusiveProbe;
-#ifdef LLCV_HDR_FRAME_AUDIT
+#if defined(LLCV_HDR_FRAME_AUDIT) || defined(LLCV_VSR_EXPERIMENT)
     g_suppressSettingsSave = true;
 #endif
     if (!smokeTest && !exclusiveProbe &&
@@ -7855,7 +8274,21 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
         g_audioOsdVisible.store(true, std::memory_order_release);
     }
 
+    LatchVideoResolutionPlan();
+    if (g_vsrResolutionPlan) {
+        const auto& capture = CurrentCapturePreset();
+        const auto& display = CurrentVideoPreset();
+        fwprintf(stderr, L"[vsr] resolution plan: capture %d x %d -> display %d x %d; F6 preserves both.\n",
+            capture.width, capture.height, display.width, display.height);
+    }
+    g_vsrMode.store(g_settings.vsrEnabled ? llcv::vsr::Mode::On
+                                         : llcv::vsr::Mode::Disabled,
+                    std::memory_order_release);
     // Allocate a console for prototype diagnostics.
+#ifdef LLCV_VSR_EXPERIMENT
+    g_settings.checkForUpdates = false;
+    g_settings.saveLog = true; // F6 can opt in after a default launch.
+#endif
 #ifdef LLCV_HDR_FRAME_AUDIT
     // Diagnostic settings are session-only; never migrate/save the user's profile.
     g_settings.saveLog = true;
@@ -7938,7 +8371,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
         return 1;
     }
 
-    const auto& video = CurrentVideoPreset();
+    const auto& video = CurrentCapturePreset();
     const wchar_t* audioLabel =
         g_settings.audioMode == AudioMode::WasapiExclusive
             ? L"WASAPI Exclusive"
@@ -8032,7 +8465,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
         fwprintf(stderr, L"[video] window client area: %ld x %ld%s\n",
                  clientRect.right - clientRect.left,
                  clientRect.bottom - clientRect.top,
-                 g_settings.pixelPerfect
+                 g_vsrResolutionPlan ? L" (VSR display size)" : g_settings.pixelPerfect
                      ? L" (pixel-perfect)"
                      : g_settings.relativeWindowSize
                            ? L" (monitor-relative)" : L"");
@@ -8223,7 +8656,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
 
     MSG m{};
     while (g_running.load() && GetMessageW(&m, nullptr, 0, 0) > 0) {
-        if (g_viewerHelp.ProcessMessage(m, hwnd, IsEnglishUi(), kAppVersionLabel)) {
+        if (g_viewerHelp.ProcessMessage(m, hwnd, IsEnglishUi(), kAppVersionLabel,
+                g_settings.settingsLightTheme)) {
             // Help shares the UI thread's cursor, but must not inherit the
             // fullscreen idle-hide state. Restart the grace period on close.
             g_lastFullscreenCursorActivityMs = GetTickCount64();
@@ -8241,6 +8675,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
         // Keyboard focus can belong to the video-host child. Key messages do
         // not bubble to its parent, so route viewer shortcuts at the thread
         // message-loop level.
+#ifdef LLCV_VSR_FEATURE
+        if (m.message == WM_KEYDOWN && HandleVsrTestKey(m.wParam, m.lParam)) continue;
+#endif
         if (m.message == WM_KEYDOWN && m.wParam == VK_TAB &&
             GetKeyState(VK_CONTROL) >= 0) {
             SendMessageW(hwnd, WM_TOGGLE_RUNTIME_OSD, 0, 0);

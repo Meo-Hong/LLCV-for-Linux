@@ -1,5 +1,6 @@
 #include "ui/AudioOnlyView.h"
-#include "ui/DarkPalette.h"
+#include "ui/AppPalette.h"
+#include "ui/SettingsFonts.h"
 
 #include <algorithm>
 #include <cmath>
@@ -118,16 +119,17 @@ void Paint(HDC dc, const Rect& content, const State& state) {
         return RECT{x(left), y(top), x(right), y(bottom)};
     };
 
-    constexpr COLORREF backgroundColor = dark_palette::background;
-    constexpr COLORREF cardColor = dark_palette::card;
-    constexpr COLORREF masterColor = dark_palette::raised;
-    constexpr COLORREF hoverColor = RGB(39, 49, 59);
-    constexpr COLORREF textColor = dark_palette::text;
-    constexpr COLORREF secondaryColor = dark_palette::secondary;
-    constexpr COLORREF accentColor = dark_palette::accent;
-    constexpr COLORREF trackColor = RGB(58, 72, 79);
-    constexpr COLORREF clipColor = RGB(237, 98, 84);
-    constexpr COLORREF boostColor = RGB(226, 176, 117);
+    const auto palette = ui::ResolvePalette(state.lightTheme, state.highContrast);
+    const COLORREF backgroundColor = palette.kBackground;
+    const COLORREF cardColor = palette.kCard;
+    const COLORREF masterColor = palette.kControl;
+    const COLORREF hoverColor = palette.kHover;
+    const COLORREF textColor = palette.kText;
+    const COLORREF secondaryColor = palette.kSecondary;
+    const COLORREF accentColor = palette.kAccent;
+    const COLORREF trackColor = palette.kEdge;
+    const COLORREF clipColor = palette.kDanger;
+    const COLORREF boostColor = palette.kWarning;
 
     HBRUSH background = CreateSolidBrush(backgroundColor);
     HBRUSH cardBrush = CreateSolidBrush(cardColor);
@@ -136,9 +138,9 @@ void Paint(HDC dc, const Rect& content, const State& state) {
     HBRUSH track = CreateSolidBrush(trackColor);
     HBRUSH master = CreateSolidBrush(masterColor);
     HBRUSH clipping = CreateSolidBrush(state.clipping ? clipColor : accentColor);
-    HBRUSH outerEdge = CreateSolidBrush(RGB(59, 70, 80));
-    HPEN cardEdge = CreatePen(PS_SOLID, 1, dark_palette::cardEdge);
-    HPEN hoverEdge = CreatePen(PS_SOLID, 1, RGB(109, 155, 145));
+    HBRUSH outerEdge = CreateSolidBrush(palette.kEdge);
+    HPEN cardEdge = CreatePen(PS_SOLID, 1, palette.kCardEdge);
+    HPEN hoverEdge = CreatePen(PS_SOLID, 1, palette.kHoverEdge);
     SetBkMode(dc, TRANSPARENT);
     SelectObject(dc, GetStockObject(NULL_PEN));
 
@@ -151,13 +153,14 @@ void Paint(HDC dc, const Rect& content, const State& state) {
         LOGFONTW descriptor{};
         descriptor.lfHeight = -(std::max)(1, pixelHeight);
         descriptor.lfWeight = weight;
-        wcscpy_s(descriptor.lfFaceName, L"Segoe UI");
+        descriptor.lfQuality = CLEARTYPE_QUALITY;
+        wcscpy_s(descriptor.lfFaceName, settings_ui::SettingsFontFamily(weight, state.english));
         return CreateFontIndirectW(&descriptor);
     };
     const auto textSizes = TextSizesForContent(height);
     HFONT masterFont = font(textSizes.master, FW_MEDIUM);
     HFONT numberFont = font(textSizes.channel, FW_MEDIUM);
-    HFONT bodyFont = font(textSizes.body, FW_NORMAL);
+    HFONT bodyFont = font(textSizes.body, FW_MEDIUM);
     HFONT smallFont = font(textSizes.secondary, FW_NORMAL);
     HGDIOBJ oldFont = SelectObject(dc, bodyFont);
     const auto label = [&](const wchar_t* value, int left, int top,
@@ -186,7 +189,7 @@ void Paint(HDC dc, const Rect& content, const State& state) {
     const auto card = [&](const Rect& bounds, int target, HBRUSH normal) {
         SelectObject(dc, state.hoveredTarget == target ? hoverEdge : cardEdge);
         rounded(state.hoveredTarget == target ? hover : normal,
-                bounds.left, bounds.top, bounds.right, bounds.bottom, 16);
+                bounds.left, bounds.top, bounds.right, bounds.bottom, 14);
         SelectObject(dc, GetStockObject(NULL_PEN));
     };
     const auto percentage = [&](int percent, int left, int top,

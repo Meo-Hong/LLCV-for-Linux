@@ -1,4 +1,6 @@
 #include "ui/SettingsView.h"
+#include "ui/SettingsFonts.h"
+#include "ui/ViewerShortcuts.h"
 #include "ui/SettingsDialogControls.h"
 #include "ui/UiText.h"
 #include "capture/DirectShowDevices.h"
@@ -19,9 +21,24 @@ static void Check(bool value, const char* message) {
     if (!value) { std::fprintf(stderr, "FAILED: %s\n", message); std::abort(); }
 }
 struct Member { HWND SettingsControls::* handle; const char* name; };
+static LRESULT CALLBACK CountEnableTransitions(HWND hwnd, UINT message, WPARAM wParam,
+                                               LPARAM lParam, UINT_PTR, DWORD_PTR data) {
+    if (message == WM_ENABLE) ++*reinterpret_cast<unsigned*>(data);
+    return DefSubclassProc(hwnd, message, wParam, lParam);
+}
 static constexpr Member kMembers[] = {
+    {&SettingsControls::videoRefreshButton, "videoRefreshButton"},
+    {&SettingsControls::brandLabel, "brandLabel"},
+    {&SettingsControls::pageTitle, "pageTitle"},
+    {&SettingsControls::pageSubtitle, "pageSubtitle"},
+    {&SettingsControls::appPreferencesSection, "appPreferencesSection"},
+    {&SettingsControls::vsrCheck, "vsrCheck"},
+    {&SettingsControls::vsrGuideButton, "vsrGuideButton"},
+    {&SettingsControls::vsrStatus, "vsrStatus"},
+    {&SettingsControls::vsrCaptureLabel, "vsrCaptureLabel"},
+    {&SettingsControls::vsrCaptureCombo, "vsrCaptureCombo"},
     {&SettingsControls::tabControl, "tabControl"},
-    {&SettingsControls::guideText, "guideText"},
+    {&SettingsControls::guideVideoHint, "guideVideoHint"},
     {&SettingsControls::guideShortcutsTitle, "guideShortcutsTitle"},
     {&SettingsControls::guideDiagnosticsTitle, "guideDiagnosticsTitle"},
     {&SettingsControls::guideDiagnosticsText, "guideDiagnosticsText"},
@@ -42,6 +59,8 @@ static constexpr Member kMembers[] = {
     {&SettingsControls::videoWindowSection, "videoWindowSection"},
     {&SettingsControls::languageLabel, "languageLabel"},
     {&SettingsControls::languageCombo, "languageCombo"},
+    {&SettingsControls::themeLabel, "themeLabel"},
+    {&SettingsControls::themeCombo, "themeCombo"},
     {&SettingsControls::audioLabel, "audioLabel"},
     {&SettingsControls::bufferLabel, "bufferLabel"},
     {&SettingsControls::audioOutputLabel, "audioOutputLabel"},
@@ -111,94 +130,52 @@ static constexpr Member kMembers[] = {
 struct Geometry {
     HWND SettingsControls::* handle;
     const char* name;
-    int x, normalY, pixelY, width, height;
+    int x, normalY, warningY, width, height;
 };
-// Golden DIP coordinates captured from main.cpp before extraction. Intentionally
-// do not derive expected rectangles from the new implementation under test.
+// Independent layout anchors plus visibility/overlap checks protect the new
+// navigation and preserve roomy hit targets across DPI and language variants.
 static constexpr Geometry kGeometry[] = {
-    {&SettingsControls::tabControl, "tabControl", 24, 16, 16, 901, 31},
-    {&SettingsControls::languageLabel, "languageLabel", 24, 500, 500, 160, 24},
-    {&SettingsControls::languageCombo, "languageCombo", 195, 496, 496, 280, 120},
-    {&SettingsControls::skipStartupCheck, "skipStartupCheck", 24, 540, 540, 451, 28},
-    {&SettingsControls::skipStartupHint, "skipStartupHint", 44, 568, 568, 500, 22},
-    {&SettingsControls::versionWatermark, "versionWatermark", 24, 602, 602, 260, 20},
-    {&SettingsControls::startButton, "startButton", 745, 568, 568, 80, 30},
-    {&SettingsControls::cancelButton, "cancelButton", 835, 568, 568, 80, 30},
-    {&SettingsControls::audioOutputSection, "audioOutputSection", 34, 58, 58, 200, 20},
-    {&SettingsControls::audioLabel, "audioLabel", 34, 80, 80, 160, 24},
-    {&SettingsControls::audioCombo, "audioCombo", 205, 76, 76, 360, 120},
-    {&SettingsControls::exclusiveTestButton, "exclusiveTestButton", 575, 76, 76, 185, 22},
-    {&SettingsControls::audioOutputLabel, "audioOutputLabel", 34, 116, 116, 160, 24},
-    {&SettingsControls::audioOutputCombo, "audioOutputCombo", 205, 112, 112, 680, 220},
-    {&SettingsControls::bufferLabel, "bufferLabel", 34, 152, 152, 160, 24},
-    {&SettingsControls::bufferCombo, "bufferCombo", 205, 148, 148, 280, 180},
-    {&SettingsControls::audioStatus, "audioStatus", 34, 188, 188, 580, 24},
-    {&SettingsControls::audioPlaybackSection, "audioPlaybackSection", 34, 222, 222, 250, 20},
-    {&SettingsControls::volumeHudLabel, "volumeHudLabel", 34, 246, 246, 160, 24},
-    {&SettingsControls::volumeHudCombo, "volumeHudCombo", 205, 242, 242, 280, 160},
-    {&SettingsControls::muteBackgroundCheck, "muteBackgroundCheck", 34, 318, 318, 500, 28},
-    {&SettingsControls::audioOnlyCheck, "audioOnlyCheck", 34, 354, 354, 500, 28},
-    {&SettingsControls::audioStabilitySection, "audioStabilitySection", 34, 392, 392, 250, 20},
-    {&SettingsControls::driftLabel, "driftLabel", 34, 416, 416, 160, 24},
-    {&SettingsControls::driftHelp, "driftHelp", 170, 412, 412, 24, 24},
-    {&SettingsControls::driftCombo, "driftCombo", 205, 412, 412, 360, 120},
-    {&SettingsControls::pcmQueueLabel, "pcmQueueLabel", 34, 452, 452, 160, 24},
-    {&SettingsControls::pcmQueueHelp, "pcmQueueHelp", 170, 448, 448, 24, 24},
-    {&SettingsControls::pcmQueueCombo, "pcmQueueCombo", 205, 448, 448, 280, 140},
-    {&SettingsControls::captureDeviceLabel, "captureDeviceLabel", 34, 84, 84, 140, 24},
-    {&SettingsControls::videoCaptureSection, "videoCaptureSection", 34, 58, 58, 140, 20},
-    {&SettingsControls::captureDeviceCombo, "captureDeviceCombo", 190, 80, 80, 270, 220},
-    {&SettingsControls::captureAudioDeviceLabel, "captureAudioDeviceLabel", 34, 124, 124, 140, 24},
-    {&SettingsControls::captureAudioDeviceCombo, "captureAudioDeviceCombo", 190, 120, 120, 270, 220},
-    {&SettingsControls::captureAudioStatus, "captureAudioStatus", 190, 124, 124, 300, 24},
-    {&SettingsControls::videoLabel, "videoLabel", 34, 164, 164, 140, 24},
-    {&SettingsControls::videoCombo, "videoCombo", 190, 160, 160, 270, 120},
-    {&SettingsControls::pixelFormatLabel, "pixelFormatLabel", 34, 204, 204, 140, 24},
-    {&SettingsControls::pixelFormatCombo, "pixelFormatCombo", 190, 200, 200, 270, 160},
-    {&SettingsControls::frameRateLabel, "frameRateLabel", 34, 244, 244, 140, 24},
-    {&SettingsControls::frameRateCombo, "frameRateCombo", 190, 240, 240, 270, 200},
-    {&SettingsControls::videoCapabilityStatus, "videoCapabilityStatus", 34, 278, 278, 430, 90},
-    {&SettingsControls::presentationLabel, "presentationLabel", 505, 84, 84, 95, 24},
-    {&SettingsControls::videoDisplaySection, "videoDisplaySection", 505, 58, 58, 140, 20},
-    {&SettingsControls::presentationHelp, "presentationHelp", 604, 80, 80, 24, 24},
-    {&SettingsControls::presentationCombo, "presentationCombo", 630, 80, 80, 255, 120},
-    {&SettingsControls::displayMonitorLabel, "displayMonitorLabel", 505, 124, 124, 120, 24},
-    {&SettingsControls::displayMonitorCombo, "displayMonitorCombo", 630, 120, 120, 255, 180},
-    {&SettingsControls::pixelCheck, "pixelCheck", 505, 160, 160, 380, 28},
-    {&SettingsControls::scalingLabel, "scalingLabel", 505, 200, 200, 120, 24},
-    {&SettingsControls::scalingCombo, "scalingCombo", 630, 196, 196, 255, 120},
-    {&SettingsControls::videoWindowSection, "videoWindowSection", 505, 244, 208, 140, 20},
-    {&SettingsControls::relativeSizeCheck, "relativeSizeCheck", 505, 268, 232, 400, 28},
-    {&SettingsControls::relativeSizeWarning, "relativeSizeWarning", 525, 296, 260, 370, 28},
-    {&SettingsControls::borderlessCheck, "borderlessCheck", 505, 336, 300, 400, 28},
-    {&SettingsControls::windowSnapCheck, "windowSnapCheck", 505, 372, 336, 400, 28},
-    {&SettingsControls::fullscreenCursorLabel, "fullscreenCursorLabel", 505, 412, 376, 120, 24},
-    {&SettingsControls::fullscreenCursorCombo, "fullscreenCursorCombo", 630, 408, 372, 255, 120},
-    {&SettingsControls::fullscreenCursorHint, "fullscreenCursorHint", 630, 440, 404, 255, 24},
-    {&SettingsControls::forceHdr10Check, "forceHdr10Check", 34, 374, 374, 360, 28},
-    {&SettingsControls::forceHdr10Help, "forceHdr10Help", 402, 370, 370, 24, 24},
-    {&SettingsControls::hdrChromaLabel, "hdrChromaLabel", 34, 414, 414, 140, 24},
-    {&SettingsControls::hdrChromaCombo, "hdrChromaCombo", 190, 410, 410, 240, 150},
-    {&SettingsControls::hdrChromaHelp, "hdrChromaHelp", 438, 410, 410, 24, 24},
-    {&SettingsControls::mjpegColorLabel, "mjpegColorLabel", 34, 374, 374, 140, 24},
-    {&SettingsControls::mjpegColorCombo, "mjpegColorCombo", 190, 370, 370, 240, 150},
-    {&SettingsControls::mjpegColorHelp, "mjpegColorHelp", 438, 370, 370, 24, 24},
-    {&SettingsControls::guideShortcutsTitle, "guideShortcutsTitle", 34, 58, 58, 280, 20},
-    {&SettingsControls::guideText, "guideText", 34, 84, 84, 400, 220},
-    {&SettingsControls::guideDiagnosticsTitle, "guideDiagnosticsTitle", 505, 58, 58, 320, 20},
-    {&SettingsControls::guideDiagnosticsText, "guideDiagnosticsText", 505, 84, 84, 360, 70},
-    {&SettingsControls::saveLogCheck, "saveLogCheck", 505, 170, 170, 360, 28},
-    {&SettingsControls::showConsoleCheck, "showConsoleCheck", 505, 206, 206, 360, 28},
-    {&SettingsControls::guideLogFolderButton, "guideLogFolderButton", 505, 248, 248, 165, 26},
-    {&SettingsControls::screenshotTitle, "screenshotTitle", 505, 470, 470, 380, 20},
-    {&SettingsControls::screenshotClipboardCheck, "screenshotClipboardCheck", 505, 494, 494, 400, 28},
-    {&SettingsControls::screenshotHelp, "screenshotHelp", 705, 530, 530, 200, 36},
-    {&SettingsControls::screenshotFolderButton, "screenshotFolderButton", 505, 530, 530, 185, 28},
-    {&SettingsControls::updateTitle, "updateTitle", 34, 76, 76, 400, 24},
-    {&SettingsControls::updateText, "updateText", 34, 110, 110, 760, 64},
-    {&SettingsControls::checkForUpdatesCheck, "checkForUpdatesCheck", 34, 190, 190, 500, 28},
-    {&SettingsControls::updateNowButton, "updateNowButton", 34, 230, 230, 185, 30},
-    {&SettingsControls::updateStatus, "updateStatus", 235, 234, 234, 650, 24},
+    {&SettingsControls::brandLabel, "brandLabel", 10, 28, 28, 132, 40},
+    {&SettingsControls::tabControl, "tabControl", 10, 100, 100, 132, 220},
+    {&SettingsControls::pageTitle, "pageTitle", 184, 24, 24, 792, 40},
+    {&SettingsControls::pageSubtitle, "pageSubtitle", 184, 66, 66, 792, 24},
+    {&SettingsControls::languageCombo, "languageCombo", 184, 164, 164, 376, 30},
+    {&SettingsControls::themeCombo, "themeCombo", 600, 164, 164, 376, 30},
+    {&SettingsControls::skipStartupCheck, "skipStartupCheck", 184, 212, 212, 760, 32},
+    {&SettingsControls::versionWatermark, "versionWatermark", 10, 608, 608, 132, 20},
+    {&SettingsControls::startButton, "startButton", 762, 602, 602, 102, 34},
+    {&SettingsControls::cancelButton, "cancelButton", 876, 602, 602, 100, 34},
+    {&SettingsControls::audioOutputSection, "audioOutputSection", 184, 112, 112, 376, 20},
+    {&SettingsControls::audioCombo, "audioCombo", 184, 164, 164, 376, 30},
+    {&SettingsControls::audioOutputCombo, "audioOutputCombo", 184, 228, 228, 376, 30},
+    {&SettingsControls::audioStabilitySection, "audioStabilitySection", 184, 488, 488, 792, 20},
+    {&SettingsControls::driftCombo, "driftCombo", 184, 544, 544, 376, 30},
+    {&SettingsControls::pcmQueueCombo, "pcmQueueCombo", 600, 544, 544, 376, 30},
+    {&SettingsControls::captureDeviceCombo, "captureDeviceCombo", 184, 164, 164, 376, 30},
+    {&SettingsControls::captureAudioDeviceCombo, "captureAudioDeviceCombo", 184, 228, 228, 376, 30},
+    {&SettingsControls::videoCombo, "videoCombo", 184, 292, 292, 180, 30},
+    {&SettingsControls::frameRateCombo, "frameRateCombo", 380, 292, 292, 180, 30},
+    {&SettingsControls::pixelFormatCombo, "pixelFormatCombo", 184, 356, 356, 376, 30},
+    {&SettingsControls::videoCapabilityStatus, "videoCapabilityStatus", 184, 392, 392, 376, 84},
+    {&SettingsControls::hdrChromaCombo, "hdrChromaCombo", 184, 552, 552, 344, 30},
+    {&SettingsControls::vsrCheck, "vsrCheck", 600, 376, 376, 264, 32},
+    {&SettingsControls::vsrGuideButton, "vsrGuideButton", 876, 376, 376, 100, 32},
+    {&SettingsControls::vsrCaptureCombo, "vsrCaptureCombo", 786, 412, 412, 190, 30},
+    {&SettingsControls::vsrStatus, "vsrStatus", 600, 448, 448, 376, 20},
+    {&SettingsControls::screenshotTitle, "screenshotTitle", 600, 492, 492, 376, 20},
+    {&SettingsControls::screenshotHelp, "screenshotHelp", 794, 542, 542, 182, 32},
+    {&SettingsControls::screenshotFolderButton, "screenshotFolderButton", 600, 544, 544, 182, 28},
+    {&SettingsControls::relativeSizeCheck, "relativeSizeCheck", 184, 140, 140, 760, 32},
+    {&SettingsControls::borderlessCheck, "borderlessCheck", 184, 180, 180, 760, 32},
+    {&SettingsControls::windowSnapCheck, "windowSnapCheck", 184, 220, 220, 760, 32},
+    {&SettingsControls::fullscreenCursorLabel, "fullscreenCursorLabel", 184, 276, 276, 376, 20},
+    {&SettingsControls::fullscreenCursorCombo, "fullscreenCursorCombo", 184, 300, 300, 376, 30},
+    {&SettingsControls::guideVideoHint, "guideVideoHint", 204, 501, 501, 336, 36},
+    {&SettingsControls::guideDiagnosticsText, "guideDiagnosticsText", 600, 160, 160, 376, 32},
+    {&SettingsControls::saveLogCheck, "saveLogCheck", 600, 208, 208, 376, 32},
+    {&SettingsControls::showConsoleCheck, "showConsoleCheck", 600, 248, 248, 376, 32},
+    {&SettingsControls::guideLogFolderButton, "guideLogFolderButton", 600, 296, 296, 185, 32},
+    {&SettingsControls::updateNowButton, "updateNowButton", 184, 456, 456, 185, 32},
 };
 static RECT ClientRectOf(HWND parent, HWND child) {
     RECT r{}; Check(GetWindowRect(child, &r) != FALSE, "read control rectangle");
@@ -210,7 +187,261 @@ static void ExpectVisible(HWND hwnd, bool visible) {
     Check(Visible(hwnd) == visible, "tab-dependent visibility");
     Check((IsWindowEnabled(hwnd) != FALSE) == visible, "hidden controls must not accept input");
 }
+
+static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
+    const HWND centered[][2] = {
+        {state.videoCaptureSection, state.videoRefreshButton},
+        {state.vsrCaptureLabel, state.vsrCaptureCombo},
+        {state.driftLabel, state.driftHelp},
+        {state.pcmQueueLabel, state.pcmQueueHelp},
+        {state.presentationLabel, state.presentationHelp},
+        {state.hdrChromaCombo, state.hdrChromaHelp},
+        {state.mjpegColorCombo, state.mjpegColorHelp},
+        {state.volumeBoostCheck, state.volumeBoostHelp},
+    };
+    for (const auto& pair : centered) {
+        const RECT a = ClientRectOf(parent, pair[0]), b = ClientRectOf(parent, pair[1]);
+        Check(std::abs((a.top + a.bottom) - (b.top + b.bottom)) <= 1,
+              "inline labels/help actions share a vertical center at fractional DPI");
+    }
+    const struct { HWND label, field; } pairs[] = {
+        {state.audioLabel, state.audioCombo},
+        {state.audioOutputLabel, state.audioOutputCombo},
+        {state.bufferLabel, state.bufferCombo},
+        {state.volumeHudLabel, state.volumeHudCombo},
+        {state.driftLabel, state.driftCombo},
+        {state.pcmQueueLabel, state.pcmQueueCombo},
+        {state.captureDeviceLabel, state.captureDeviceCombo},
+        {state.captureAudioDeviceLabel, state.captureAudioDeviceCombo},
+        {state.videoLabel, state.videoCombo},
+        {state.frameRateLabel, state.frameRateCombo},
+        {state.pixelFormatLabel, state.pixelFormatCombo},
+        {state.presentationLabel, state.presentationCombo},
+        {state.displayMonitorLabel, state.displayMonitorCombo},
+        {state.scalingLabel, state.scalingCombo},
+        {state.hdrChromaLabel, state.hdrChromaCombo},
+        {state.mjpegColorLabel, state.mjpegColorCombo},
+        {state.fullscreenCursorLabel, state.fullscreenCursorCombo},
+        {state.languageLabel, state.languageCombo},
+        {state.themeLabel, state.themeCombo},
+    };
+    for (const auto& pair : pairs) {
+        Check((GetWindowLongPtrW(pair.field, GWL_STYLE) & (CBS_OWNERDRAWFIXED | CBS_HASSTRINGS)) ==
+              (CBS_OWNERDRAWFIXED | CBS_HASSTRINGS), "all dropdown rows use centered paint with native strings");
+        const RECT label = ClientRectOf(parent, pair.label);
+        const RECT field = ClientRectOf(parent, pair.field);
+        Check(field.left == label.left && field.top - label.bottom == SettingsPixels(4, dpi),
+              "labels align with their fields across a consistent four-DIP gap");
+        if (field.bottom - field.top != SettingsPixels(30, dpi)) {
+            wchar_t name[128]{};
+            GetWindowTextW(pair.label, name, ARRAYSIZE(name));
+            std::fwprintf(stderr, L"Combo metric mismatch: %ls id=%d dpi=%u rect=(%ld,%ld,%ld,%ld) selection=%lld row=%lld\n",
+                name, GetDlgCtrlID(pair.field), dpi, field.left, field.top, field.right, field.bottom,
+                static_cast<long long>(SendMessageW(pair.field, CB_GETITEMHEIGHT, static_cast<WPARAM>(-1), 0)),
+                static_cast<long long>(SendMessageW(pair.field, CB_GETITEMHEIGHT, 0, 0)));
+        }
+        Check(field.bottom - field.top == SettingsPixels(30, dpi),
+              "native closed combo really retains a thirty-DIP hit target after layout");
+        Check(SendMessageW(pair.field, CB_GETITEMHEIGHT, 0, 0) == SettingsPixels(24, dpi),
+              "expanded native combo keeps readable twenty-four-DIP rows");
+        HDC dc = GetDC(pair.field);
+        const auto previous = SelectObject(dc,
+            reinterpret_cast<HFONT>(SendMessageW(pair.field, WM_GETFONT, 0, 0)));
+        TEXTMETRICW metrics{};
+        Check(GetTextMetricsW(dc, &metrics) != FALSE, "read real combo font metrics");
+        SelectObject(dc, previous);
+        ReleaseDC(pair.field, dc);
+        Check(SendMessageW(pair.field, CB_GETITEMHEIGHT, static_cast<WPARAM>(-1), 0) >= metrics.tmHeight,
+              "collapsed native combo can contain the actual font without vertical clipping");
+    }
+    Check(ClientRectOf(parent, state.audioStabilitySection).top -
+          ClientRectOf(parent, state.surround51Hint).bottom == SettingsPixels(24, dpi),
+          "major audio sections have a twenty-four-DIP separation");
+    Check(ClientRectOf(parent, state.screenshotTitle).top -
+          ClientRectOf(parent, state.vsrStatus).bottom == SettingsPixels(24, dpi),
+          "video actions form two clearly separated compact groups");
+    const int cardPadding = SettingsPixels(8, dpi);
+    const RECT screenshotHelp = ClientRectOf(parent, state.screenshotHelp);
+    const RECT screenshotButton = ClientRectOf(parent, state.screenshotFolderButton);
+    const int screenshotBottom = std::max(screenshotHelp.bottom, screenshotButton.bottom) + cardPadding;
+    const int cardGap = ClientRectOf(parent, state.screenshotTitle).top - cardPadding -
+        (ClientRectOf(parent, state.vsrStatus).bottom + cardPadding);
+    Check(cardGap == SettingsPixels(8, dpi) &&
+          SettingsPixels(kSettingsFooterTopDip, dpi) - screenshotBottom == cardGap,
+          "screenshot card/footer gap matches the VSR/screenshot card gap at every DPI");
+}
+
+static void CheckFontHierarchy(const SettingsControls& state, UINT dpi, bool english) {
+    Check(state.uiFonts.size() == 4, "DPI changes replace four fonts instead of accumulating");
+    const struct { HWND control; int points, weight; } roles[] = {
+        {state.audioLabel, 10, FW_MEDIUM},
+        {state.audioCombo, 10, FW_MEDIUM},
+        {state.tabControl, 10, FW_MEDIUM},
+        {state.cancelButton, 10, FW_MEDIUM},
+        {state.audioOutputSection, 10, FW_SEMIBOLD},
+        {state.startButton, 10, FW_SEMIBOLD},
+        {state.pageSubtitle, 9, FW_NORMAL},
+        {state.videoCapabilityStatus, 9, FW_NORMAL},
+        {state.vsrStatus, 9, FW_NORMAL},
+        {state.pageTitle, 20, FW_SEMIBOLD},
+    };
+    for (const auto& role : roles) {
+        LOGFONTW actual{};
+        Check(GetObjectW(reinterpret_cast<HFONT>(SendMessageW(role.control, WM_GETFONT, 0, 0)),
+                         sizeof(actual), &actual) == sizeof(actual), "control font remains a live GDI object");
+        Check(actual.lfHeight == -MulDiv(role.points, dpi, 72) && actual.lfWeight == role.weight,
+              "body, secondary, section and page title font hierarchy is explicit");
+        Check(std::wcscmp(actual.lfFaceName, SettingsFontFamily(role.weight, english)) == 0 &&
+              std::wcsstr(actual.lfFaceName, L"Pretendard") != nullptr,
+              "both languages use the embedded font without installation");
+        HDC fontDc = GetDC(role.control);
+        HGDIOBJ previousFont = SelectObject(fontDc, reinterpret_cast<HFONT>(
+            SendMessageW(role.control, WM_GETFONT, 0, 0)));
+        wchar_t resolvedFace[64]{};
+        GetTextFaceW(fontDc, ARRAYSIZE(resolvedFace), resolvedFace);
+        Check(std::wcscmp(resolvedFace, actual.lfFaceName) == 0, "GDI selects the actual bundled font");
+        // The CFF edition resolves to the same family but silently loses GDI
+        // ClearType. Checking only GetTextFace/lfQuality missed that regression.
+        Check(GetFontData(fontDc, 0x66796c67, 0, nullptr, 0) != GDI_ERROR &&
+              GetFontData(fontDc, 0x20464643, 0, nullptr, 0) == GDI_ERROR,
+              "bundled settings fonts have TrueType glyf outlines, not CFF");
+        Check(actual.lfQuality == CLEARTYPE_QUALITY,
+              "settings request ClearType without changing Windows preferences");
+        SelectObject(fontDc, previousFont); ReleaseDC(role.control, fontDc);
+    }
+}
+
+static void CheckWindowBehaviorReflow(SettingsControls& state, HWND parent, UINT dpi) {
+    state.activeTab = SettingsTab::Window;
+    LayoutSettingsControls(&state, dpi);
+    const RECT captureBefore = ClientRectOf(parent, state.captureDeviceCombo);
+    const struct { bool pixel, relative; } transitions[] = {
+        {false, false}, {true, true}, {true, false},
+        {true, true}, {false, true}, {true, true},
+    };
+    for (const auto& step : transitions) {
+        SendMessageW(state.pixelCheck, BM_SETCHECK, step.pixel ? BST_CHECKED : BST_UNCHECKED, 0);
+        SendMessageW(state.relativeSizeCheck, BM_SETCHECK, step.relative ? BST_CHECKED : BST_UNCHECKED, 0);
+        // Exercise checkbox-change handling without a full page relayout.
+        UpdateWindowBehaviorVisibility(&state);
+        const bool warning = step.pixel && step.relative;
+        ExpectVisible(state.relativeSizeWarning, warning);
+        const RECT borderless = ClientRectOf(parent, state.borderlessCheck);
+        const RECT cursor = ClientRectOf(parent, state.fullscreenCursorCombo);
+        Check(borderless.top == SettingsPixels(180, dpi) &&
+              cursor.top == SettingsPixels(300, dpi),
+              "conditional warning never shifts window options");
+        Check(ClientRectOf(parent, state.relativeSizeWarning).top >
+              ClientRectOf(parent, state.fullscreenCursorHint).bottom,
+              "conditional note has a separate reserved row");
+        if (!warning)
+            Check(borderless.top - ClientRectOf(parent, state.relativeSizeCheck).bottom == SettingsPixels(8, dpi),
+                  "hidden warning leaves only an eight-DIP gap between window options");
+        const RECT captureAfter = ClientRectOf(parent, state.captureDeviceCombo);
+        Check(EqualRect(&captureBefore, &captureAfter) != FALSE,
+              "window warning reflow never moves another page's controls");
+        CheckFieldMetrics(state, parent, dpi);
+    }
+}
+
+static void CheckCaptionFits(HWND control, const char* name, UINT dpi,
+                             bool english, int horizontalPadding, bool wrap, bool singleLine = true) {
+    wchar_t caption[4096]{};
+    GetWindowTextW(control, caption, ARRAYSIZE(caption));
+    if (!caption[0]) return;
+    RECT client{}; GetClientRect(control, &client);
+    const int availableWidth = client.right - SettingsPixels(horizontalPadding, dpi);
+    HDC dc = GetDC(control);
+    const auto previous = SelectObject(dc,
+        reinterpret_cast<HFONT>(SendMessageW(control, WM_GETFONT, 0, 0)));
+    RECT measured{0, 0, availableWidth, 0};
+    DrawTextW(dc, caption, -1, &measured,
+        DT_CALCRECT | DT_NOPREFIX | DT_EXPANDTABS | (wrap ? DT_WORDBREAK : singleLine ? DT_SINGLELINE : 0));
+    SelectObject(dc, previous); ReleaseDC(control, dc);
+    if (measured.right > availableWidth || measured.bottom > client.bottom) {
+        std::fprintf(stderr,
+            "Text clipped: %s lang=%s dpi=%u page-caption size=%ldx%ld available=%dx%ld wrap=%d\n",
+            name, english ? "en" : "ko", dpi, measured.right, measured.bottom,
+            availableWidth, client.bottom, wrap);
+        std::abort();
+    }
+}
+
+static void CheckAllCaptionsFit(SettingsControls& state, UINT dpi, bool english) {
+    for (const auto& entry : kMembers) {
+        const HWND control = state.*entry.handle;
+        wchar_t kind[32]{}; GetClassNameW(control, kind, ARRAYSIZE(kind));
+        const DWORD style = static_cast<DWORD>(GetWindowLongPtrW(control, GWL_STYLE));
+        if (_wcsicmp(kind, L"STATIC") == 0) {
+            const DWORD type = style & SS_TYPEMASK;
+            CheckCaptionFits(control, entry.name, dpi, english, 0,
+                             type == SS_LEFT || type == SS_CENTER || type == SS_RIGHT,
+                             (style & SS_CENTERIMAGE) != 0);
+        } else if (_wcsicmp(kind, L"BUTTON") == 0) {
+            const DWORD type = style & BS_TYPEMASK;
+            const bool checkbox = type == BS_AUTOCHECKBOX || type == BS_CHECKBOX;
+            // Match SettingsTheme's actual content inset rather than measuring
+            // against the full HWND and accidentally accepting clipped text.
+            CheckCaptionFits(control, entry.name, dpi, english, checkbox ? 27 : 14,
+                             checkbox && (style & BS_MULTILINE));
+        }
+        // User device names are unbounded. Collapsed native combo fields use
+        // ellipsis intentionally; expanded device lists retain wider fields.
+    }
+    wchar_t guide[2048]{}; GetWindowTextW(state.guideVideoHint, guide, ARRAYSIZE(guide));
+    Check(std::wcscmp(guide, llcv::viewer_help::VideoOnlyHint(english)) == 0,
+          "settings and F1 share one video-only footer");
+    const HWND parent = GetParent(state.guideVideoHint);
+    for (size_t i = 0; i < llcv::viewer_help::kShortcuts.size(); ++i) {
+        const auto& shortcut = llcv::viewer_help::kShortcuts[i];
+        for (HWND control : {state.guideKeys[i], state.guideDescriptions[i]}) {
+            Check(IsWindow(control) != FALSE, "shortcut native text exists");
+            Check(!(GetWindowLongPtrW(control, GWL_STYLE) & (WS_TABSTOP | SS_NOTIFY)),
+                  "read-only shortcuts do not capture focus or clicks");
+            CheckCaptionFits(control, "shortcut row", dpi, english, 0, false, true);
+        }
+        GetWindowTextW(state.guideKeys[i], guide, ARRAYSIZE(guide));
+        Check(std::wcscmp(guide, shortcut.key) == 0, "every key matches F1");
+        GetWindowTextW(state.guideDescriptions[i], guide, ARRAYSIZE(guide));
+        Check(std::wcscmp(guide, english ? shortcut.english : shortcut.korean) == 0,
+              "every action matches F1 without repeated video-mode suffixes");
+        const auto action = ClientRectOf(parent, state.guideDescriptions[i]);
+        const auto key = ClientRectOf(parent, state.guideKeys[i]);
+        Check(action.left == SettingsPixels(276, dpi) &&
+              action.top == SettingsPixels(168 + static_cast<int>(i) * 36, dpi),
+              "shortcut rows maintain aligned columns and generous rhythm");
+        Check(std::abs((key.top + key.bottom) - (action.top + action.bottom)) <= 2,
+              "key text and action are vertically centered together at fractional DPI");
+    }
+    Check(ClientRectOf(parent, state.guideShortcutsTitle).top == ClientRectOf(parent, state.guideDiagnosticsTitle).top,
+          "guide section titles align");
+    Check(ClientRectOf(parent, state.saveLogCheck).top - ClientRectOf(parent, state.guideDiagnosticsText).bottom == SettingsPixels(16, dpi) &&
+          ClientRectOf(parent, state.showConsoleCheck).top - ClientRectOf(parent, state.saveLogCheck).bottom == SettingsPixels(8, dpi) &&
+          ClientRectOf(parent, state.guideLogFolderButton).top - ClientRectOf(parent, state.showConsoleCheck).bottom == SettingsPixels(16, dpi),
+          "diagnostics explanation, options and action use intentional compact spacing");
+    HDC dc = GetDC(state.tabControl);
+    const auto previous = SelectObject(dc,
+        reinterpret_cast<HFONT>(SendMessageW(state.tabControl, WM_GETFONT, 0, 0)));
+    for (int i = 0; i < kSettingsNavigationCount; ++i) {
+        wchar_t text[256]{};
+        SendMessageW(state.tabControl, LB_GETTEXT, i, reinterpret_cast<LPARAM>(text));
+        SIZE size{}; GetTextExtentPoint32W(dc, text, static_cast<int>(wcslen(text)), &size);
+        Check(size.cx <= SettingsPixels(107, dpi) && size.cy <= SettingsPixels(44, dpi),
+              "localized sidebar captions fit their themed content area");
+    }
+    SelectObject(dc, previous); ReleaseDC(state.tabControl, dc);
+}
 static void TestHelpText() {
+    for (bool english : {false, true}) {
+        const wchar_t* guide = llcv::ui_text::VsrSetupGuide(english);
+        Check(guide && *guide && std::wcsstr(guide, L"F6") &&
+              std::wcsstr(guide, L"NVIDIA App") && std::wcsstr(guide, L"NV12") &&
+              std::wcsstr(guide, english ? L"latency" : L"지연"),
+              "bilingual VSR setup guide explains activation, supported input and latency");
+        Check(std::wcsstr(guide, english ? L"cannot verify activation" : L"확인하지 못합니다") &&
+              !std::wcsstr(guide, L"HRESULT") && !std::wcsstr(guide, L"Request supported"),
+              "VSR guide does not present diagnostic acceptance as actual activation");
+    }
     Check(std::wcsstr(SettingsHelpText(SettingsHelpTopic::HdrChroma, true), L"staggered") != nullptr &&
           std::wcsstr(SettingsHelpText(SettingsHelpTopic::HdrChroma, false), L"보장하지") != nullptr,
           "chroma help discloses interpretation override limitations in both languages");
@@ -292,6 +523,7 @@ struct PopulationProbe {
 static void TestActualControlCreation() {
     using namespace llcv::settings;
     const VideoPresetInfo presets[] = {
+        {VideoPreset::R1280x720, 1280, 720, 60, L"1280 x 720"},
         {VideoPreset::R1920x1080, 1920, 1080, 120, L"1920 x 1080"},
         {VideoPreset::R2560x1440, 2560, 1440, 120, L"2560 x 1440"},
         {VideoPreset::R3840x2160, 3840, 2160, 60, L"3840 x 2160"},
@@ -302,6 +534,9 @@ static void TestActualControlCreation() {
     // Frozen numeric IDs from the old WM_CREATE: no event-routing changes.
     const struct { HWND SettingsControls::* handle; int id; } controlIds[] = {
     {&SettingsControls::tabControl, 2037},
+    {&SettingsControls::vsrCheck, 2049},
+    {&SettingsControls::vsrGuideButton, 2050},
+    {&SettingsControls::vsrCaptureCombo, 2051},
     {&SettingsControls::audioCombo, 2001},
     {&SettingsControls::audioOutputCombo, 2016},
     {&SettingsControls::bufferCombo, 2006},
@@ -317,6 +552,7 @@ static void TestActualControlCreation() {
     {&SettingsControls::muteBackgroundCheck, 2021},
     {&SettingsControls::audioOnlyCheck, 2032},
     {&SettingsControls::languageCombo, 2024},
+    {&SettingsControls::themeCombo, 2053},
     {&SettingsControls::skipStartupCheck, 2028},
     {&SettingsControls::checkForUpdatesCheck, 2035},
     {&SettingsControls::guideLogFolderButton, 2039},
@@ -368,6 +604,7 @@ static void TestActualControlCreation() {
         settings.scalingMode = profile % 2 ? ScalingMode::Sharp : ScalingMode::Smooth;
         settings.fullscreenCursorMode = profile % 2 ? FullscreenCursorMode::AlwaysVisible : FullscreenCursorMode::AutoHide;
         settings.uiLanguage = static_cast<UiLanguage>(profile % 3);
+        settings.settingsLightTheme = profile % 2 != 0;
         settings.mjpegColorOverride = static_cast<llcv::video_color::Override>(profile % 5);
         settings.hdrChromaLocation = static_cast<llcv::hdr::ChromaLocation>(profile % 3);
         settings.allowVolumeBoost = (profile & 1) != 0;
@@ -381,6 +618,8 @@ static void TestActualControlCreation() {
         settings.consoleSurround51 = profile % 2 != 0;
         settings.saveLog = !settings.borderlessWindow;
         settings.screenshotClipboard = profile % 2 != 0;
+        settings.vsrEnabled = profile % 2 != 0;
+        settings.vsrCapturePreset = presets[(profile + 1) % 4].preset;
         settings.showDiagnosticConsole = !settings.windowSnap;
         settings.skipStartupSettings = settings.allowVolumeBoost;
         settings.checkForUpdates = settings.pixelPerfect;
@@ -390,13 +629,13 @@ static void TestActualControlCreation() {
         const bool noDevices = profile % 7 == 0;
         const auto inputs = noDevices ? std::span<const llcv::capture::DeviceInfo>{}
                                      : std::span<const llcv::capture::DeviceInfo>{devices};
-        state.activeTab = static_cast<SettingsTab>(profile % 4);
+        state.activeTab = SettingsTabFromNavigationIndex(profile % kSettingsNavigationCount);
         const llcv::display::MonitorChoice monitors[] = {
             {nullptr,L"monitor-a",L"DISPLAY1 · Test A"},
             {nullptr,L"monitor-b",L"DISPLAY2 · Test B"}};
         settings.preferredDisplayMonitor = profile % 3 == 0 ? L"" : profile % 3 == 1 ? L"monitor-b" : L"missing";
         SettingsControlInitialValues initial{
-            settings, english, available, L"vTEST", presets[profile % 3].preset,
+            settings, english, available, L"vTEST", presets[profile % 4].preset,
             inputs, inputs, presets, pcm, monitors};
         PopulationProbe probe{&state, GetCurrentThreadId()};
         SettingsControlPopulation population{
@@ -407,8 +646,9 @@ static void TestActualControlCreation() {
         for (const auto& item : controlIds)
             Check(GetDlgCtrlID(state.*item.handle) == item.id, "original control/event ID retained");
         const auto selection = [](HWND combo) { return SendMessageW(combo, CB_GETCURSEL, 0, 0); };
-        Check(TabCtrl_GetItemCount(state.tabControl) == 4 &&
-              TabCtrl_GetCurSel(state.tabControl) == static_cast<int>(state.activeTab), "tab count and initial selection");
+        Check(SendMessageW(state.tabControl, LB_GETCOUNT, 0, 0) == kSettingsNavigationCount &&
+              SendMessageW(state.tabControl, LB_GETCURSEL, 0, 0) == SettingsNavigationIndex(state.activeTab),
+              "sidebar count and initial selection");
         Check(SendMessageW(state.audioCombo, CB_GETCOUNT, 0, 0) == (available ? 3 : 2), "ASIO option visibility");
         const int audio = settings.audioMode == AudioMode::Asio && available ? 2 :
                           settings.audioMode == AudioMode::WasapiExclusive ? 1 : 0;
@@ -420,9 +660,17 @@ static void TestActualControlCreation() {
               SendMessageW(state.pcmQueueCombo, CB_GETITEMDATA, profile % 5, 0) == settings.pcmQueueTargetMs, "PCM values and selection");
         Check(selection(state.presentationCombo) == profile % 3, "presentation mode mapping");
         Check(selection(state.displayMonitorCombo) == (profile % 3 == 0 ? 0 : profile % 3 == 1 ? 2 : 3), "display selection / disconnected preference");
-        Check(selection(state.videoCombo) == profile % 3, "initial video preset");
+        Check(SendMessageW(state.videoCombo, CB_GETCOUNT, 0, 0) == 4,
+              "720p plus three existing resolutions are listed");
+        Check(selection(state.videoCombo) == profile % 4, "initial video preset");
+        Check(selection(state.vsrCaptureCombo) == (profile + 1) % 4,
+              "VSR capture selection is independent from display");
+        Check((SendMessageW(state.vsrCheck, BM_GETCHECK, 0, 0) == BST_CHECKED) == settings.vsrEnabled,
+              "VSR saved setting maps to checkbox");
         Check(selection(state.volumeHudCombo) == profile % 4, "volume HUD selection");
         Check(selection(state.languageCombo) == profile % 3, "language preference selection");
+        Check(selection(state.themeCombo) == (settings.settingsLightTheme ? 1 : 0),
+              "theme preference restored in the native picker");
         Check(selection(state.scalingCombo) == profile % 2, "scaling selection");
         Check(selection(state.fullscreenCursorCombo) == profile % 2, "cursor selection");
         Check(selection(state.mjpegColorCombo) == profile % 5, "MJPEG interpretation selection");
@@ -460,9 +708,50 @@ static void TestActualControlCreation() {
                          L"F11  보더리스 전체화면 켜기/끄기") == 0, "F11 caption unchanged");
         Check((GetWindowLongPtrW(state.fullscreenCursorHint, GWL_STYLE) & SS_TYPEMASK) == SS_RIGHT,
               "F11 right alignment unchanged");
-        Check(SendMessageW(state.tooltipWindow, TTM_GETTOOLCOUNT, 0, 0) == 8, "seven help buttons and display monitor tooltip registered");
+        Check(SendMessageW(state.tooltipWindow, TTM_GETTOOLCOUNT, 0, 0) == 10,
+              "seven help buttons plus monitor, audio mode and pixel-perfect tooltips registered");
+        // Model a full five-line device capability report, not just the short
+        // loading placeholder. Long formats/FPS lists must remain visible.
+        SetWindowTextW(state.videoCapabilityStatus, english
+            ? L"Detected modes:\r\nNV12 240/144/120/100/90/60/50/30 fps\r\nYUY2 120/100/60/50/30 fps\r\nP010 60/50/30 fps\r\nMJPEG 240/144/120/100/90/60/50/30 fps"
+            : L"자동 인식:\r\nNV12 240/144/120/100/90/60/50/30 fps\r\nYUY2 120/100/60/50/30 fps\r\nP010 60/50/30 fps\r\nMJPEG 240/144/120/100/90/60/50/30 fps");
+        SetWindowTextW(state.audioStatus, english
+            ? L"Console 5.1: output period is negotiated on start; actual value in Tab diagnostics."
+            : L"콘솔 5.1: 출력 주기는 시작 시 협상 · 실제 값은 Tab 진단에서 확인");
+        const SettingsTab initialTab = state.activeTab;
+        for (UINT textDpi : {96u, 120u, 144u, 192u}) {
+            ApplySettingsFont(&state, parent, textDpi);
+            LayoutSettingsControls(&state, textDpi);
+            CheckFontHierarchy(state, textDpi, english);
+            CheckFieldMetrics(state, parent, textDpi);
+            for (int page = 0; page < kSettingsNavigationCount; ++page) {
+                state.activeTab = SettingsTabFromNavigationIndex(page);
+                RefreshSettingsPageHeader(&state);
+                CheckAllCaptionsFit(state, textDpi, english);
+            }
+        }
+        state.activeTab = initialTab;
+        RefreshSettingsPageHeader(&state);
         ApplySettingsFont(&state, parent, 96);
         LayoutSettingsControls(&state, 96);
+        for (HWND control : {state.vsrCheck, state.vsrGuideButton, state.vsrStatus}) {
+            wchar_t label[256]{};
+            GetWindowTextW(control, label, ARRAYSIZE(label));
+            HDC dc = GetDC(control);
+            auto oldFont = SelectObject(dc, reinterpret_cast<HFONT>(SendMessageW(control, WM_GETFONT, 0, 0)));
+            SIZE textSize{};
+            GetTextExtentPoint32W(dc, label, static_cast<int>(wcslen(label)), &textSize);
+            RECT client{}; GetClientRect(control, &client);
+            if (control == state.vsrStatus) {
+                RECT wrapped{0, 0, client.right, 0};
+                DrawTextW(dc, label, -1, &wrapped, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+                Check(wrapped.bottom <= client.bottom, "bilingual VSR status wraps within its area");
+            } else {
+                Check(textSize.cx + (control == state.vsrCheck ? 20 : 0) <= client.right &&
+                      textSize.cy <= client.bottom, "bilingual VSR captions fit");
+            }
+            SelectObject(dc, oldFont); ReleaseDC(control, dc);
+        }
         wchar_t screenshotCaption[256]{};
         GetWindowTextW(state.screenshotTitle,screenshotCaption,256);
         Check(std::wcsstr(screenshotCaption,L"F12")!=nullptr,"video screenshot section advertises F12");
@@ -470,9 +759,9 @@ static void TestActualControlCreation() {
         const auto oldScreenshotFont=SelectObject(screenshotDc,
             reinterpret_cast<HFONT>(SendMessageW(state.screenshotHelp,WM_GETFONT,0,0)));
         GetWindowTextW(state.screenshotHelp,screenshotCaption,256);
-        RECT screenshotTextRect{0,0,200,0};
+        RECT screenshotTextRect{0,0,168,0};
         DrawTextW(screenshotDc,screenshotCaption,-1,&screenshotTextRect,DT_CALCRECT|DT_WORDBREAK|DT_NOPREFIX);
-        Check(screenshotTextRect.bottom<=36,"bilingual screenshot hint fits its bottom section");
+        Check(screenshotTextRect.bottom<=38,"bilingual screenshot hint fits its bottom section");
         SelectObject(screenshotDc,oldScreenshotFont); ReleaseDC(state.screenshotHelp,screenshotDc);
         UpdateAdvancedControlVisibility(&state, settings.audioMode == AudioMode::WasapiExclusive,
             VideoPixelFormat::Nv12);
@@ -505,6 +794,12 @@ int main() {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     INITCOMMONCONTROLSEX init{sizeof(init), ICC_WIN95_CLASSES};
     Check(InitCommonControlsEx(&init) != FALSE, "initialize tooltip controls");
+    for (int i = 0; i < kSettingsNavigationCount; ++i)
+        Check(SettingsNavigationIndex(SettingsTabFromNavigationIndex(i)) == i,
+              "sidebar order maps one-to-one to stable page values");
+    Check(SettingsTabFromNavigationIndex(-1) == SettingsTab::VideoWindow &&
+          SettingsTabFromNavigationIndex(kSettingsNavigationCount) == SettingsTab::VideoWindow,
+          "invalid navigation safely selects video");
     TestTranslationBoundary();
     TestActualControlCreation();
     HWND parent = CreateWindowExW(0, L"STATIC", L"Hidden settings view regression",
@@ -517,23 +812,28 @@ int main() {
         // The original pixelCheck is the only lowercase c among checkbox names.
         check |= std::strcmp(entry.name, "pixelCheck") == 0;
         state.*entry.handle = CreateWindowExW(0, combo ? L"COMBOBOX" : check ? L"BUTTON" : L"STATIC",
-            L"", WS_CHILD | (combo ? CBS_DROPDOWNLIST : check ? BS_AUTOCHECKBOX : 0),
+            L"", WS_CHILD | (combo ? CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS : check ? BS_AUTOCHECKBOX : 0),
             0, 0, 100, 100, parent, nullptr, GetModuleHandleW(nullptr), nullptr);
         Check(state.*entry.handle != nullptr, entry.name);
     }
     unsigned cases = 0;
-    for (UINT dpi : {96u, 144u, 192u}) for (bool english : {false, true}) {
+    for (UINT dpi : {96u, 120u, 144u, 192u}) for (bool english : {false, true}) {
+        state.english = english;
         SetWindowTextW(state.volumeBoostCheck, english
             ? L"Allow volume boost above 100% (up to 200%)"
             : L"100% 이상 볼륨 증폭 허용 (최대 200%)");
+        const auto oldFonts = state.uiFonts;
         ApplySettingsFont(&state, parent, dpi);
-        LOGFONTW regular{}, section{};
-        GetObjectW(reinterpret_cast<HFONT>(SendMessageW(state.audioLabel, WM_GETFONT, 0, 0)), sizeof(regular), &regular);
-        GetObjectW(reinterpret_cast<HFONT>(SendMessageW(state.audioOutputSection, WM_GETFONT, 0, 0)), sizeof(section), &section);
-        Check(regular.lfWeight == FW_NORMAL && section.lfWeight == FW_SEMIBOLD, "font hierarchy unchanged");
-        Check(regular.lfHeight == -MulDiv(9, dpi, 72), "font size unchanged");
+        CheckFontHierarchy(state, dpi, english);
+        for (HFONT retired : oldFonts) {
+            LOGFONTW oldDescription{};
+            Check(GetObjectW(retired, sizeof(oldDescription), &oldDescription) == 0,
+                  "monitor and language transitions release the complete previous font set");
+        }
+        CheckWindowBehaviorReflow(state, parent, dpi);
         for (bool pixel : {false, true}) for (bool relative : {false, true})
-        for (auto tab : {SettingsTab::Audio, SettingsTab::VideoWindow, SettingsTab::GuideDiagnostics, SettingsTab::Updates})
+        for (auto tab : {SettingsTab::Audio, SettingsTab::VideoWindow, SettingsTab::Window,
+                         SettingsTab::GuideDiagnostics, SettingsTab::Updates})
         for (auto format : {VideoPixelFormat::Auto, VideoPixelFormat::Nv12, VideoPixelFormat::Yuy2,
                             VideoPixelFormat::Mjpeg, VideoPixelFormat::P010})
         for (bool exclusive : {false, true}) {
@@ -541,24 +841,43 @@ int main() {
             SendMessageW(state.pixelCheck, BM_SETCHECK, pixel ? BST_CHECKED : BST_UNCHECKED, 0);
             SendMessageW(state.relativeSizeCheck, BM_SETCHECK, relative ? BST_CHECKED : BST_UNCHECKED, 0);
             LayoutSettingsControls(&state, dpi);
+            CheckFieldMetrics(state, parent, dpi);
             UpdateAdvancedControlVisibility(&state, exclusive, format);
             const bool video = tab == SettingsTab::VideoWindow;
             const bool audio = tab == SettingsTab::Audio;
             for (const auto& item : kGeometry) {
                 const RECT rect = ClientRectOf(parent, state.*item.handle);
-                const bool combo = std::strstr(item.name, "Combo") != nullptr;
                 if (rect.left != MulDiv(item.x, dpi, 96) ||
-                    rect.top != MulDiv(pixel ? item.pixelY : item.normalY, dpi, 96) ||
+                    rect.top != MulDiv(pixel && relative ? item.warningY : item.normalY, dpi, 96) ||
                     rect.right - rect.left != MulDiv(item.width, dpi, 96) ||
-                    (!combo && rect.bottom - rect.top != MulDiv(item.height, dpi, 96))) {
+                    rect.bottom - rect.top != MulDiv(item.height, dpi, 96)) {
                     std::fprintf(stderr, "Geometry mismatch: %s dpi=%u pixel=%d\n", item.name, dpi, pixel);
                     return EXIT_FAILURE;
                 }
             }
+            for (size_t i = 0; i < ARRAYSIZE(kMembers); ++i) {
+                const HWND first = state.*kMembers[i].handle;
+                if (!Visible(first)) continue;
+                const RECT a = ClientRectOf(parent, first);
+                Check(a.left >= 0 && a.top >= 0 &&
+                      a.right <= SettingsPixels(kSettingsClientWidthDip, dpi) &&
+                      a.bottom <= SettingsPixels(SettingsClientHeightDip(&state), dpi),
+                      "visible controls stay inside settings client area");
+                for (size_t j = i + 1; j < ARRAYSIZE(kMembers); ++j) {
+                    const HWND second = state.*kMembers[j].handle;
+                    if (!Visible(second)) continue;
+                    const RECT b = ClientRectOf(parent, second);
+                    RECT overlap{};
+                    if (IntersectRect(&overlap, &a, &b)) {
+                        std::fprintf(stderr, "Visible overlap: %s / %s dpi=%u tab=%d\n",
+                                     kMembers[i].name, kMembers[j].name, dpi, static_cast<int>(tab));
+                        return EXIT_FAILURE;
+                    }
+                }
+            }
             const RECT boost = ClientRectOf(parent, state.volumeBoostCheck);
             const RECT button = ClientRectOf(parent, state.volumeBoostHelp);
-            Check(button.left - boost.right >= MulDiv(9, dpi, 96) &&
-                  button.left - boost.right <= MulDiv(11, dpi, 96),
+            Check(button.left - boost.right == MulDiv(8, dpi, 96),
                   "volume help remains adjacent and cannot overlap checkbox");
             Check(IsSettingsHelpControl(&state, state.volumeBoostHelp) &&
                   !IsSettingsHelpControl(&state, state.volumeBoostCheck), "help routing distinct from option toggle");
@@ -572,11 +891,17 @@ int main() {
             const RECT chromaHelp = ClientRectOf(parent, state.hdrChromaHelp);
             Check(chromaHelp.left > chromaCombo.right, "HDR chroma help cannot overlap combo hit target");
             ExpectVisible(state.mjpegColorCombo, video && format == VideoPixelFormat::Mjpeg);
-            ExpectVisible(state.scalingCombo, video && !pixel);
-            ExpectVisible(state.relativeSizeWarning, video && pixel && relative);
-            ExpectVisible(state.fullscreenCursorHint, video);
+            Check(Visible(state.scalingCombo) == video, "scaling row never jumps when lock changes");
+            Check((IsWindowEnabled(state.scalingCombo) != FALSE) == (video && (!pixel ||
+                SendMessageW(state.vsrCheck, BM_GETCHECK, 0, 0) == BST_CHECKED)), "scaling enable policy");
+            ExpectVisible(state.relativeSizeWarning, tab == SettingsTab::Window && pixel && relative);
+            ExpectVisible(state.fullscreenCursorHint, tab == SettingsTab::Window);
+            ExpectVisible(state.windowSnapCheck, tab == SettingsTab::Window);
             ExpectVisible(state.guideLogFolderButton, tab == SettingsTab::GuideDiagnostics);
             ExpectVisible(state.screenshotTitle, tab == SettingsTab::VideoWindow);
+            ExpectVisible(state.vsrCheck, video);
+            ExpectVisible(state.vsrGuideButton, video);
+            ExpectVisible(state.vsrStatus, video);
             ExpectVisible(state.screenshotClipboardCheck, tab == SettingsTab::VideoWindow);
             ExpectVisible(state.screenshotHelp, tab == SettingsTab::VideoWindow);
             ExpectVisible(state.screenshotFolderButton, tab == SettingsTab::VideoWindow);
@@ -594,7 +919,9 @@ int main() {
                 }
             }
             ExpectVisible(state.updateNowButton, tab == SettingsTab::Updates);
-            for (HWND control : {state.languageCombo, state.skipStartupCheck, state.versionWatermark,
+            for (HWND control : {state.languageCombo, state.themeLabel, state.themeCombo, state.skipStartupCheck, state.appPreferencesSection})
+                ExpectVisible(control, tab == SettingsTab::Updates);
+            for (HWND control : {state.brandLabel, state.pageTitle, state.pageSubtitle, state.versionWatermark,
                                  state.startButton, state.cancelButton}) ExpectVisible(control, true);
             if (!video) {
                 ExpectVisible(state.captureAudioDeviceCombo, false);
@@ -608,6 +935,27 @@ int main() {
             ++cases;
         }
     }
+    // Re-applying a selection must not enable disabled controls momentarily:
+    // doing so generates repaint/focus churn even when the final state matches.
+    unsigned enableTransitions = 0;
+    for (const auto& entry : kMembers)
+        Check(SetWindowSubclass(state.*entry.handle, CountEnableTransitions, 71,
+              reinterpret_cast<DWORD_PTR>(&enableTransitions)) != FALSE, "observe enable transitions");
+    SendMessageW(state.pixelCheck, BM_SETCHECK, BST_CHECKED, 0);
+    SendMessageW(state.vsrCheck, BM_SETCHECK, BST_UNCHECKED, 0);
+    for (const auto tab : {SettingsTab::VideoWindow, SettingsTab::Audio}) {
+        state.activeTab = tab;
+        UpdateAdvancedControlVisibility(&state, true, VideoPixelFormat::Nv12, {false, false, false});
+        enableTransitions = 0;
+        for (int repeat = 0; repeat < 50; ++repeat)
+            UpdateAdvancedControlVisibility(&state, true, VideoPixelFormat::Nv12, {false, false, false});
+        Check(enableTransitions == 0, "unchanged option refresh emits no enable/disable churn");
+        Check(!IsWindowEnabled(state.startButton) && !IsWindowEnabled(state.pixelFormatCombo) &&
+              !IsWindowEnabled(state.captureDeviceCombo), "controller capability gates remain closed");
+    }
+    for (const auto& entry : kMembers)
+        RemoveWindowSubclass(state.*entry.handle, CountEnableTransitions, 71);
+
     // Capture-audio row selection belongs to the dialog/controller, not the
     // view: entering/reflowing Video must not undo its internal-audio choice.
     state.activeTab = SettingsTab::VideoWindow;

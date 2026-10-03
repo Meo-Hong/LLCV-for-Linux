@@ -3,3 +3,6 @@
 *.txt text eol=crlf
 *.md text eol=crlf
 *.ini text eol=crlf
+
+# Preserve whitespace in the unmodified upstream font license notice.
+third_party/pretendard/LICENSE.txt -whitespace

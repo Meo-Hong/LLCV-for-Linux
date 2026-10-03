@@ -5,6 +5,32 @@
 
 namespace llcv::ui_text {
 
+const wchar_t* VsrSetupGuide(bool useEnglish) {
+    return useEnglish
+        ? L"Setup\n"
+          L"1. In NVIDIA App > System > Video, enable RTX Video Super Resolution.\n"
+          L"2. Enable NVIDIA VSR in this viewer. F6 toggles the request during playback.\n"
+          L"3. Check NVIDIA App's active indicator while playing. This viewer cannot verify activation.\n\n"
+          L"Supported input\n"
+          L"NV12 SDR, including MJPEG decoded to NV12; display at source size or larger. "
+          L"HDR/P010, YUY2 and downscaling bypass VSR.\n\n"
+          L"Keep in mind\n"
+          L"When enabled, the main resolution selects display size; VSR capture selects input size. "
+          L"F6 keeps both sizes unchanged. F5 restores source-size display.\n"
+          L"GPU processing can increase latency. Screenshots remain unfiltered source images."
+        : L"설정 방법\n"
+          L"1. NVIDIA App > 시스템 > 비디오에서 RTX Video Super Resolution을 켜세요.\n"
+          L"2. 이 뷰어에서 NVIDIA VSR을 켜세요. 재생 중에는 F6으로 전환합니다.\n"
+          L"3. NVIDIA App의 활성 표시를 확인하세요. 이 뷰어는 실제 적용 여부를 확인하지 못합니다.\n\n"
+          L"지원 조건\n"
+          L"NV12 SDR(MJPEG의 NV12 변환 포함)을 원본과 같거나 크게 표시할 때 요청합니다. "
+          L"HDR/P010·YUY2 및 축소 표시에는 적용하지 않습니다.\n\n"
+          L"참고\n"
+          L"VSR을 켜면 위 해상도는 표시 크기, VSR 캡처 해상도는 입력 크기입니다. "
+          L"F6은 두 해상도를 유지합니다. F5는 입력 크기로 표시합니다.\n"
+          L"GPU 처리로 지연이 늘 수 있습니다. 스크린샷에는 VSR이 적용되지 않습니다.";
+}
+
 const wchar_t* Translate(const wchar_t* korean, bool useEnglish) {
     if (!korean || !useEnglish) return korean;
     // The map is intentionally keyed by the existing Korean source strings.

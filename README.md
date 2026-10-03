@@ -10,16 +10,28 @@ capture-device window used alongside other work or viewed directly.
 
 No FFmpeg, codec pack, or separate Visual C++ Redistributable is required.
 
+## What's new in 2.0.0
+
+See the [2.0.0 release notes](docs/release-notes-v2.0.0.md) for the changes.
+
+- Redesigned settings with a sidebar, clearer grouping, dark/light themes, and consistent typography.
+- Optional NVIDIA VSR with independent capture/display resolutions, same-size processing requests, and an F6 toggle.
+- Unified styling for F1 help, audio-only controls, and in-video overlays, with clearer volume-boost and VSR request status.
+- Smoother settings transitions, cached format/FPS queries, and refined window snapping and 1:1 size restoration.
+
 ## Features at a glance
 
 | Feature | What it offers |
 | --- | --- |
 | Low-latency video | Latest-frame-first presentation; Immediate, VSync, and Compatibility output |
 | Video formats | NV12/YUY2, MJPEG, and experimental P010 HDR10 input |
+| NVIDIA VSR | Experimental SDR enhancement requests at native size or larger; independent input/display sizes and F6 toggle |
 | Audio outputs | WASAPI Shared/Exclusive, experimental ASIO, and following the Windows default output device |
 | Console LPCM 5.1 | Experimental 5.1 playback on supported equipment; WASAPI Shared only |
 | Audio-only view | Audio without video, with master/L/R volume, level meters, and clipping status |
+| App theme | Shared dark/light colors and Pretendard typography across settings, F1 help, and audio-only view |
 | Window controls | 1:1 display, aspect-ratio resizing, fullscreen/borderless, startup monitor selection, and edge snap |
+| Screenshots and help | F12 source-resolution PNGs, optional clipboard copy, HDR-to-SDR export, and F1 app information/shortcuts |
 | Convenience and diagnostics | Automatic clock correction, optional 200% volume boost/background mute, diagnostic logs, update checks, Korean/English |
 
 ## Download
@@ -48,18 +60,35 @@ devices can expose separate video and audio devices; in that case, choose the
 matching audio input manually. If the app shows “Internal audio detected · use
 automatically,” no separate selection is needed.
 
+## Finding your settings
+
+The sidebar separates **Video**, **Audio**, **Window**, **Guide & logs**, and **App**.
+Video contains capture/display settings, VSR, and screenshot options at the bottom.
+Audio contains output devices, buffers, volume options, audio-only mode, and LPCM 5.1.
+Window controls placement, resizing, borders, and cursor behavior.
+Guide & logs groups keyboard shortcuts and diagnostic logging; App contains language,
+theme, startup, and update preferences.
+
+Choose **Dark** or **Light** under **App → App theme**. Settings, F1 help, and
+the audio-only view share the theme. Overlays drawn over video remain dark for
+contrast against the picture, regardless of the app theme.
+
+Supported format/FPS combinations are queried in the background and reused while
+the settings window remains open. **Refresh** requests a new query. Start remains
+unavailable while the required video capabilities are being checked or could not be queried.
+
 ## What should I choose?
 
 ### Video
 
 | Setting | Good starting choice |
 | --- | --- |
-| Capture resolution | **1920 × 1080**; change it to match the source and capture device |
+| Capture resolution | **1920 × 1080** to start. With VSR enabled, this field becomes **Display resolution**; set input size separately in **VSR capture** |
 | Pixel format | **Auto (NV12 preferred)** |
 | Frame rate | **Auto**, or the source's actual output rate |
 | Presentation | **Immediate (minimum latency)**; **VSync (reduced tearing)** waits for refresh. **Compatibility (Blt + VSync)** uses an alternative output path, may add latency/GPU load, and does not support HDR10 |
 | Display monitor | **Auto (restore last position)**; select a monitor to choose the startup location. A missing monitor falls back to the primary display; moving the window afterward is still allowed |
-| Pixel-perfect | On for exact 1:1 output; off for a freely resizable window |
+| Pixel-perfect / Lock display size | Without VSR, locks the source-sized window. With VSR, locks the selected display size. Turn off to resize manually |
 
 A 120 fps capture mode does not create extra visual information when the game
 does not output a new frame at that rate. Choose only frame rates that the
@@ -122,50 +151,91 @@ See the [audio-only guide](docs/AUDIO.md) for details.
 | `F2` | Reopen settings |
 | `Tab` | Show/hide live diagnostics |
 | `F3` | Show/hide the audio meter over video (audio-only has its own view) |
-| `F5` | Restore pixel-perfect size |
+| `F5` | Restore source-resolution 1:1 size (video mode) |
+| `F6` | Toggle NVIDIA VSR request (video mode) |
 | `F1` | App information and shortcuts (F1/Esc closes only the help window) |
 | `F12` | Save a source-resolution screenshot (video mode) |
 | `F11` | Toggle borderless fullscreen |
 | `Esc` | Leave F11 fullscreen; close the app in windowed or automatic-fullscreen mode |
 | Mouse wheel over viewer | Change app volume in 5% steps |
 | Mouse wheel over an L/R card | Change that channel only (show the meter with `F3` in video mode) |
-| Double-click a master/L/R area in the audio meter or audio-only view | Reset that volume to 100% |
+| Double-click a master/L/R area in the audio-only view | Reset that volume to 100% |
 | `Shift` + drag | Temporarily bypass edge snap |
 
-Pixel-perfect maps one video pixel to one display pixel for a sharper image,
+Without VSR, Pixel-perfect maps one video pixel to one display pixel for a sharper image,
 but fixes the window size. With it off, the window can be resized freely while
 keeping the aspect ratio; choose Smooth or Sharp scaling in settings.
 In Pixel-perfect fullscreen, video that fits is centered at its original size;
 only video larger than the display is scaled down, keeping its aspect ratio.
+With VSR enabled in settings, the control becomes **Lock display size**: it keeps
+the selected display resolution, which can differ from the capture resolution.
+It does not mean 1:1 source pixels when the two sizes differ; use F5 to restore
+source size. F6 does not switch between these size policies during playback.
 
 **Hide title bar** removes windowed-mode borders and is separate from `F11`
 fullscreen. **Keep relative window size when moving monitors** maintains similar
 screen coverage across monitors. It is independent of Pixel-perfect, so press
-`F5` if you need exact 1:1 sizing after a move. The window position is saved,
-and edge snap can be enabled or disabled.
+`F5` if you need exact 1:1 sizing after a move. F5 also resets the relative-size
+baseline to the restored capture-sized window, including when VSR's display size
+differs. The window position is saved. Edge snap can be enabled or disabled and
+uses the same edge-distance threshold for snapping and releasing; hold Shift to bypass it.
 
 Enable **Allow volume boost above 100%** in audio settings to raise master volume
 up to 200%. Individual L/R volume is capped at 100%; boosting loud input can
 cause clipping. **Background auto-mute** silences output while another window
 is active without stopping capture. The audio meter's position over video is
 also configurable.
+When boost is enabled, the audio-only view and F3 meter indicate the 200% maximum;
+master values above 100% also use orange in those views and the volume notification.
+The clipping warning is separate from this boost indication.
 
 In fullscreen, the cursor hides after two seconds of inactivity and reappears
-when you move the mouse or scroll. Choose **Always show** in the Video & window
-tab if you prefer a visible cursor.
+when you move the mouse or scroll. Choose **Always show** on the **Window**
+page if you prefer a visible cursor.
 
 Enable **Start directly next time** to skip the settings window. Hold `Shift`
 while launching, or press `F2` from the viewer, to open it again.
 
-Use **Language** in settings to follow the Windows language or explicitly choose
-Korean or English. The **Updates** tab offers automatic checks after startup
+Use **Language** on the **App** page to follow the Windows language or explicitly choose
+Korean or English. The same page offers automatic update checks after startup
 (enabled by default) and manual checks. It does not install updates
 automatically; accepting the prompt opens the installer link in your browser.
+
+## NVIDIA VSR (experimental)
+
+The **Video** page has an opt-in NVIDIA VSR checkbox and a **Setup guide**
+button. VSR defaults to OFF; the checkbox and F6 preference are saved on normal
+exit. Supported viewer routes are NV12 SDR (including MJPEG decoded to NV12)
+displayed at the source size or larger. Same-size output can request native-resolution
+de-artifacting. With VSR enabled in settings, the main resolution selects display
+size and **VSR capture** selects the input resolution independently. **Lock display
+size** keeps that selected window size; disable it for manual resizing. F6 changes
+only the effect, without restarting capture or changing either resolution. F5
+restores source-size display. Detected formats/FPS and screenshots follow the input
+resolution. HDR/P010, YUY2 and downscaling in either dimension bypass VSR. Capture resolutions
+include 1280x720, 1920x1080, 2560x1440 and 3840x2160, subject to device support.
+
+For example, choose **VSR capture: 1920 × 1080** and **Display resolution: 2560 × 1440**
+for 1080p capture in a 1440p-sized window. Choose 1920 × 1080 for both to request
+same-size processing. These options configure the viewer/capture path; they do
+not change the console's HDMI output mode or the monitor's desktop resolution.
+
+**Tab** shows the renderer's VSR request state and input → displayed video size.
+“ON requested” is not proof that NVIDIA activated the effect. Rejected, unavailable,
+and failed/unknown states are distinguished. No VSR-added-latency number is shown:
+CPU call time is not equivalent to actual added display latency.
+
+**Setup guide** explains how to enable VSR; it does not run a GPU test or claim
+compatibility or activation. Enable RTX Video Super Resolution and check its active indicator in
+[NVIDIA App / Control Panel](https://nvidia.custhelp.com/app/answers/detail/a_id/5448).
+The viewer does not change NVIDIA profiles or add a frame queue/wait to match
+ON/OFF latency. VSR processing can increase latency and GPU use. Screenshots
+remain source images without VSR.
 
 ## Screenshots
 
 Press **F12** during video playback to save a PNG in **Pictures / LowLatencyCaptureViewer**.
-The bottom of the **Video & window** tab has **Open screenshot folder** and an opt-in
+The bottom of the **Video** page has **Open screenshot folder** and an opt-in
 **Also copy screenshots to clipboard** setting (off by default).
 
 **F1** opens a modeless guide with the app version, keyboard shortcuts, mouse controls,
@@ -195,7 +265,8 @@ Use F1, Esc, or its Close button to dismiss it; Esc here does not exit the viewe
 | Monitor briefly loses signal in Low latency mode | The graphics driver may be incompatible with the tearing presentation path. Change Presentation to **VSync**; borderless mode can remain enabled |
 | No audio | Select the audio input that belongs to the chosen video device |
 | Occasional audio breakup | Check for buffer shortage in Tab diagnostics, then raise the PCM target in 5 ms steps and test again |
-| Need more evidence | Enable logging in Shortcuts & diagnostics, reproduce the issue, then send the newest `.log` file from **Open log folder** together with screenshots of settings and Tab diagnostics |
+| VSR appears to have no effect | Check NV12/MJPEG SDR input, native-size or larger output, the Tab request state, and NVIDIA's active indicator; a successful request alone does not confirm activation |
+| Need more evidence | Enable logging in Guide & logs, reproduce the issue, then send the newest `.log` file from **Open log folder** together with screenshots of settings and Tab diagnostics |
 
 Settings and optional logs are stored in `%LOCALAPPDATA%\LowLatencyCaptureViewer`.
 The uninstaller can remove this user data on request.
@@ -212,7 +283,7 @@ cannot be guaranteed.
   When colors still differ from another application, **MJPEG color
   interpretation** appears for an explicit MJPEG selection and permits a manual
   matrix/range override.
-- Experimental: ASIO output, P010 10-bit HDR10, and console LPCM 5.1
+- Experimental: NVIDIA VSR, ASIO output, P010 10-bit HDR10, and console LPCM 5.1
 - Not supported: H.264/AVC, MPEG-4, automatic device reconnect
 
 ### Viewing HDR (experimental)
@@ -238,6 +309,7 @@ and monitor.
 
 ## Learn more
 
+- [2.0.0 release notes](docs/release-notes-v2.0.0.md)
 - [Video formats, scaling, and fullscreen](docs/VIDEO.md)
 - [Audio modes, buffers, and clock correction](docs/AUDIO.md)
 - [Reading diagnostics and logs](docs/DIAGNOSTICS.md)

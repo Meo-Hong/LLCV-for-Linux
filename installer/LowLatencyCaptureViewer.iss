@@ -1,13 +1,13 @@
-; Low Latency Capture Viewer v1.3.1
+; Low Latency Capture Viewer v2.0.0
 ; Build this script with Inno Setup 7 from the installer directory.
 
 #define MyAppName "Low Latency Capture Viewer"
-#define MyAppVersion "1.3.1"
+#define MyAppVersion "2.0.0"
 #define MyAppPublisher "seria-aa"
 #define MyAppURL "https://github.com/seria-aa/LowLatencyCaptureViewer"
 #define MyAppExeName "LowLatencyCaptureViewer.exe"
 #ifndef BuildDir
-#define BuildDir "..\build-v1310-release"
+#define BuildDir "..\build-v2000-release"
 #endif
 
 [Setup]
@@ -24,9 +24,9 @@ DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
-OutputDir=..\..\outputs\v1.3.1
-OutputBaseFilename=LowLatencyCaptureViewer_v1.3.1_Setup
-OutputManifestFile=LowLatencyCaptureViewer_v1.3.1_Setup-manifest.txt
+OutputDir=..\outputs\v2.0.0
+OutputBaseFilename=LowLatencyCaptureViewer_v2.0.0_Setup
+OutputManifestFile=LowLatencyCaptureViewer_v2.0.0_Setup-manifest.txt
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -34,7 +34,7 @@ CloseApplications=yes
 SetupIconFile=..\assets\LowLatencyCaptureViewer.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Uninstallable=yes
-VersionInfoVersion=1.3.1.0
+VersionInfoVersion=2.0.0.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName}
 VersionInfoCopyright=Copyright (C) 2026 seria-aa
@@ -57,6 +57,7 @@ Source: "..\README.ko.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\third_party\asio\LICENSE.txt"; DestDir: "{app}"; DestName: "ASIO-SDK-LICENSE.txt"; Flags: ignoreversion
 Source: "..\third_party\asio\HOST-LICENSE.txt"; DestDir: "{app}"; DestName: "ASIO-HOST-LICENSE.txt"; Flags: ignoreversion
+Source: "..\third_party\pretendard\LICENSE.txt"; DestDir: "{app}"; DestName: "PRETENDARD-LICENSE.txt"; Flags: ignoreversion
 Source: "..\실행안내.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\DEPENDENCIES.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs

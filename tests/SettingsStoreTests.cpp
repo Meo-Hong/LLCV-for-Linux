@@ -28,7 +28,9 @@ std::wstring TemporaryIniPath() {
 void TestDefaults(const std::wstring& path) {
     DeleteFileW(path.c_str());
     const auto loaded = llcv::settings::LoadFromIni(path);
+    Check(!loaded.settings.settingsLightTheme, "legacy and fresh profiles retain dark settings");
     Check(!loaded.settings.screenshotClipboard, "screenshot clipboard is opt-in");
+    Check(!loaded.settings.vsrEnabled, "VSR defaults OFF for fresh/legacy settings");
     Check(!loaded.settings.consoleSurround51, "5.1 is opt-in for old and fresh profiles");
     Check(loaded.settings.audioOnlyWidth == 380 && loaded.settings.audioOnlyHeight == 230,
           "audio-only default size preserves old profiles");
@@ -49,12 +51,51 @@ void TestDefaults(const std::wstring& path) {
           "old and fresh profiles keep automatic HDR chroma");
 }
 
+void TestResolutionRoundTrips(const std::wstring& path) {
+    using namespace llcv::settings;
+    const struct { VideoPreset preset; const wchar_t* text; } cases[] = {
+        {VideoPreset::R1280x720, L"1280x720"},
+        {VideoPreset::R1920x1080, L"1920x1080"},
+        {VideoPreset::R2560x1440, L"2560x1440"},
+        {VideoPreset::R3840x2160, L"3840x2160"},
+    };
+    for (const auto& item : cases) {
+        for (int fps : {0, 60, 120}) {
+            AppSettings saved{};
+            saved.videoPreset = item.preset;
+            saved.vsrCapturePreset = item.preset;
+            saved.videoFrameRate = fps;
+            saved.pixelFormat = VideoPixelFormat::Nv12;
+            SaveToIni(path, saved);
+            wchar_t value[32]{};
+            GetPrivateProfileStringW(L"Video", L"Resolution", L"", value,
+                                     ARRAYSIZE(value), path.c_str());
+            Check(std::wstring(value) == item.text, "exact resolution persisted");
+            const auto loaded = LoadFromIni(path).settings;
+            Check(loaded.videoPreset == item.preset &&
+                  loaded.vsrCapturePreset == item.preset &&
+                  loaded.videoFrameRate == fps &&
+                  loaded.pixelFormat == VideoPixelFormat::Nv12,
+                  "all resolutions retain FPS and NV12 through save/load");
+        }
+        WritePrivateProfileStringW(L"Video", L"VsrCaptureResolution", nullptr, path.c_str());
+        Check(LoadFromIni(path).settings.vsrCapturePreset == item.preset,
+              "legacy profiles keep their existing capture size");
+        WritePrivateProfileStringW(L"Video", L"VsrCaptureResolution", L"invalid", path.c_str());
+        Check(LoadFromIni(path).settings.vsrCapturePreset == item.preset,
+              "invalid VSR size falls back to existing resolution");
+    }
+}
+
 void TestRoundTrip(const std::wstring& path) {
     using namespace llcv::settings;
     AppSettings saved{};
     saved.consoleSurround51 = true;
+    saved.vsrEnabled = true;
+    saved.vsrCapturePreset = VideoPreset::R1280x720;
     saved.preferredDisplayMonitor = L"interface:monitor-test-id";
     saved.uiLanguage = UiLanguage::English;
+    saved.settingsLightTheme = true;
     saved.audioMode = AudioMode::Asio;
     saved.wasapiBufferMs = 30;
     saved.wasapiSharedPeriodFrames = 144;
@@ -108,6 +149,7 @@ void TestRoundTrip(const std::wstring& path) {
     Check(loaded.hdrChromaLocation == saved.hdrChromaLocation, "HDR chroma round trip");
     Check(loaded.preferredDisplayMonitor == saved.preferredDisplayMonitor, "display monitor round trip");
     Check(loaded.uiLanguage == saved.uiLanguage, "language round trip");
+    Check(loaded.settingsLightTheme, "light settings theme round trip");
     Check(loaded.audioMode == saved.audioMode, "audio mode round trip");
     Check(loaded.wasapiBufferMs == saved.wasapiBufferMs,
           "audio buffer round trip");
@@ -128,6 +170,8 @@ void TestRoundTrip(const std::wstring& path) {
           "exclusive cache count round trip");
     Check(loaded.asioDriverName == saved.asioDriverName,
           "ASIO driver round trip");
+    Check(loaded.vsrEnabled == saved.vsrEnabled, "VSR preference saved/restored");
+    Check(loaded.vsrCapturePreset == saved.vsrCapturePreset, "VSR capture resolution saved separately");
     Check(loaded.videoPreset == saved.videoPreset,
           "resolution round trip");
     Check(loaded.pixelFormat == saved.pixelFormat,
@@ -263,7 +307,13 @@ int main() {
         return 1;
     }
     TestDefaults(path);
+    TestResolutionRoundTrips(path);
     TestRoundTrip(path);
+    for (const wchar_t* value : {L"Dark", L"invalid", L"LIGHT"}) {
+        WritePrivateProfileStringW(L"General", L"SettingsTheme", value, path.c_str());
+        Check(llcv::settings::LoadFromIni(path).settings.settingsLightTheme ==
+            (_wcsicmp(value, L"Light") == 0), "theme values are bounded and case insensitive");
+    }
     WritePrivateProfileStringW(L"Window", L"AudioOnlyWidth", L"-1", path.c_str());
     WritePrivateProfileStringW(L"Window", L"AudioOnlyHeight", L"999999", path.c_str());
     const auto bounded = llcv::settings::LoadFromIni(path).settings;
