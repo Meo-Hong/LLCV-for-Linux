@@ -100,6 +100,10 @@ const wchar_t* PixelFormatSettingName(VideoPixelFormat format) {
 
 void VideoDimensions(VideoPreset preset, int& width, int& height) {
     switch (preset) {
+    case VideoPreset::R1280x720:
+        width = 1280;
+        height = 720;
+        break;
     case VideoPreset::R2560x1440:
         width = 2560;
         height = 1440;
@@ -130,6 +134,8 @@ bool MigrateLegacyPcmQueueTarget(const std::wstring& path) {
 LoadResult LoadFromIni(const std::wstring& path) {
     LoadResult result{};
     AppSettings& settings = result.settings;
+    settings.settingsLightTheme = _wcsicmp(
+        ReadString(path, L"General", L"SettingsTheme", L"Dark").c_str(), L"Light") == 0;
 
     const std::wstring language =
         ReadString(path, L"General", L"Language", L"Auto");
@@ -265,7 +271,9 @@ LoadResult LoadFromIni(const std::wstring& path) {
         ReadString(path, L"Video", L"CaptureAudioDeviceId");
     const std::wstring resolution =
         ReadString(path, L"Video", L"Resolution", L"1920x1080");
-    if (_wcsicmp(resolution.c_str(), L"1920x1080") == 0) {
+    if (_wcsicmp(resolution.c_str(), L"1280x720") == 0) {
+        settings.videoPreset = VideoPreset::R1280x720;
+    } else if (_wcsicmp(resolution.c_str(), L"1920x1080") == 0) {
         settings.videoPreset = VideoPreset::R1920x1080;
     } else if (_wcsicmp(resolution.c_str(), L"3840x2160") == 0) {
         settings.videoPreset = VideoPreset::R3840x2160;
@@ -325,6 +333,14 @@ LoadResult LoadFromIni(const std::wstring& path) {
     }
     settings.saveLog = ReadBool(path, L"Diagnostics", L"SaveLog");
     settings.screenshotClipboard = ReadBool(path, L"Screenshot", L"CopyToClipboard");
+    settings.vsrEnabled = ReadBool(path, L"Video", L"VsrEnabled");
+    // Older profiles used the same resolution for capture and display.
+    const std::wstring vsrResolution = ReadString(path, L"Video", L"VsrCaptureResolution", resolution.c_str());
+    settings.vsrCapturePreset = settings.videoPreset;
+    if (vsrResolution == L"1280x720") settings.vsrCapturePreset = VideoPreset::R1280x720;
+    else if (vsrResolution == L"1920x1080") settings.vsrCapturePreset = VideoPreset::R1920x1080;
+    else if (vsrResolution == L"2560x1440") settings.vsrCapturePreset = VideoPreset::R2560x1440;
+    else if (vsrResolution == L"3840x2160") settings.vsrCapturePreset = VideoPreset::R3840x2160;
     settings.showDiagnosticConsole =
         ReadBool(path, L"Diagnostics", L"ShowConsole");
     return result;
@@ -335,6 +351,7 @@ void SaveToIni(const std::wstring& path, const AppSettings& settings) {
     if (settings.uiLanguage == UiLanguage::Korean) language = L"Korean";
     if (settings.uiLanguage == UiLanguage::English) language = L"English";
     WriteString(path, L"General", L"Language", language);
+    WriteString(path, L"General", L"SettingsTheme", settings.settingsLightTheme ? L"Light" : L"Dark");
     WriteInt(path, L"General", L"SkipStartupSettings",
              settings.skipStartupSettings ? 1 : 0);
     WriteInt(path, L"General", L"CheckForUpdates",
@@ -420,6 +437,9 @@ void SaveToIni(const std::wstring& path, const AppSettings& settings) {
     wchar_t resolution[32]{};
     swprintf_s(resolution, L"%dx%d", width, height);
     WriteString(path, L"Video", L"Resolution", resolution);
+    VideoDimensions(settings.vsrCapturePreset, width, height);
+    swprintf_s(resolution, L"%dx%d", width, height);
+    WriteString(path, L"Video", L"VsrCaptureResolution", resolution);
     WriteString(path, L"Video", L"CaptureDeviceId",
                 settings.captureDeviceId.c_str());
     WriteString(path, L"Video", L"CaptureAudioDeviceId",
@@ -454,6 +474,7 @@ void SaveToIni(const std::wstring& path, const AppSettings& settings) {
     WriteInt(path, L"Window", L"Snap", settings.windowSnap ? 1 : 0);
     WriteInt(path, L"Diagnostics", L"SaveLog", settings.saveLog ? 1 : 0);
     WriteInt(path, L"Screenshot", L"CopyToClipboard", settings.screenshotClipboard ? 1 : 0);
+    WriteInt(path, L"Video", L"VsrEnabled", settings.vsrEnabled ? 1 : 0);
     WriteInt(path, L"Diagnostics", L"ShowConsole",
              settings.showDiagnosticConsole ? 1 : 0);
 }

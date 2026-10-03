@@ -1,4 +1,6 @@
 #include "ui/AudioOnlyView.h"
+#include "ui/AppPalette.h"
+#include "ui/SettingsFonts.h"
 #include <objidl.h>
 #include <gdiplus.h>
 #include <cstdio>
@@ -53,7 +55,8 @@ int wmain(int argc, wchar_t** argv) {
             LOGFONTW desc{};
             desc.lfHeight = -fontHeight;
             desc.lfWeight = weight;
-            wcscpy_s(desc.lfFaceName, L"Segoe UI");
+            desc.lfQuality = CLEARTYPE_QUALITY;
+            wcscpy_s(desc.lfFaceName, llcv::settings_ui::SettingsFontFamily(weight,false));
             HFONT font = CreateFontIndirectW(&desc);
             const auto previous = SelectObject(dc, font);
             SIZE extent{};
@@ -71,9 +74,9 @@ int wmain(int argc, wchar_t** argv) {
             DeleteObject(font);
         };
         for (const auto text : {L"Audio", L"오디오"})
-            fits(text, sizes.body, FW_NORMAL, 136, 22);
+            fits(text, sizes.body, FW_MEDIUM, 136, 22);
         for (const auto text : {L"Master volume", L"마스터 음량"})
-            fits(text, sizes.body, FW_NORMAL, 190, 23);
+            fits(text, sizes.body, FW_MEDIUM, 190, 23);
         for (const auto text : {L"Output level", L"출력 레벨"})
             fits(text, sizes.secondary, FW_NORMAL, 70, 18);
         fits(L"-96.0 dBFS", sizes.secondary, FW_NORMAL, 80, 18);
@@ -90,18 +93,19 @@ int wmain(int argc, wchar_t** argv) {
     Check(TextSizesForContent(115).secondary == 6,
           "work-area constrained window keeps text proportional to cards");
     State state{};
+    const auto palette = llcv::ui::PaletteForTheme(false);
     state.leftPeakDb = -9.4;
     state.rightPeakDb = -11.1;
     Paint(dc, {0, 0, 380, 230}, state);
-    Check(GetPixel(dc, 3, 3) == RGB(12, 15, 19), "dark charcoal background");
-    Check(GetPixel(dc, 0, 115) == RGB(59, 70, 80) &&
-          GetPixel(dc, 379, 115) == RGB(59, 70, 80), "thin outer frame");
-    Check(GetPixel(dc, 100, 38) == RGB(48, 58, 67) &&
-          GetPixel(dc, 100, 107) == RGB(48, 58, 67), "subtle card outlines");
-    Check(GetPixel(dc, 190, 94) == RGB(30, 36, 44), "master tile");
-    Check(GetPixel(dc, 30, 153) == RGB(23, 28, 34), "channel tile");
-    Check(GetPixel(dc, 30, 184) == RGB(129, 206, 186), "real level fills meter");
-    Check(GetPixel(dc, 170, 184) == RGB(58, 72, 79), "meter unfilled remainder");
+    Check(GetPixel(dc, 3, 3) == palette.kBackground, "shared settings background");
+    Check(GetPixel(dc, 0, 115) == palette.kEdge &&
+          GetPixel(dc, 379, 115) == palette.kEdge, "thin outer frame");
+    Check(GetPixel(dc, 100, 38) == palette.kCardEdge &&
+          GetPixel(dc, 100, 107) == palette.kCardEdge, "subtle card outlines");
+    Check(GetPixel(dc, 190, 94) == palette.kControl, "master tile");
+    Check(GetPixel(dc, 30, 153) == palette.kCard, "channel tile");
+    Check(GetPixel(dc, 30, 184) == palette.kAccent, "real level fills meter");
+    Check(GetPixel(dc, 170, 184) == palette.kEdge, "meter unfilled remainder");
     Check(GetCurrentObject(dc, OBJ_FONT) == originalFont &&
           GetCurrentObject(dc, OBJ_BRUSH) == originalBrush &&
           GetBkMode(dc) == originalBk, "paint restores caller GDI state");
@@ -112,17 +116,19 @@ int wmain(int argc, wchar_t** argv) {
                 if (GetPixel(dc, x, y) == color) return true;
         return false;
     };
-    const RECT hintArea{26, 70, 216, 89};
+    // Below the centered master caption; its antialiased glyphs can contain
+    // the secondary gray even when the capacity hint is absent.
+    const RECT hintArea{26, 78, 216, 89};
     const RECT masterNumber{218, 48, 339, 90};
     for (const bool english : {false, true}) {
         state.english = english;
         state.allowBoost = false;
         state.masterPercent = 100;
         Paint(dc, {0, 0, 380, 230}, state);
-        Check(!hasColor(hintArea, RGB(162, 178, 188)), "boost-off hides capacity hint");
+        Check(!hasColor(hintArea, palette.kSecondary), "boost-off hides capacity hint");
         state.allowBoost = true;
         Paint(dc, {0, 0, 380, 230}, state);
-        Check(hasColor(hintArea, RGB(162, 178, 188)), "boost-on shows localized capacity hint");
+        Check(hasColor(hintArea, palette.kSecondary), "boost-on shows localized capacity hint");
         Check(!hasColor(masterNumber, RGB(226, 176, 117)), "100 percent stays neutral");
         for (const int volume : {105, 150, 200}) {
             state.masterPercent = volume;
@@ -135,40 +141,55 @@ int wmain(int argc, wchar_t** argv) {
         Check(!hasColor(masterNumber, RGB(226, 176, 117)), "reset clears boost highlight");
         state.allowBoost = false;
         Paint(dc, {0, 0, 380, 230}, state);
-        Check(!hasColor(hintArea, RGB(162, 178, 188)), "disabling boost clears old hint");
+        Check(!hasColor(hintArea, palette.kSecondary), "disabling boost clears old hint");
     }
 
     for (int target : {1, 2, 3, 0}) {
         state.hoveredTarget = target;
         Paint(dc, {0, 0, 380, 230}, state);
-        Check(GetPixel(dc, 100, 107) == (target == 1 ? RGB(109, 155, 145) : RGB(48, 58, 67)) &&
-              GetPixel(dc, 250, 107) == (target == 2 ? RGB(109, 155, 145) : RGB(48, 58, 67)) &&
-              GetPixel(dc, 100, 38) == (target == 3 ? RGB(109, 155, 145) : RGB(48, 58, 67)),
+        Check(GetPixel(dc, 100, 107) == (target == 1 ? palette.kHoverEdge : palette.kCardEdge) &&
+              GetPixel(dc, 250, 107) == (target == 2 ? palette.kHoverEdge : palette.kCardEdge) &&
+              GetPixel(dc, 100, 38) == (target == 3 ? palette.kHoverEdge : palette.kCardEdge),
               "hover outlines follow only the active card");
-        Check(GetPixel(dc, 30, 153) == (target == 1 ? RGB(39, 49, 59) : RGB(23, 28, 34)),
+        Check(GetPixel(dc, 30, 153) == (target == 1 ? palette.kHover : palette.kCard),
               "left hover restores independently");
-        Check(GetPixel(dc, 210, 153) == (target == 2 ? RGB(39, 49, 59) : RGB(23, 28, 34)),
+        Check(GetPixel(dc, 210, 153) == (target == 2 ? palette.kHover : palette.kCard),
               "right hover restores independently");
-        Check(GetPixel(dc, 190, 94) == (target == 3 ? RGB(39, 49, 59) : RGB(30, 36, 44)),
+        Check(GetPixel(dc, 190, 94) == (target == 3 ? palette.kHover : palette.kControl),
               "master hover restores independently");
     }
     state.clipping = true;
     state.leftPeakDb = std::numeric_limits<double>::quiet_NaN();
     state.rightPeakDb = -96;
     Paint(dc, {0, 0, 380, 230}, state);
-    Check(GetPixel(dc, 30, 153) == RGB(23, 28, 34), "unhovered channel");
-    Check(GetPixel(dc, 30, 184) == RGB(58, 72, 79), "invalid level paints silent track");
+    Check(GetPixel(dc, 30, 153) == palette.kCard, "unhovered channel");
+    Check(GetPixel(dc, 30, 184) == palette.kEdge, "invalid level paints silent track");
     bool clipVisible = false;
     for (int y = 209; y < 213; ++y)
         for (int x = 14; x < 18; ++x)
             clipVisible |= GetPixel(dc, x, y) == RGB(237, 98, 84);
     Check(clipVisible, "clipping warning");
+    for (bool light : {false,true}) for (bool highContrast : {false,true}) {
+        state.lightTheme = light;
+        state.highContrast = highContrast;
+        state.allowBoost = true;
+        state.masterPercent = 150;
+        state.leftPeakDb = -9;
+        const auto theme = llcv::ui::ResolvePalette(light,highContrast);
+        Paint(dc, {0,0,380,230}, state);
+        Check(GetPixel(dc,3,3) == theme.kBackground && GetPixel(dc,30,153) == theme.kCard,
+              "dark/light/high-contrast surfaces share app palette");
+        Check(GetPixel(dc,30,184) == theme.kAccent && hasColor(masterNumber,theme.kWarning),
+              "themed meter and accessible boost indication");
+    }
     // Warm caches before checking that fonts/brushes are released every frame.
     const DWORD before = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
     for (int i = 0; i < 1000; ++i) {
         state.english = (i % 2) != 0;
         state.masterPercent = i % 201;
         state.allowBoost = (i % 3) != 0;
+        state.lightTheme = (i % 4) < 2;
+        state.highContrast = (i % 5) == 0;
         state.outputLabel = state.english ? L"WASAPI Exclusive" : L"ASIO";
         Paint(dc, ContentRect(i % 2 ? 380 : 760, i % 2 ? 230 : 460), state);
     }
@@ -177,9 +198,10 @@ int wmain(int argc, wchar_t** argv) {
     Paint(nullptr, {0, 0, 380, 230}, state);
     Paint(dc, {}, state);
 
-    if (argc == 2) {
+    if (argc >= 2) {
         FillRect(dc, &all, reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
         state = State{};
+        state.lightTheme = argc >= 3 && !wcscmp(argv[2],L"--light");
         state.allowBoost = true;
         state.leftPeakDb = -9.4; state.rightPeakDb = -11.1;
         Paint(dc, {10, 10, 390, 240}, state);

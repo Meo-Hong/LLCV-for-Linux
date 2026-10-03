@@ -1,5 +1,6 @@
 #pragma once
 #include "ViewerShortcuts.h"
+#include "AppPalette.h"
 #include <array>
 #include <string>
 #include <vector>
@@ -12,9 +13,12 @@ public:
     Window() = default;
     Window(const Window&) = delete;
     Window& operator=(const Window&) = delete;
-    void Toggle(HWND owner, bool english, const wchar_t* version, int show = SW_SHOWNORMAL);
+    void Toggle(HWND owner, bool english, const wchar_t* version, int show = SW_SHOWNORMAL,
+                bool lightTheme = false);
     // Call before viewer shortcut/wheel routing. Dismissal consumes key repeat.
-    bool ProcessMessage(MSG& message, HWND owner, bool english, const wchar_t* version);
+    bool ProcessMessage(MSG& message, HWND owner, bool english, const wchar_t* version,
+                        bool lightTheme = false);
+    void SetLightTheme(bool lightTheme);
     HWND Handle() const { return window_; }
     void Close();
 private:
@@ -23,6 +27,7 @@ private:
     void Layout();
     void ApplyFont();
     bool CreateContent();
+    bool UpdateTheme();
     void Paint(HDC dc, bool body);
     void Scroll(int position);
     enum Font { Normal, Strong, Title, Small, FontCount };
@@ -38,5 +43,7 @@ private:
     int scroll_ = 0, contentHeight_ = 0, wheelRemainder_ = 0;
     bool layingOut_ = false, highContrast_ = false;
     bool english_ = false, dismissEscape_ = false;
+    bool lightTheme_ = false;
+    ui::Palette palette_;
 };
 } // namespace llcv::viewer_help

@@ -1,7 +1,7 @@
 ﻿param(
-    [string]$Version = "1.3.1",
-    [string]$BuildDir = "..\build-v1310-release",
-    [string]$OutputDir = "..\outputs\v1.3.1"
+    [string]$Version = "2.0.0",
+    [string]$BuildDir = "..\build-v2000-release",
+    [string]$OutputDir = "outputs\v2.0.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,6 +45,8 @@ Copy-Item -LiteralPath (Join-Path $root "third_party\asio\LICENSE.txt") `
     -Destination (Join-Path $portable "ASIO-SDK-LICENSE.txt")
 Copy-Item -LiteralPath (Join-Path $root "third_party\asio\HOST-LICENSE.txt") `
     -Destination (Join-Path $portable "ASIO-HOST-LICENSE.txt")
+Copy-Item -LiteralPath (Join-Path $root "third_party\pretendard\LICENSE.txt") `
+    -Destination (Join-Path $portable "PRETENDARD-LICENSE.txt")
 Copy-Item -LiteralPath (Join-Path $root "docs") -Destination $portable -Recurse
 Compress-Archive -Path (Join-Path $portable "*") -DestinationPath $zip -CompressionLevel Optimal
 Write-Host "Portable package: $zip"

@@ -1,0 +1,7 @@
+#include <windows.h>
+// GDI ClearType requires TrueType outlines; the CFF/OTF edition falls back
+// to grayscale even when the caller requests CLEARTYPE_QUALITY.
+9001 RCDATA "../../third_party/pretendard/Pretendard-Regular.ttf"
+9002 RCDATA "../../third_party/pretendard/Pretendard-SemiBold.ttf"
+9003 RCDATA "../../third_party/pretendard/LICENSE.txt"
+9004 RCDATA "../../third_party/pretendard/Pretendard-Medium.ttf"

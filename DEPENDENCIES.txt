@@ -1,4 +1,4 @@
-Low Latency Capture Viewer v1.3.1 - dependencies
+Low Latency Capture Viewer v2.0.0 - dependencies
 =================================================
 
 License: GNU General Public License v3.0 or later. See the root LICENSE file.
@@ -11,7 +11,7 @@ separate Visual C++ Redistributable installation. The target PC needs:
 - A card exposing NV12/YUY2, or experimental MJPEG/P010, and compatible 48 kHz
   mono/stereo PCM or 32-bit float audio, either on the video filter or as a
   separate DirectShow audio-input filter
-- D3D11, DXGI, DirectShow, WASAPI, HID, SetupAPI, WIC and DWM Windows system components
+- D3D11, DXGI, DirectShow, WASAPI, HID, SetupAPI, WIC, DWM and UxTheme Windows system components
 - Optional console LPCM 5.1: explicit 48 kHz 6/8-channel PCM capture input and
   WASAPI Shared output. Configure Windows speakers for 5.1; stereo endpoints
   downmix. Dolby/DTS decoding and ASIO/Exclusive 5.1 are not supported.
@@ -26,6 +26,14 @@ The tested/recommended card is AVerMedia GC573. Other cards are experimental;
 when their video and audio filters are separate, enable drift correction for
 long sessions if the diagnostics show repeated imbalance.
 No mpv.exe, FFmpeg DLL, third-party codec pack, or companion executable is required.
+
+Settings typography
+-------------------
+Pretendard 1.3.9 TrueType Regular, Medium and SemiBold are embedded as private, process-local
+fonts. They are not installed on the system. Licensed under SIL Open Font
+License 1.1; see PRETENDARD-LICENSE.txt in packages or
+third_party/pretendard/LICENSE.txt in source. Source and file hashes are recorded
+in third_party/pretendard/SOURCE.txt.
 
 Elgato driver/USB-protocol reference
 ------------------------------

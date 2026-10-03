@@ -28,6 +28,8 @@ TextSizes TextSizesForContent(int contentHeight) noexcept;
 
 struct State {
     bool english = false;
+    bool lightTheme = false;
+    bool highContrast = false;
     bool allowBoost = false;
     const wchar_t* outputLabel = L"WASAPI Shared";
     bool clipping = false;

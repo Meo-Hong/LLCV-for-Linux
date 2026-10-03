@@ -32,6 +32,7 @@ enum class VideoPreset {
     R1920x1080,
     R2560x1440,
     R3840x2160,
+    R1280x720,
 };
 
 struct VideoPresetInfo {
@@ -82,6 +83,7 @@ struct ExclusiveEndpointCacheEntry {
 
 struct AppSettings {
     UiLanguage uiLanguage = UiLanguage::Auto;
+    bool settingsLightTheme = false; // App chrome; persisted key retained for compatibility.
     AudioMode audioMode = AudioMode::WasapiShared;
     bool consoleSurround51 = false;
     int wasapiBufferMs = 20;
@@ -114,6 +116,8 @@ struct AppSettings {
     std::wstring asioDriverName;
     bool saveLog = false;
     bool screenshotClipboard = false;
+    bool vsrEnabled = false;
+    VideoPreset vsrCapturePreset = VideoPreset::R1920x1080;
     bool showDiagnosticConsole = false;
     bool skipStartupSettings = false;
     bool checkForUpdates = true;

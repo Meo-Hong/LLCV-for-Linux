@@ -379,7 +379,218 @@ static int TestRawSdr() {
     return 0;
 }
 
+static void SaveOverlayPreview(DirectD3D11Renderer& renderer, ID3D11Texture2D* texture,
+                               const std::filesystem::path& path) {
+    if (path.empty()) return;
+    llcv::hdr_audit::Image image;
+    Check(llcv::hdr_audit::Read(renderer.context, texture, image), "overlay preview readback");
+    D3D11_TEXTURE2D_DESC desc{}; texture->GetDesc(&desc);
+    BITMAPFILEHEADER file{}; BITMAPINFOHEADER info{};
+    info.biSize = sizeof(info); info.biWidth = desc.Width;
+    info.biHeight = -static_cast<LONG>(desc.Height); info.biPlanes = 1;
+    info.biBitCount = 32; info.biCompression = BI_RGB;
+    info.biSizeImage = desc.Width * desc.Height * 4;
+    file.bfType = 0x4d42; file.bfOffBits = sizeof(file) + sizeof(info);
+    file.bfSize = file.bfOffBits + info.biSizeImage;
+    Require(image.bytes.size() == info.biSizeImage, "tightly packed BGRA preview");
+    std::ofstream output(path, std::ios::binary);
+    output.write(reinterpret_cast<const char*>(&file), sizeof(file));
+    output.write(reinterpret_cast<const char*>(&info), sizeof(info));
+    output.write(reinterpret_cast<const char*>(image.bytes.data()), image.bytes.size());
+    Require(output.good(), "preview written");
+}
+
+static int TestOverlayUi(const char* directory) {
+    Check(CoInitializeEx(nullptr, COINIT_MULTITHREADED), "overlay COM");
+    HWND hwnd = CreateWindowExW(0, L"STATIC", L"Hidden OSD UI test", WS_POPUP,
+        0, 0, 1280, 720, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    Require(hwnd != nullptr, "overlay hidden window");
+    const std::filesystem::path root = directory ? directory : "";
+    if (!root.empty()) std::filesystem::create_directories(root);
+    g_settings.pixelPerfect = false;
+    g_settings.presentationMode = PresentationMode::VSync;
+    g_osdVisible = true; g_audioOsdVisible = true;
+    for (bool english : {false, true}) {
+        g_settings.uiLanguage = english ? UiLanguage::English : UiLanguage::Korean;
+        DirectD3D11Renderer r;
+        Check(r.initialize(hwnd, 64, 64, 60, VideoPixelFormat::Nv12), "overlay initialize");
+        Require(r.overlayFonts.Available(), "embedded DirectWrite fonts loaded");
+        for (auto* format : {r.osdTextFormat, r.volumeTextFormat, r.audioTextFormat,
+                            r.audioValueFormat, r.audioSmallFormat}) {
+            wchar_t family[128]{};
+            Check(format->GetFontFamilyName(family, 128), "private family name");
+            Require(wcsstr(family, L"Pretendard") != nullptr, "OSD uses application font family");
+            IDWriteFontCollection* collection = nullptr;
+            Check(format->GetFontCollection(&collection), "private collection");
+            Require(collection != nullptr, "not silent system font substitution");
+            UINT32 index = 0; BOOL exists = FALSE;
+            Check(collection->FindFamilyName(family, &index, &exists), "family present");
+            Require(exists, "family exists in embedded collection");
+            IDWriteFontFamily* fontFamily = nullptr;
+            Check(collection->GetFontFamily(index, &fontFamily), "private font family");
+            IDWriteFont* font = nullptr;
+            Check(fontFamily->GetFirstMatchingFont(format->GetFontWeight(),
+                DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, &font), "actual font weight");
+            Require(font->GetWeight() == format->GetFontWeight() &&
+                font->GetSimulations() == DWRITE_FONT_SIMULATIONS_NONE, "real font weight, not synthetic bold");
+            font->Release(); fontFamily->Release(); collection->Release();
+        }
+        const auto fits = [&](const wchar_t* text, IDWriteTextFormat* format, float width, float height) {
+            IDWriteTextLayout* layout = nullptr;
+            Check(r.dwriteFactory->CreateTextLayout(text, static_cast<UINT32>(wcslen(text)),
+                format, width, height, &layout), "measure overlay caption");
+            DWRITE_TEXT_METRICS metrics{}; Check(layout->GetMetrics(&metrics), "caption metrics");
+            if (metrics.width > width || metrics.height > height)
+                std::wprintf(L"Clipped caption: %s, %.1f x %.1f / %.1f x %.1f\n",
+                    text, metrics.width, metrics.height, width, height);
+            Require(metrics.width <= width && metrics.height <= height, "overlay text fits");
+            layout->Release();
+        };
+#ifdef LLCV_VSR_FEATURE
+        const auto savedVsrState = r.vsrState;
+        const UINT savedInputWidth = r.vsrInputWidth, savedInputHeight = r.vsrInputHeight;
+        const UINT savedDisplayWidth = r.vsrDisplayWidth, savedDisplayHeight = r.vsrDisplayHeight;
+        r.vsrInputWidth = 1920; r.vsrInputHeight = 1080;
+        r.vsrDisplayWidth = 3840; r.vsrDisplayHeight = 2160;
+        for (const auto state : {llcv::vsr::State::Untouched, llcv::vsr::State::Off,
+                llcv::vsr::State::Requested, llcv::vsr::State::Bypassed,
+                llcv::vsr::State::Rejected, llcv::vsr::State::Unknown}) {
+            r.vsrState = state;
+            const auto line = r.vsrOsdLine();
+            Require(line.find(L"1920×1080 → 3840×2160") != std::wstring::npos,
+                "VSR diagnostics use actual input and video rectangle sizes");
+            Require(line.find(L"ms") == std::wstring::npos, "no unverified VSR latency number");
+            if (state == llcv::vsr::State::Requested)
+                Require(line.find(english ? L"activation unverified" : L"실제 활성 미확인") != std::wstring::npos,
+                    "accepted ON request never claims confirmed activation");
+            if (state == llcv::vsr::State::Unknown)
+                Require(line.find(L"OFF") == std::wstring::npos, "unknown state never claims OFF");
+            fits(line.substr(0, line.size() - 1).c_str(), r.osdTextFormat, r.kOsdTextWidth, 20);
+            g_overlayGeneration.fetch_add(1);
+            Check(r.refreshOverlayLayouts(), "VSR diagnostics refresh");
+            DWRITE_TEXT_METRICS metrics{};
+            Check(r.osdTextLayout->GetMetrics(&metrics), "VSR diagnostics fit");
+            Require(metrics.lineCount == 20 && metrics.height <= r.kOsdTextHeight,
+                "VSR row retains all diagnostics without wrapping or clipping");
+        }
+        r.vsrState = savedVsrState;
+        r.vsrInputWidth = savedInputWidth; r.vsrInputHeight = savedInputHeight;
+        r.vsrDisplayWidth = savedDisplayWidth; r.vsrDisplayHeight = savedDisplayHeight;
+        g_overlayGeneration.fetch_add(1);
+#endif
+        fits(L"100%", r.audioValueFormat, 88, 33);
+        fits(L"200%", r.audioValueFormat, 88, 29);
+        fits(L"-96.0 dBFS", r.audioSmallFormat, 120, 22);
+        fits(english ? L"Wheel · Double-click reset" : L"휠 조절 · 두 번 클릭 초기화",
+            r.audioSmallFormat, 208, 22);
+        const auto hasColor = [&](ID3D11Texture2D* texture, RECT rect, COLORREF expected) {
+            llcv::hdr_audit::Image pixels;
+            Check(llcv::hdr_audit::Read(r.context, texture, pixels), "OSD color readback");
+            D3D11_TEXTURE2D_DESC desc{}; texture->GetDesc(&desc);
+            for (LONG y = rect.top; y < rect.bottom; ++y)
+                for (LONG x = rect.left; x < rect.right; ++x) {
+                    const BYTE* pixel = pixels.bytes.data() +
+                        (static_cast<size_t>(y) * desc.Width + x) * 4;
+                    if (std::abs(int(pixel[2]) - GetRValue(expected)) <= 1 &&
+                        std::abs(int(pixel[1]) - GetGValue(expected)) <= 1 &&
+                        std::abs(int(pixel[0]) - GetBValue(expected)) <= 1) return true;
+                }
+            return false;
+        };
+        const auto verifyBoost = [&](bool expected) {
+            const COLORREF orange = llcv::overlay_ui::kPalette.kWarning;
+            Require(hasColor(r.audioOverlayTexture, {220, 33, 308, 62}, orange) == expected,
+                "master percentage is orange only above unity gain with boost enabled");
+            Require(hasColor(r.volumeOverlayTexture, {16, 6, 244, 50}, orange) == expected,
+                "transient volume indication follows the same boost threshold");
+            Require(!hasColor(r.audioOverlayTexture, {16, 84, 320, 168}, orange),
+                "master boost never recolors L/R channel values");
+        };
+        for (bool boost : {false, true}) for (bool clip : {false, true}) {
+            g_settings.allowVolumeBoost = boost;
+            g_volumePercent = boost ? 200 : 100;
+            g_leftVolumePercent = 100; g_rightVolumePercent = clip ? 75 : 100;
+            g_audioPeakLeft = clip ? 32768 : 1638; g_audioPeakRight = 492;
+            g_audioClipUntilMs = clip ? GetTickCount64() + 5000 : 0;
+            g_audioOsdHoverTarget = clip ? 1 : 0;
+            g_transientHudContent = TransientHudContent::Volume;
+            g_overlayGeneration.fetch_add(1);
+            Check(r.refreshOverlayLayouts(), "production OSD render");
+            verifyBoost(boost);
+            Require(hasColor(r.audioOverlayTexture, {16, 171, 111, 193},
+                llcv::overlay_ui::kPalette.kDanger) == clip, "red clipping status remains independent");
+            DWRITE_TEXT_METRICS metrics{};
+            Check(r.osdTextLayout->GetMetrics(&metrics), "diagnostics metrics");
+            Require(metrics.height <= r.kOsdTextHeight, "diagnostics retained without clipping");
+            auto* cached = r.osdTextLayout;
+            for (int frame = 0; frame < 1000; ++frame)
+                Check(r.refreshOverlayLayouts(), "unchanged overlay cache");
+            Require(cached == r.osdTextLayout, "unchanged frames do not recreate layout");
+            if (!root.empty()) {
+                const std::string suffix = std::string(english ? "en" : "ko") +
+                    (boost ? "-200" : "-100") + (clip ? "-clip" : "-normal") + ".bmp";
+                SaveOverlayPreview(r, r.audioOverlayTexture, root / ("audio-" + suffix));
+                SaveOverlayPreview(r, r.volumeOverlayTexture, root / ("volume-" + suffix));
+                SaveOverlayPreview(r, r.osdOverlayTexture, root / ("diagnostics-" + suffix));
+            }
+        }
+        for (bool enabled : {false, true}) {
+            g_settings.allowVolumeBoost = enabled;
+            for (int percent : {0, 99, 100, 101, 150, 200, 100, 99}) {
+                g_volumePercent = percent;
+                g_overlayGeneration.fetch_add(1);
+                Check(r.refreshOverlayLayouts(), "boost boundary transition");
+                verifyBoost(enabled && percent > 100);
+            }
+        }
+        g_settings.allowVolumeBoost = true; g_volumePercent = 200;
+        for (const auto position : {VolumeHudPosition::TopLeft, VolumeHudPosition::TopRight,
+                VolumeHudPosition::BottomLeft, VolumeHudPosition::BottomRight}) {
+        g_settings.volumeHudPosition = position;
+        for (int message = 0; message <= static_cast<int>(TransientHudContent::VsrFailed); ++message) {
+            g_transientHudContent = static_cast<TransientHudContent>(message);
+            g_overlayGeneration.fetch_add(1);
+            Check(r.refreshOverlayLayouts(), "every transient HUD");
+            DWRITE_TEXT_METRICS metrics{}; Check(r.volumeTextLayout->GetMetrics(&metrics), "HUD metrics");
+            if (metrics.height > 62 || metrics.width > 228)
+                std::printf("HUD clipped: language=%s message=%d metrics=%.1fx%.1f\n",
+                    english ? "en" : "ko", message, metrics.width, metrics.height);
+            Require(metrics.height <= 62 && metrics.width <= 228, "transient message fits");
+            const bool volume = message == static_cast<int>(TransientHudContent::Volume);
+            const bool bottom = position == VolumeHudPosition::BottomLeft || position == VolumeHudPosition::BottomRight;
+            const float expectedHeight = volume ? 82.0f : std::clamp(std::ceil(metrics.height) + 20.0f, 40.0f, 82.0f);
+            Require(r.volumePanelHeight == expectedHeight &&
+                r.volumePanelTop == (bottom ? 82.0f - expectedHeight : 0.0f),
+                "notification hugs text and preserves top/bottom screen margin");
+            llcv::hdr_audit::Image notification;
+            Check(llcv::hdr_audit::Read(r.context, r.volumeOverlayTexture, notification), "notification padding pixels");
+            for (int y = 0; y < 82; ++y) if (y < r.volumePanelTop || y >= r.volumePanelTop + r.volumePanelHeight)
+                for (int x = 0; x < 260; ++x)
+                    Require(notification.bytes[(y * 260 + x) * 4 + 3] == 0,
+                        "no stale panel pixels outside fitted notification");
+            if (!root.empty() && position == VolumeHudPosition::TopLeft &&
+                (message == static_cast<int>(TransientHudContent::VsrOn) ||
+                 message == static_cast<int>(TransientHudContent::ScreenshotSaved)))
+                SaveOverlayPreview(r, r.volumeOverlayTexture, root / (std::string(english ? "en-" : "ko-") +
+                    (message == static_cast<int>(TransientHudContent::VsrOn) ? "vsr-fit.bmp" : "saved-fit.bmp")));
+            if (message != static_cast<int>(TransientHudContent::Volume))
+                Require(!hasColor(r.volumeOverlayTexture, {0, 0, 260, 82},
+                    llcv::overlay_ui::kPalette.kWarning), "boost color does not leak to screenshot/VSR messages");
+        }
+        }
+        g_settings.volumeHudPosition = VolumeHudPosition::TopLeft;
+        r.reset();
+        Require(!r.overlayFonts.Available() && !r.audioValueFormat && !r.audioSmallFormat &&
+            !r.audioCacheCardBrush && !r.osdCacheEdgeBrush &&
+            !r.audioCacheBoostBrush && !r.volumeCacheBoostBrush, "OSD resources released on reset");
+    }
+    DestroyWindow(hwnd); CoUninitialize();
+    std::puts("OSD UI: embedded font weights, bilingual text fit, gain/clip states, all notifications, cache reuse and reset passed.");
+    return 0;
+}
+
 int main(int argc, char** argv) {
+    if (argc >= 2 && std::string(argv[1]) == "--osd-ui") return TestOverlayUi(argc >= 3 ? argv[2] : nullptr);
     if (argc == 2 && std::string(argv[1]) == "--sdr-only") return TestRawSdr();
     Check(CoInitializeEx(nullptr, COINIT_MULTITHREADED), "COM");
     HWND hwnd = CreateWindowExW(0, L"STATIC", L"HDR pixel test", WS_POPUP,
@@ -656,8 +867,9 @@ int main(int argc, char** argv) {
                 std::abs(r.audioCacheBackgroundBrush->GetColor().a - 0.92f) < 0.0001f,
                 "SDR panel opacity unchanged");
         const auto sdrPanelColor = r.osdCacheBackgroundBrush->GetColor();
-        Require(sdrPanelColor.r == 0.055f && sdrPanelColor.g == 0.063f && sdrPanelColor.b == 0.078f,
-            "HDR-to-SDR reinitialization restores original SDR panel tint");
+        const auto expectedSdr = llcv::overlay_ui::Background(false);
+        Require(sdrPanelColor.r == expectedSdr.r && sdrPanelColor.g == expectedSdr.g && sdrPanelColor.b == expectedSdr.b,
+            "HDR-to-SDR reinitialization restores neutral application palette");
         ClearUi(r, 1, 1, 1, 1); DrawUi(r); Require(Read(r)[0] == 255, "SDR white unchanged");
         ClearUi(r, 0, 0, 0, 0.5f); Benchmark(r); RequireCleanGpu(r);
         // Explicit SDR is still identified, but P010 has no SDR output path.

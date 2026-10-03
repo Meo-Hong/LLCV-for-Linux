@@ -26,52 +26,59 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     };
     auto makeLabel = [&](const wchar_t* text, int x, int y) {
         return CreateWindowExW(0, L"STATIC", text,
-                               WS_CHILD | WS_VISIBLE | SS_LEFTNOWORDWRAP,
+                               WS_CHILD | WS_VISIBLE | SS_LEFTNOWORDWRAP | SS_NOPREFIX | SS_CENTERIMAGE,
                                x, y, 160, 24, hwnd, nullptr, instance, nullptr);
     };
 
+    state->english = initial.english;
+    state->brandLabel = makeLabel(L"LLCV", 12, 28);
+    state->pageTitle = makeLabel(L"", 184, 24);
+    state->pageSubtitle = makeLabel(L"", 184, 60);
+    state->appPreferencesSection = makeLabel(initial.english ? L"General" : L"일반", 184, 110);
     state->tabControl = CreateWindowExW(
-        0, WC_TABCONTROLW, nullptr,
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | TCS_FIXEDWIDTH,
-        24, 16, 901, 31, hwnd,
+        0, L"LISTBOX", nullptr,
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | LBS_NOTIFY |
+            LBS_OWNERDRAWFIXED | LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT,
+        12, 100, 132, 220, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_TAB)),
         instance, nullptr);
     if (state->tabControl) {
         const wchar_t* labels[] = {
-            text(L"오디오"), text(L"영상 · 창"),
-            text(L"단축키 · 진단"), text(L"업데이트")};
+            initial.english ? L"Video" : L"영상", text(L"오디오"),
+            initial.english ? L"Window" : L"창",
+            initial.english ? L"Guide & logs" : L"도움말 · 진단",
+            initial.english ? L"App" : L"앱 설정"};
         for (int i = 0; i < static_cast<int>(ARRAYSIZE(labels)); ++i) {
-            TCITEMW item{};
-            item.mask = TCIF_TEXT;
-            item.pszText = const_cast<LPWSTR>(labels[i]);
-            TabCtrl_InsertItem(state->tabControl, i, &item);
+            SendMessageW(state->tabControl, LB_ADDSTRING, 0,
+                         reinterpret_cast<LPARAM>(labels[i]));
         }
-        TabCtrl_SetCurSel(state->tabControl,
-                          static_cast<int>(state->activeTab));
+        SendMessageW(state->tabControl, LB_SETCURSEL,
+                     SettingsNavigationIndex(state->activeTab), 0);
     }
+    RefreshSettingsPageHeader(state);
 
     state->audioOutputSection = makeLabel(text(L"출력"), 34, 62);
     state->audioPlaybackSection = makeLabel(text(L"재생 · 편의"), 34, 226);
     state->audioStabilitySection = makeLabel(text(L"동기화 · 안정성"), 34, 392);
     state->videoCaptureSection = makeLabel(text(L"캡처"), 34, 62);
-    state->videoDisplaySection = makeLabel(text(L"영상"), 505, 62);
-    state->videoWindowSection = makeLabel(text(L"창"), 505, 184);
+    state->videoDisplaySection = makeLabel(initial.english ? L"Display" : L"화면 표시", 505, 62);
+    state->videoWindowSection = makeLabel(initial.english ? L"Window behavior" : L"창 동작", 505, 184);
     state->audioLabel = makeLabel(text(L"오디오 출력 모드"), 24, 24);
     state->audioCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         180, 20, 210, 120, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_AUDIO)), instance, nullptr);
     SendMessageW(state->audioCombo, CB_ADDSTRING, 0,
                  reinterpret_cast<LPARAM>(
-                     text(L"WASAPI Shared (호환성 우선 · 권장)")));
+                     initial.english ? L"WASAPI Shared (recommended)" : L"WASAPI Shared (권장)"));
     SendMessageW(state->audioCombo, CB_ADDSTRING, 0,
-                 reinterpret_cast<LPARAM>(text(
-                     L"WASAPI Exclusive (이벤트 진단 · 장치 독점)")));
+                 reinterpret_cast<LPARAM>(initial.english
+                     ? L"WASAPI Exclusive (exclusive access)" : L"WASAPI Exclusive (장치 독점)"));
     if (initial.asioAvailable) {
         SendMessageW(state->audioCombo, CB_ADDSTRING, 0,
-                     reinterpret_cast<LPARAM>(text(
-                         L"ASIO (지연 최소화 · 드라이버 필요 · 실험적)")));
+                     reinterpret_cast<LPARAM>(initial.english
+                         ? L"ASIO (experimental)" : L"ASIO (실험적)"));
     }
     const LRESULT audioSelection =
         initial.settings.audioMode == AudioMode::Asio && initial.asioAvailable
@@ -79,11 +86,14 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
             : initial.settings.audioMode == AudioMode::WasapiExclusive ? 1 : 0;
     SendMessageW(state->audioCombo, CB_SETCURSEL,
                   audioSelection, 0);
+    AddSettingsTooltip(state, hwnd, state->audioCombo, initial.english
+        ? L"Shared works alongside other apps. Exclusive reserves the output device and requires a successful buffer test. ASIO requires an installed driver."
+        : L"Shared는 다른 앱과 함께 사용할 수 있습니다. Exclusive는 출력 장치를 독점하며 버퍼 검사가 필요합니다. ASIO는 전용 드라이버가 필요합니다.");
 
     state->audioOutputLabel = makeLabel(text(L"오디오 출력 장치"), 24, 68);
     state->audioOutputCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         150, 64, 250, 220, hwnd,
         reinterpret_cast<HMENU>(
             static_cast<INT_PTR>(IDC_SETTINGS_AUDIO_OUTPUT)),
@@ -93,7 +103,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     state->bufferLabel = makeLabel(text(L"오디오 출력 버퍼"), 24, 68);
     state->bufferCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         180, 64, 210, 180, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_BUFFER)),
         instance, nullptr);
@@ -114,10 +124,10 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
             static_cast<INT_PTR>(IDC_SETTINGS_EXCLUSIVE_TEST)),
         instance, nullptr);
 
-    state->volumeHudLabel = makeLabel(text(L"볼륨 HUD 위치"), 24, 142);
+    state->volumeHudLabel = makeLabel(initial.english ? L"Volume overlay position" : L"음량 표시 위치", 24, 142);
     state->volumeHudCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         180, 138, 210, 160, hwnd,
         reinterpret_cast<HMENU>(
             static_cast<INT_PTR>(IDC_SETTINGS_VOLUME_HUD)),
@@ -132,7 +142,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         static_cast<WPARAM>(initial.settings.volumeHudPosition), 0);
 
     state->volumeBoostCheck = CreateWindowExW(
-        0, L"BUTTON", text(L"100% 이상 볼륨 증폭 허용 (최대 200%)"),
+        0, L"BUTTON", initial.english ? L"Allow volume up to 200%" : L"최대 200% 음량 증폭 허용",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         24, 230, 400, 28, hwnd,
         reinterpret_cast<HMENU>(
@@ -165,7 +175,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         SettingsHelpText(SettingsHelpTopic::Drift, initial.english));
     state->driftCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         192, 222, 228, 120, hwnd,
         reinterpret_cast<HMENU>(
             static_cast<INT_PTR>(IDC_SETTINGS_DRIFT)),
@@ -201,7 +211,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         SettingsHelpText(SettingsHelpTopic::PcmQueue, initial.english));
     state->pcmQueueCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         180, 270, 210, 140, hwnd,
         reinterpret_cast<HMENU>(
             static_cast<INT_PTR>(IDC_SETTINGS_PCM_QUEUE)),
@@ -239,7 +249,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                      ? BST_CHECKED : BST_UNCHECKED, 0);
 
     state->audioOnlyCheck = CreateWindowExW(
-        0, L"BUTTON", text(L"오디오 only 모드"),
+        0, L"BUTTON", initial.english ? L"Audio-only mode" : L"오디오 전용 모드",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         24, 146, 451, 28, hwnd,
         reinterpret_cast<HMENU>(
@@ -249,7 +259,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                  initial.settings.audioOnly ? BST_CHECKED : BST_UNCHECKED, 0);
 
     state->surround51Check = CreateWindowExW(
-        0, L"BUTTON", text(L"콘솔 LPCM 5.1 (실험적 · Shared 전용)"),
+        0, L"BUTTON", initial.english ? L"Console LPCM 5.1 (experimental)" : L"콘솔 LPCM 5.1 (실험적)",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         580, 244, 320, 28, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SURROUND51)),
@@ -257,10 +267,15 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     SendMessageW(state->surround51Check, BM_SETCHECK,
         initial.settings.consoleSurround51 ? BST_CHECKED : BST_UNCHECKED, 0);
     state->surround51Hint = CreateWindowExW(
-        0, L"STATIC", text(L"콘솔: 5.1 LPCM · 캡처: 6/8채널 PCM 필요\r\n"
-        L"Windows 출력 장치도 5.1로 설정하세요.\r\n"
-        L"스테레오 출력에서는 Windows가 다운믹스합니다.\r\n"
-        L"Dolby/DTS 및 가상 서라운드는 지원하지 않습니다."),
+        0, L"STATIC", initial.english
+        ? L"Shared only · needs 6/8-channel PCM capture.\r\n"
+          L"Set console and Windows output to 5.1 LPCM.\r\n"
+          L"Windows downmixes on stereo outputs.\r\n"
+          L"No Dolby/DTS or virtual surround."
+        : L"Shared 전용 · 6/8채널 PCM 캡처가 필요합니다.\r\n"
+          L"콘솔과 Windows 출력을 5.1 LPCM으로 설정하세요.\r\n"
+          L"스테레오 출력은 Windows가 다운믹스합니다.\r\n"
+          L"Dolby/DTS와 가상 서라운드는 지원하지 않습니다.",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
         580, 280, 320, 100, hwnd, nullptr, instance, nullptr);
 
@@ -268,7 +283,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         text(L"언어 / Language"), 24, 392);
     state->languageCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         180, 388, 210, 120, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_LANGUAGE)),
         instance, nullptr);
@@ -281,6 +296,17 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     SendMessageW(state->languageCombo, CB_SETCURSEL,
                  static_cast<WPARAM>(initial.settings.uiLanguage), 0);
 
+    state->themeLabel = makeLabel(initial.english ? L"App theme" : L"앱 테마", 600, 140);
+    state->themeCombo = CreateWindowExW(
+        0, L"COMBOBOX", nullptr, kSettingsDropdownStyle,
+        600, 164, 376, 120, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_THEME)), instance, nullptr);
+    SendMessageW(state->themeCombo, CB_ADDSTRING, 0,
+        reinterpret_cast<LPARAM>(initial.english ? L"Dark" : L"다크"));
+    SendMessageW(state->themeCombo, CB_ADDSTRING, 0,
+        reinterpret_cast<LPARAM>(initial.english ? L"Light" : L"라이트"));
+    SendMessageW(state->themeCombo, CB_SETCURSEL, initial.settings.settingsLightTheme ? 1 : 0, 0);
+
     state->skipStartupCheck = CreateWindowExW(
         0, L"BUTTON", text(L"다음 실행부터 바로 시작"),
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
@@ -292,12 +318,13 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                  initial.settings.skipStartupSettings
                      ? BST_CHECKED : BST_UNCHECKED, 0);
     state->skipStartupHint = CreateWindowExW(
-        0, L"STATIC", text(
-            L"저장된 설정으로 바로 실행 · Shift 실행 또는 F2로 설정 열기"),
+        0, L"STATIC", initial.english
+            ? L"Uses saved settings. Hold Shift at launch or press F2 to return here."
+            : L"저장된 설정으로 실행합니다. Shift를 누른 채 실행하거나 F2로 설정을 여세요.",
         WS_CHILD | WS_VISIBLE | SS_LEFTNOWORDWRAP,
         44, 424, 431, 42, hwnd, nullptr, instance, nullptr);
     state->checkForUpdatesCheck = CreateWindowExW(
-        0, L"BUTTON", text(L"업데이트 자동 확인 (시작 후 백그라운드)"),
+        0, L"BUTTON", initial.english ? L"Check for updates automatically" : L"업데이트 자동 확인",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         24, 466, 451, 28, hwnd,
         reinterpret_cast<HMENU>(
@@ -308,16 +335,54 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                      ? BST_CHECKED : BST_UNCHECKED, 0);
 
     state->guideShortcutsTitle = makeLabel(
-        text(L"단축키"), 34, 62);
-    state->guideText = CreateWindowExW(
-        0, L"STATIC", viewer_help::Shortcuts(initial.english),
-        WS_CHILD | WS_VISIBLE | SS_LEFT,
-        34, 84, 400, 220, hwnd, nullptr, instance, nullptr);
+        initial.english ? L"Keyboard shortcuts" : L"키보드 단축키", 34, 62);
+    for (size_t i = 0; i < viewer_help::kShortcuts.size(); ++i) {
+        const auto& shortcut = viewer_help::kShortcuts[i];
+        state->guideKeys[i] = CreateWindowExW(0, L"STATIC", shortcut.key,
+            WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
+            0, 0, 40, 23, hwnd, nullptr, instance, nullptr);
+        state->guideDescriptions[i] = CreateWindowExW(0, L"STATIC",
+            initial.english ? shortcut.english : shortcut.korean,
+            WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
+            0, 0, 264, 29, hwnd, nullptr, instance, nullptr);
+    }
+    state->guideVideoHint = makeLabel(viewer_help::VideoOnlyHint(initial.english), 34, 84);
     state->guideDiagnosticsTitle = makeLabel(
-        text(L"진단 · 문제 해결"), 505, 62);
+        initial.english ? L"Diagnostics" : L"진단", 505, 62);
     state->screenshotTitle = makeLabel(text(L"스크린샷 (F12)"), 505, 470);
+    state->videoRefreshButton = CreateWindowExW(0, L"BUTTON",
+        initial.english ? L"Refresh" : L"새로고침",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+        468, 104, 84, 28, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_VIDEO_REFRESH)), instance, nullptr);
+    state->vsrCheck = CreateWindowExW(0, L"BUTTON",
+        L"NVIDIA VSR · F6",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+        34, 444, 295, 26, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_VSR)), instance, nullptr);
+    SendMessageW(state->vsrCheck, BM_SETCHECK,
+        initial.settings.vsrEnabled ? BST_CHECKED : BST_UNCHECKED, 0);
+    state->vsrGuideButton = CreateWindowExW(0, L"BUTTON",
+        initial.english ? L"Setup guide" : L"설정 안내",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+        340, 444, 120, 26, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_VSR_GUIDE)), instance, nullptr);
+    state->vsrCaptureLabel = makeLabel(initial.english ? L"VSR capture" : L"VSR 캡처 해상도", 576, 420);
+    state->vsrCaptureCombo = CreateWindowExW(0, L"COMBOBOX", nullptr,
+        kSettingsDropdownStyle,
+        748, 416, 178, 150, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_VSR_CAPTURE)), instance, nullptr);
+    for (const auto& preset : initial.videoPresets) {
+        const LRESULT index = SendMessageW(state->vsrCaptureCombo, CB_ADDSTRING, 0,
+            reinterpret_cast<LPARAM>(preset.label));
+        if (preset.preset == initial.settings.vsrCapturePreset)
+            SendMessageW(state->vsrCaptureCombo, CB_SETCURSEL, index, 0);
+    }
+    state->vsrStatus = makeLabel(initial.english
+        ? L"NV12 / MJPEG SDR · F6 toggles the effect"
+        : L"NV12 / MJPEG SDR · F6 효과만 전환", 34, 474);
     state->screenshotClipboardCheck = CreateWindowExW(
-        0, L"BUTTON", text(L"스크린샷 저장 시 클립보드에도 복사"),
+        0, L"BUTTON", initial.english ? L"Also copy to clipboard" : L"클립보드에도 복사",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         505, 494, 400, 28, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SCREENSHOT_CLIPBOARD)),
@@ -325,19 +390,19 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     SendMessageW(state->screenshotClipboardCheck, BM_SETCHECK,
         initial.settings.screenshotClipboard ? BST_CHECKED : BST_UNCHECKED, 0);
     state->screenshotHelp = CreateWindowExW(
-        0, L"STATIC", text(L"입력 해상도 PNG\r\nHDR → SDR · F1 도움말"),
+        0, L"STATIC", initial.english ? L"Source-size PNG\r\nHDR to SDR" : L"입력 해상도 PNG\r\nHDR은 SDR로 저장",
         WS_CHILD | WS_VISIBLE | SS_LEFT, 705, 530, 200, 36,
         hwnd, nullptr, instance, nullptr);
     state->screenshotFolderButton = CreateWindowExW(
-        0, L"BUTTON", text(L"스크린샷 폴더 열기"),
+        0, L"BUTTON", initial.english ? L"Open folder" : L"저장 폴더 열기",
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
         505, 530, 185, 28, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SCREENSHOT_FOLDER)),
         instance, nullptr);
     state->guideDiagnosticsText = CreateWindowExW(
-        0, L"STATIC", text(
-            L"문제가 생길 때만 로그 저장을 켜고 같은 문제를 재현하세요.\r\n"
-            L"로그는 사용자 폴더의 logs에 저장됩니다."),
+        0, L"STATIC", initial.english
+            ? L"Enable log saving, then reproduce the issue.\r\nAttach the file from the logs folder when reporting it."
+            : L"로그 저장을 켠 뒤 증상을 다시 재현하세요.\r\n문의할 때 로그 폴더의 파일을 첨부해 주세요.",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
         505, 84, 360, 70, hwnd, nullptr, instance, nullptr);
     state->guideLogFolderButton = CreateWindowExW(
@@ -355,9 +420,9 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         WS_CHILD | WS_VISIBLE | SS_LEFTNOWORDWRAP,
         34, 76, 400, 24, hwnd, nullptr, instance, nullptr);
     state->updateText = CreateWindowExW(
-        0, L"STATIC", text(
-            L"자동 확인은 시작 후 백그라운드에서 최신 릴리스를 확인합니다. "
-            L"새 버전이 있으면 공식 설치 파일 다운로드를 안내합니다."),
+        0, L"STATIC", initial.english
+            ? L"Checks run in the background after startup.\r\nYou choose whether to download a new version."
+            : L"실행 후 백그라운드에서 새 버전을 확인합니다.\r\n다운로드는 안내를 확인한 뒤 선택할 수 있습니다.",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
         34, 110, 760, 70, hwnd, nullptr, instance, nullptr);
     state->updateNowButton = CreateWindowExW(
@@ -372,13 +437,13 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         235, 234, 650, 24, hwnd, nullptr, instance, nullptr);
     state->versionWatermark = CreateWindowExW(
         0, L"STATIC", initial.versionLabel,
-        WS_CHILD | WS_VISIBLE | SS_LEFTNOWORDWRAP,
+        WS_CHILD | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
         24, 596, 260, 20, hwnd, nullptr, instance, nullptr);
 
     state->presentationLabel = makeLabel(text(L"화면 표시 방식"), 24, 274);
     state->presentationCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         180, 270, 210, 120, hwnd,
         reinterpret_cast<HMENU>(
             static_cast<INT_PTR>(IDC_SETTINGS_PRESENTATION)),
@@ -403,7 +468,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     state->displayMonitorLabel = makeLabel(
         initial.english ? L"Display monitor" : L"표시 모니터", 505, 124);
     state->displayMonitorCombo = CreateWindowExW(
-        0, L"COMBOBOX", nullptr, WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        0, L"COMBOBOX", nullptr, kSettingsDropdownStyle,
         630, 120, 255, 180, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_DISPLAY_MONITOR)),
         instance, nullptr);
@@ -443,7 +508,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     state->captureDeviceLabel = makeLabel(text(L"캡처 장치"), 430, 68);
     state->captureDeviceCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         550, 64, 245, 220, hwnd,
         reinterpret_cast<HMENU>(
             static_cast<INT_PTR>(IDC_SETTINGS_CAPTURE_DEVICE)),
@@ -474,7 +539,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         text(L"캡처 오디오 장치"), 430, 112);
     state->captureAudioDeviceCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         550, 108, 245, 220, hwnd,
         reinterpret_cast<HMENU>(
             static_cast<INT_PTR>(IDC_SETTINGS_CAPTURE_AUDIO_DEVICE)),
@@ -496,13 +561,13 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                  selectedCaptureAudioDevice, 0);
     state->captureAudioStatus = CreateWindowExW(
         0, L"STATIC", text(L"내부 오디오 확인 중…"),
-        WS_CHILD | SS_LEFTNOWORDWRAP,
+        WS_CHILD | SS_LEFTNOWORDWRAP | SS_CENTERIMAGE,
         550, 108, 245, 24, hwnd, nullptr, instance, nullptr);
 
     state->videoLabel = makeLabel(text(L"캡처 해상도"), 430, 156);
     state->videoCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         550, 152, 245, 120, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_VIDEO)), instance, nullptr);
     for (const auto& info : initial.videoPresets) {
@@ -522,7 +587,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     state->pixelFormatLabel = makeLabel(text(L"픽셀 포맷"), 430, 156);
     state->pixelFormatCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         550, 152, 245, 160, hwnd,
         reinterpret_cast<HMENU>(
             static_cast<INT_PTR>(IDC_SETTINGS_PIXEL_FORMAT)),
@@ -530,7 +595,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     state->frameRateLabel = makeLabel(text(L"프레임"), 430, 200);
     state->frameRateCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         550, 196, 245, 200, hwnd,
         reinterpret_cast<HMENU>(
             static_cast<INT_PTR>(IDC_SETTINGS_FRAME_RATE)),
@@ -544,7 +609,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     state->scalingLabel = makeLabel(text(L"화면 확대 방식"), 430, 274);
     state->scalingCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         550, 270, 245, 120, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SCALING)),
         instance, nullptr);
@@ -559,8 +624,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         text(L"전체화면 커서"), 505, 336);
     state->fullscreenCursorCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS |
-            CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle | WS_CLIPSIBLINGS,
         630, 332, 255, 120, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(
             IDC_SETTINGS_FULLSCREEN_CURSOR)),
@@ -604,7 +668,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     state->hdrChromaLabel = makeLabel(text(L"HDR 색차 배치"), 34, 414);
     state->hdrChromaCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         190, 410, 240, 150, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_HDR_CHROMA)),
         instance, nullptr);
@@ -634,7 +698,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         text(L"MJPEG 색상 해석"), 24, 376);
     state->mjpegColorCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
-        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_TABSTOP,
+        kSettingsDropdownStyle,
         190, 372, 240, 150, hwnd,
         reinterpret_cast<HMENU>(
             static_cast<INT_PTR>(IDC_SETTINGS_MJPEG_COLOR)),
@@ -675,15 +739,18 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         SettingsHelpText(SettingsHelpTopic::MjpegColor, initial.english));
 
     state->pixelCheck = CreateWindowExW(
-        0, L"BUTTON", text(L"Pixel-perfect (1:1 · 창 크기 고정)"),
+        0, L"BUTTON", L"Pixel-perfect (1:1)",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         24, 362, 250, 28, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_PIXEL)), instance, nullptr);
     SendMessageW(state->pixelCheck, BM_SETCHECK,
                  initial.settings.pixelPerfect ? BST_CHECKED : BST_UNCHECKED, 0);
+    AddSettingsTooltip(state, hwnd, state->pixelCheck, initial.english
+        ? L"Locks the selected size. With VSR enabled, this is display size; otherwise it is 1:1 capture size. Relative-size behavior across monitors is separate."
+        : L"선택한 크기로 창을 고정합니다. VSR을 켜면 표시 해상도, 끄면 입력 1:1 크기입니다. 모니터 이동 시 상대적 창 크기 유지는 별도 옵션입니다.");
 
     state->relativeSizeCheck = CreateWindowExW(
-        0, L"BUTTON", text(L"모니터 이동 시 상대적 창 크기 유지 (독립 옵션)"),
+        0, L"BUTTON", initial.english ? L"Keep window size proportional across monitors" : L"모니터에 맞춰 상대적 창 크기 유지",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         24, 396, 390, 28, hwnd,
         reinterpret_cast<HMENU>(
@@ -700,7 +767,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         44, 424, 411, 24, hwnd, nullptr, instance, nullptr);
 
     state->borderlessCheck = CreateWindowExW(
-        0, L"BUTTON", text(L"제목 표시줄 숨기기 (borderless 창)"),
+        0, L"BUTTON", initial.english ? L"Hide title bar (borderless)" : L"제목 표시줄 숨기기 (보더리스)",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         24, 430, 300, 28, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_BORDERLESS)),
@@ -709,7 +776,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                  initial.settings.borderlessWindow ? BST_CHECKED : BST_UNCHECKED, 0);
 
     state->windowSnapCheck = CreateWindowExW(
-        0, L"BUTTON", text(L"창을 모니터 가장자리에 스냅 (권장)"),
+        0, L"BUTTON", initial.english ? L"Snap to monitor edges" : L"모니터 가장자리에 창 맞추기",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         24, 464, 330, 28, hwnd,
         reinterpret_cast<HMENU>(
@@ -719,7 +786,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                  initial.settings.windowSnap ? BST_CHECKED : BST_UNCHECKED, 0);
 
     state->saveLogCheck = CreateWindowExW(
-        0, L"BUTTON", text(L"진단 로그 파일 저장 (사용자 폴더)"),
+        0, L"BUTTON", initial.english ? L"Save diagnostic log" : L"진단 로그 저장",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         430, 374, 365, 28, hwnd,
         reinterpret_cast<HMENU>(
@@ -747,6 +814,94 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         0, L"BUTTON", text(L"취소"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
         375, 520, 80, 30, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_CANCEL)), instance, nullptr);
+
+    // Long localized options retain their complete accessible labels and wrap
+    // naturally in the narrower two-column layout.
+    for (HWND checkbox : {state->volumeBoostCheck, state->surround51Check,
+                          state->forceHdr10Check, state->saveLogCheck}) {
+        SetWindowLongPtrW(checkbox, GWL_STYLE,
+            GetWindowLongPtrW(checkbox, GWL_STYLE) | BS_MULTILINE);
+    }
+    for (HWND status : {state->vsrStatus, state->updateStatus}) {
+        SetWindowLongPtrW(status, GWL_STYLE,
+            (GetWindowLongPtrW(status, GWL_STYLE) & ~SS_TYPEMASK) | SS_LEFT);
+    }
+    // These are descriptive labels, never access-key labels. Literal '&'
+    // appears in English help and must not disappear as a mnemonic prefix.
+    for (HWND child = GetWindow(hwnd, GW_CHILD); child;
+         child = GetWindow(child, GW_HWNDNEXT)) {
+        wchar_t className[32]{};
+        GetClassNameW(child, className, ARRAYSIZE(className));
+        if (_wcsicmp(className, L"STATIC") == 0)
+            SetWindowLongPtrW(child, GWL_STYLE,
+                GetWindowLongPtrW(child, GWL_STYLE) | SS_NOPREFIX);
+    }
+
+    // Native dialog navigation follows sibling Z order, not screen position.
+    // Keep each label directly before its field: native accessibility discovers
+    // combo names from that preceding static. Related help follows the field.
+    // Whole groups retain the same reading order as the visual pages.
+    // Hidden/disabled fields are skipped by Windows; no input is intercepted.
+    const HWND readingOrder[] = {
+        state->brandLabel, state->tabControl, state->pageTitle, state->pageSubtitle,
+
+        state->videoCaptureSection, state->videoRefreshButton,
+        state->captureDeviceLabel, state->captureDeviceCombo,
+        state->captureAudioDeviceLabel, state->captureAudioDeviceCombo, state->captureAudioStatus,
+        state->videoLabel, state->videoCombo, state->frameRateLabel, state->frameRateCombo,
+        state->pixelFormatLabel, state->pixelFormatCombo, state->videoCapabilityStatus,
+        state->forceHdr10Check, state->forceHdr10Help,
+        state->hdrChromaLabel, state->hdrChromaCombo, state->hdrChromaHelp,
+        state->mjpegColorLabel, state->mjpegColorCombo, state->mjpegColorHelp,
+        state->videoDisplaySection,
+        state->presentationLabel, state->presentationCombo, state->presentationHelp,
+        state->displayMonitorLabel, state->displayMonitorCombo, state->pixelCheck,
+        state->scalingLabel, state->scalingCombo,
+        state->vsrCheck, state->vsrGuideButton, state->vsrCaptureLabel, state->vsrCaptureCombo, state->vsrStatus,
+        state->screenshotTitle, state->screenshotClipboardCheck,
+        state->screenshotFolderButton, state->screenshotHelp,
+
+        state->audioOutputSection,
+        state->audioLabel, state->audioCombo, state->audioOutputLabel, state->audioOutputCombo,
+        state->bufferLabel, state->bufferCombo, state->audioStatus, state->exclusiveTestButton,
+        state->audioPlaybackSection,
+        state->volumeHudLabel, state->volumeHudCombo,
+        state->volumeBoostCheck, state->volumeBoostHelp, state->muteBackgroundCheck,
+        state->audioOnlyCheck, state->surround51Check, state->surround51Hint,
+        state->audioStabilitySection,
+        state->driftLabel, state->driftCombo, state->driftHelp,
+        state->pcmQueueLabel, state->pcmQueueCombo, state->pcmQueueHelp,
+
+        state->videoWindowSection,
+        state->relativeSizeCheck, state->relativeSizeWarning,
+        state->borderlessCheck, state->windowSnapCheck,
+        // Keep the hint above the combo in Z order, including before layout's
+        // existing hint-to-front safeguard, and the actual label next to it.
+        state->fullscreenCursorHint, state->fullscreenCursorLabel, state->fullscreenCursorCombo,
+
+        state->guideShortcutsTitle, state->guideVideoHint,
+        state->guideDiagnosticsTitle, state->guideDiagnosticsText,
+        state->saveLogCheck, state->showConsoleCheck, state->guideLogFolderButton,
+
+        state->appPreferencesSection, state->languageLabel, state->languageCombo,
+        state->themeLabel, state->themeCombo,
+        state->skipStartupCheck, state->skipStartupHint,
+        state->updateTitle, state->updateText, state->checkForUpdatesCheck,
+        state->updateNowButton, state->updateStatus,
+
+        state->versionWatermark, state->startButton, state->cancelButton,
+    };
+    for (HWND control : readingOrder) {
+        if (control) SetWindowPos(control, HWND_BOTTOM, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW);
+        if (control == state->guideShortcutsTitle) {
+            for (size_t i = 0; i < state->guideKeys.size(); ++i) {
+                for (HWND row : {state->guideKeys[i], state->guideDescriptions[i]})
+                    SetWindowPos(row, HWND_BOTTOM, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW);
+            }
+        }
+    }
 }
 
 } // namespace llcv::settings_ui

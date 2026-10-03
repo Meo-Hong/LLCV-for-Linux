@@ -12,6 +12,8 @@ static bool reverseMonitorEnumeration = false;
 static LONG_PTR simulatedStyle = WS_POPUP;
 static RECT simulatedWindowRect;
 static POINT cursorPoint;
+static bool shiftHeld = false;
+static SHORT FakeGetAsyncKeyState(int key) { return key == VK_SHIFT && shiftHeld ? static_cast<SHORT>(-32768) : 0; }
 static HWND testWindow = reinterpret_cast<HWND>(0x12345);
 static HWND simulatedCapture = nullptr;
 static int audioDragMoves = 0;
@@ -87,6 +89,7 @@ static BOOL FakeSetWindowPos(HWND,HWND,int,int,int,int,UINT);
 #define GetDpiForMonitor FakeGetDpiForMonitor
 #define GetDpiForWindow FakeGetDpiForWindow
 #define GetCursorPos FakeGetCursorPos
+#define GetAsyncKeyState FakeGetAsyncKeyState
 #define ScreenToClient FakeScreenToClient
 #define ClientToScreen FakeClientToScreen
 #define WindowFromPoint FakeWindowFromPoint
@@ -110,6 +113,7 @@ static BOOL FakeSetWindowPos(HWND,HWND,int,int,int,int,UINT);
 #undef GetDpiForMonitor
 #undef GetDpiForWindow
 #undef GetCursorPos
+#undef GetAsyncKeyState
 #undef ScreenToClient
 #undef ClientToScreen
 #undef WindowFromPoint
@@ -184,9 +188,150 @@ static void DpiTo(UINT dpi,int target) {
     RECT r{x,y,x+size.cx,y+size.cy};
     WndProc(testWindow,WM_DPICHANGED,MAKELONG(dpi,dpi),reinterpret_cast<LPARAM>(&r));
 }
+static void TestSymmetricEdgeSnap() {
+    const VirtualMonitor savedMonitors[]{monitors[0], monitors[1]};
+    unsigned cases = 0;
+    for (const UINT dpi : {96u, 120u, 144u, 192u})
+    for (const bool audioOnly : {false, true})
+    for (const bool negativeOrigin : {false, true})
+    for (int edge = 0; edge < 4; ++edge) {
+        monitors[0] = {negativeOrigin ? RECT{-1920,-1080,0,0} : RECT{0,0,1920,1080}, dpi};
+        const RECT work = monitors[0].rect;
+        const int distance = MulDiv(kWindowSnapDistanceDip, dpi, 96);
+        const auto rectAt = [&](int offset) {
+            RECT r{work.left + 300, work.top + 300, work.left + 940, work.top + 660};
+            if (edge == 0) { r.left = work.left + offset; r.right = r.left + 640; }
+            if (edge == 1) { r.right = work.right + offset; r.left = r.right - 640; }
+            if (edge == 2) { r.top = work.top + offset; r.bottom = r.top + 360; }
+            if (edge == 3) { r.bottom = work.bottom + offset; r.top = r.bottom - 360; }
+            return r;
+        };
+        const auto offsetOf = [&](const RECT& r) {
+            return edge == 0 ? r.left - work.left : edge == 1 ? r.right - work.right :
+                edge == 2 ? r.top - work.top : r.bottom - work.bottom;
+        };
+        for (int initial : {-distance, 0, distance}) for (int direction : {-1, 1}) {
+            Reset(false, false); ResetWindowSnapState();
+            g_settings.windowSnap = true; g_settings.audioOnly = audioOnly;
+            const POINT anchor{work.left + 500, work.top + 400};
+            cursorPoint = anchor;
+            RECT candidate = rectAt(direction * (distance + 1));
+            ApplyWindowEdgeSnap(testWindow, candidate);
+            Require(offsetOf(candidate) == direction * (distance + 1), "no attraction outside snap distance");
+            candidate = rectAt(initial);
+            ApplyWindowEdgeSnap(testWindow, candidate);
+            Require(offsetOf(candidate) == 0, "snap inside and exactly at either zone boundary");
+            // Feed back the snapped rectangle to exercise the native moving-
+            // rectangle feedback case, not just ideal absolute proposals.
+            for (int offset : {0, direction * (distance - 1), direction * distance,
+                               direction * (distance + 1)}) {
+                cursorPoint = anchor;
+                if (edge < 2) cursorPoint.x += offset - initial;
+                else cursorPoint.y += offset - initial;
+                candidate = rectAt(0);
+                ApplyWindowEdgeSnap(testWindow, candidate);
+                Require(offsetOf(candidate) == (std::abs(offset) <= distance ? 0 : offset),
+                    "release uses the same edge-distance boundary, without a second cursor dead zone");
+                Require(candidate.right - candidate.left == 640 && candidate.bottom - candidate.top == 360,
+                    "snap/release never changes window size");
+            }
+            candidate = rectAt(direction * distance);
+            ApplyWindowEdgeSnap(testWindow, candidate);
+            Require(offsetOf(candidate) == 0, "can reattach immediately after returning into zone");
+            shiftHeld = true;
+            candidate = rectAt(5); ApplyWindowEdgeSnap(testWindow, candidate);
+            Require(offsetOf(candidate) == 5 && g_windowSnapState.horizontal == HorizontalSnapEdge::None &&
+                g_windowSnapState.vertical == VerticalSnapEdge::None, "Shift bypass clears latches");
+            shiftHeld = false;
+            ++cases;
+        }
+    }
+    monitors[0] = {{0,0,1920,1080}, 96};
+    monitors[1] = {{1920,0,4480,1440}, 144};
+    Reset(false, false); ResetWindowSnapState(); g_settings.windowSnap = true;
+    cursorPoint = {500,400}; RECT corner{10,10,650,370};
+    ApplyWindowEdgeSnap(testWindow, corner);
+    cursorPoint.x += 11;
+    ApplyWindowEdgeSnap(testWindow, corner);
+    Require(corner.left == 21 && corner.top == 0, "corner axes release independently");
+    cursorPoint = {2420,400}; corner = {1930,100,2570,460};
+    ApplyWindowEdgeSnap(testWindow, corner);
+    Require(corner.left == 1920, "monitor crossing never retains the old monitor edge");
+    for (bool fullscreen : {false, true}) {
+        g_fullscreen = fullscreen; g_settings.windowSnap = fullscreen;
+        corner = {1930,100,2570,460}; ApplyWindowEdgeSnap(testWindow, corner);
+        Require(corner.left == 1930 && g_windowSnapState.horizontal == HorizontalSnapEdge::None,
+            "disabled snap and fullscreen bypass magnetism");
+    }
+    monitors[0] = savedMonitors[0]; monitors[1] = savedMonitors[1];
+    Reset(false, false); ResetWindowSnapState();
+    std::printf("Symmetric snap: %u edge/DPI/mode/origin/direction cases plus corner, bypass and monitor crossing passed.\n", cases);
+}
+
+static void TestF5SplitResolutionBaseline() {
+    const auto savedSettings = g_settings;
+    const bool savedSuppress = g_suppressSettingsSave;
+    const bool savedLatched = g_resolutionPlanLatched;
+    const bool savedVsrPlan = g_vsrResolutionPlan;
+    const auto savedCapture = g_capturePreset;
+    const VirtualMonitor savedMonitors[]{monitors[0], monitors[1]};
+    g_suppressSettingsSave = true;
+    unsigned cases = 0;
+    for (const UINT dpi : {96u, 144u, 192u})
+    for (const auto capture : {VideoPreset::R1280x720, VideoPreset::R1920x1080})
+    for (const auto display : {VideoPreset::R1920x1080, VideoPreset::R2560x1440,
+                               VideoPreset::R3840x2160}) {
+        monitors[0] = {{0, 0, 2560, 1440}, 96};
+        monitors[1] = {{2560, 0, 5120, 1440}, dpi};
+        Reset(true, true);
+        g_settings.vsrEnabled = true;
+        g_settings.vsrCapturePreset = capture;
+        g_settings.videoPreset = display;
+        LatchVideoResolutionPlan();
+        const auto source = CurrentCapturePreset();
+        g_settings.relativeWindowScalePpm = RelativeScaleForMonitor(MonitorHandle(0));
+        ApplyRect({100, 100, 2020, 1180});
+        WndProc(testWindow, WM_RESTORE_ONE_TO_ONE, 0, 0);
+        const int expectedScale = source.width * kRelativeScaleUnit / 2560;
+        Require(g_settings.relativeWindowScalePpm == expectedScale,
+                "F5 relative baseline follows capture, not VSR display resolution");
+        for (const int target : {1, 0, 1, 0}) {
+            Enter(); MoveTo(target); Leave();
+            Require(simulatedWindowRect.right - simulatedWindowRect.left == source.width &&
+                    simulatedWindowRect.bottom - simulatedWindowRect.top == source.height &&
+                    g_settings.relativeWindowScalePpm == expectedScale,
+                    "F5 size survives same-resolution monitor round trips at mixed DPI");
+        }
+        // The default helper must still describe the selected display size;
+        // only F5 explicitly establishes a capture-size baseline.
+        Require(RelativeScaleForMonitor(MonitorHandle(0)) ==
+                    (std::min)(static_cast<int64_t>(kRelativeScaleUnit),
+                        static_cast<int64_t>(CurrentVideoPreset().width) * kRelativeScaleUnit / 2560),
+                "ordinary display-size policy remains unchanged");
+        ++cases;
+    }
+    // Matching-monitor fullscreen must also use capture's 100% baseline.
+    monitors[0] = {{0, 0, 1920, 1080}, 96};
+    g_settings.vsrCapturePreset = VideoPreset::R1920x1080;
+    g_settings.videoPreset = VideoPreset::R1280x720;
+    LatchVideoResolutionPlan();
+    Require(RelativeScaleForMonitor(MonitorHandle(0), true) == kRelativeScaleUnit,
+            "matching capture monitor has a full-size relative baseline");
+    monitors[0] = savedMonitors[0]; monitors[1] = savedMonitors[1];
+    Reset();
+    g_settings = savedSettings;
+    g_resolutionPlanLatched = savedLatched;
+    g_vsrResolutionPlan = savedVsrPlan;
+    g_capturePreset = savedCapture;
+    g_suppressSettingsSave = savedSuppress;
+    std::printf("PASS %u F5 capture/display/DPI cases with four monitor crossings each.\n", cases);
+}
+
 int main(int argc, char** argv) {
     monitors[0]={{0,0,1920,1080},96};
     monitors[1]={{1920,0,4480,1440},144};
+    TestSymmetricEdgeSnap();
+    TestF5SplitResolutionBaseline();
     // Placement regressions run in the regular suite, not just review mode.
     unsigned placementCases=0;
     for(int layout=0;layout<4;++layout)
@@ -625,15 +770,20 @@ int main(int argc, char** argv) {
     FillRect(panelDc, &panelPixels,
              reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
     g_audioOsdVisible.store(false, std::memory_order_release);
-    SetViewportOrgEx(panelDc, -panel.left, -panel.top, nullptr);
-    PaintAudioOnlyView(panelDc, panel);
-    SetViewportOrgEx(panelDc, 0, 0, nullptr);
-    Require(GetPixel(panelDc, MulDiv(365, panelWidth, 380),
-                     MulDiv(200, panelHeight, 230)) == RGB(12, 15, 19),
-            "audio-only view renders its full-size background");
-    Require(GetPixel(panelDc, MulDiv(200, panelWidth, 380),
-                     MulDiv(94, panelHeight, 230)) == RGB(30, 36, 44),
-            "audio-only master control renders at its scaled size");
+    for (bool light : {false,true}) {
+        g_settings.settingsLightTheme = light;
+        const auto palette = llcv::ui::PaletteForTheme(light);
+        SetViewportOrgEx(panelDc, -panel.left, -panel.top, nullptr);
+        PaintAudioOnlyView(panelDc, panel);
+        SetViewportOrgEx(panelDc, 0, 0, nullptr);
+        Require(GetPixel(panelDc, MulDiv(365, panelWidth, 380),
+                         MulDiv(200, panelHeight, 230)) == palette.kBackground,
+                "audio-only background follows saved app theme through the real controller");
+        Require(GetPixel(panelDc, MulDiv(200, panelWidth, 380),
+                         MulDiv(94, panelHeight, 230)) == palette.kControl,
+                "audio-only master control renders at its scaled size in both themes");
+    }
+    g_settings.settingsLightTheme = false;
     g_settings.audioOnly = true;
     ToggleAudioOsd();
     Require(!g_audioOsdVisible.load(std::memory_order_acquire),

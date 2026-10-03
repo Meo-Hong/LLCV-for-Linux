@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.24)
-project(LowLatencyCaptureViewer VERSION 1.3.1 LANGUAGES CXX)
+project(LowLatencyCaptureViewer VERSION 2.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_WIN32_EXECUTABLE ON)
+add_compile_definitions(LLCV_VSR_FEATURE)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 add_executable(LowLatencyCaptureViewer
@@ -30,6 +31,7 @@ add_executable(LowLatencyCaptureViewer
     src/ui/AudioOnlyView.cpp
     src/ui/PresentationModeUi.cpp
     src/ui/SettingsView.cpp
+    src/ui/SettingsTheme.cpp
     src/ui/SettingsDialogControls.cpp
     src/ui/UiText.cpp
     src/ui/ViewerHelpWindow.cpp
@@ -39,6 +41,7 @@ add_executable(LowLatencyCaptureViewer
     src/video/MjpegDecoder.cpp
     src/video/VideoColor.cpp
     src/video/HdrDisplay.cpp
+    src/video/VsrExperiment.cpp
 )
 
 target_include_directories(LowLatencyCaptureViewer PRIVATE
@@ -49,15 +52,41 @@ target_include_directories(LowLatencyCaptureViewer PRIVATE
 )
 
 # Keep help layout ABI and shared shortcut text current with localized MSVC scans.
-set_property(SOURCE src/ui/AudioOnlyView.cpp src/ui/ViewerHelpWindow.cpp tests/ViewerHelpTests.cpp
-    APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/DarkPalette.h")
+set_property(SOURCE src/main.cpp src/ui/AudioOnlyView.cpp src/ui/ViewerHelpWindow.cpp
+    src/ui/SettingsTheme.cpp tests/ViewerHelpTests.cpp tests/AudioOnlyViewTests.cpp
+    APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/AppPalette.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/AudioOnlyView.h")
 set_property(SOURCE src/main.cpp src/ui/ViewerHelpWindow.cpp src/ui/SettingsDialogControls.cpp
+    tests/SettingsViewTests.cpp tests/ViewerHelpTests.cpp
     APPEND PROPERTY OBJECT_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerHelpWindow.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerShortcuts.h")
+set_property(SOURCE src/main.cpp src/ui/SettingsView.cpp src/ui/SettingsTheme.cpp
+    src/ui/SettingsDialogControls.cpp tests/SettingsViewTests.cpp tests/SettingsThemeTests.cpp
+    tests/AudioCallbackTests.cpp tests/HdrPipelineTests.cpp tests/MonitorMoveTests.cpp
+    tests/SharedReplayTests.cpp tests/VsrExperimentTests.cpp APPEND PROPERTY OBJECT_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsView.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsTheme.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsFonts.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/OverlayStyle.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsModeCache.h")
+set_property(SOURCE tests/SettingsModeCacheTests.cpp APPEND PROPERTY OBJECT_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsModeCache.h")
+set_property(SOURCE tests/VsrExperimentTests.cpp APPEND PROPERTY OBJECT_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/VsrTimingValidation.inl")
 
 option(LLCV_HDR_FRAME_AUDIT "Build a private F8 single-frame HDR diagnostic (not for release)" OFF)
 option(LLCV_HDR_SCRGB_PROTOTYPE "Private direct P010 shader/scRGB comparison (not for release)" OFF)
+option(LLCV_VSR_EXPERIMENT "Private NVIDIA VSR A/B experiment (not for release)" OFF)
+if (LLCV_VSR_EXPERIMENT)
+    target_compile_definitions(LowLatencyCaptureViewer PRIVATE LLCV_VSR_EXPERIMENT)
+    set_property(SOURCE src/main.cpp APPEND PROPERTY OBJECT_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/video/VsrExperiment.h")
+    set_target_properties(LowLatencyCaptureViewer PROPERTIES OUTPUT_NAME "LowLatencyCaptureViewer_VSR_Test")
+    if (LLCV_HDR_SCRGB_PROTOTYPE OR LLCV_HDR_FRAME_AUDIT)
+        message(FATAL_ERROR "Build VSR and HDR experiments separately for unambiguous measurements")
+    endif()
+endif()
 if (LLCV_HDR_SCRGB_PROTOTYPE)
     set(LLCV_HDR_FRAME_AUDIT ON)
     target_compile_definitions(LowLatencyCaptureViewer PRIVATE LLCV_HDR_SCRGB_PROTOTYPE)
@@ -129,13 +158,14 @@ if (BUILD_TESTING)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerShortcuts.h")
     target_include_directories(ViewerHelpTests PRIVATE src)
     target_compile_definitions(ViewerHelpTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN WINVER=0x0A00 _WIN32_WINNT=0x0A00)
-    target_link_libraries(ViewerHelpTests PRIVATE user32 gdi32 dwmapi gdiplus)
+    target_link_libraries(ViewerHelpTests PRIVATE user32 gdi32 dwmapi gdiplus imm32)
     set_target_properties(ViewerHelpTests PROPERTIES WIN32_EXECUTABLE FALSE)
     if (MSVC)
         target_compile_options(ViewerHelpTests PRIVATE /W4 /EHsc /permissive- /utf-8)
     endif()
     add_test(NAME ViewerHelpTests COMMAND ViewerHelpTests)
-    set_tests_properties(ViewerHelpTests PROPERTIES TIMEOUT 30)
+    add_test(NAME ViewerHelpImeTests COMMAND ViewerHelpTests --with-ime)
+    set_tests_properties(ViewerHelpTests ViewerHelpImeTests PROPERTIES TIMEOUT 45)
     add_executable(ScreenshotTests tests/ScreenshotTests.cpp tests/HdrScreenshotReference.cpp
         src/screenshot/ScreenshotPixels.cpp src/screenshot/ScreenshotService.cpp)
     target_include_directories(ScreenshotTests PRIVATE src)
@@ -239,9 +269,41 @@ if (BUILD_TESTING)
         target_compile_options(SettingsViewTests PRIVATE /W4 /EHsc /permissive- /utf-8)
     endif()
     add_test(NAME SettingsViewTests COMMAND SettingsViewTests)
+    add_executable(SettingsModeCacheTests tests/SettingsModeCacheTests.cpp)
+    target_include_directories(SettingsModeCacheTests PRIVATE src)
+    set_target_properties(SettingsModeCacheTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME SettingsModeCacheTests COMMAND SettingsModeCacheTests)
+    set_tests_properties(SettingsModeCacheTests PROPERTIES TIMEOUT 15)
     # Native control creation is substantially slower than pure geometry tests,
     # especially when other replay tests run concurrently on CI.
     set_tests_properties(SettingsViewTests PROPERTIES TIMEOUT 120)
+    add_executable(SettingsThemeTests tests/SettingsThemeTests.cpp
+        src/ui/SettingsTheme.cpp src/ui/SettingsView.cpp src/ui/PresentationModeUi.cpp
+        src/ui/SettingsDialogControls.cpp src/ui/UiText.cpp)
+    target_include_directories(SettingsThemeTests PRIVATE src)
+    target_compile_definitions(SettingsThemeTests PRIVATE UNICODE _UNICODE NOMINMAX
+        WIN32_LEAN_AND_MEAN WINVER=0x0A00 _WIN32_WINNT=0x0A00)
+    target_link_libraries(SettingsThemeTests PRIVATE comctl32 dwmapi)
+    set_target_properties(SettingsThemeTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    if (MSVC)
+        target_compile_options(SettingsThemeTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+    endif()
+    add_test(NAME SettingsThemeTests COMMAND SettingsThemeTests)
+    # Hidden native fixture clicks can take 2 s each on the test host.
+    # Keep all 32 lifecycle checks; allow the
+    # measured ~70 s run instead of mistaking that finite work for a deadlock.
+    set_tests_properties(SettingsThemeTests PROPERTIES TIMEOUT 120)
+    # Local visual/keyboard QA with synthetic devices; never installed and
+    # never reads or saves a user's settings or opens capture/audio hardware.
+    get_target_property(settings_preview_sources SettingsThemeTests SOURCES)
+    add_executable(SettingsPreview WIN32 ${settings_preview_sources})
+    target_include_directories(SettingsPreview PRIVATE src)
+    target_compile_definitions(SettingsPreview PRIVATE LLCV_SETTINGS_PREVIEW
+        $<TARGET_PROPERTY:SettingsThemeTests,COMPILE_DEFINITIONS>)
+    target_link_libraries(SettingsPreview PRIVATE comctl32 dwmapi)
+    if (MSVC)
+        target_compile_options(SettingsPreview PRIVATE /W4 /EHsc /permissive- /utf-8)
+    endif()
     add_executable(LatestVideoSampleTests tests/LatestVideoSampleTests.cpp
         src/capture/LatestVideoSample.cpp
         src/video/DirectShowVideoFormat.cpp
@@ -267,6 +329,27 @@ if (BUILD_TESTING)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerShortcuts.h")
     get_target_property(audio_callback_sources LowLatencyCaptureViewer SOURCES)
     list(FILTER audio_callback_sources EXCLUDE REGEX "src/(main.cpp|app.rc|audio/AsioOutput.cpp)$")
+    if (WIN32)
+        add_executable(VsrExperimentTests tests/VsrExperimentTests.cpp ${audio_callback_sources})
+        target_compile_definitions(VsrExperimentTests PRIVATE LLCV_SETTINGS_MODE_TEST)
+        set_property(SOURCE tests/VsrExperimentTests.cpp APPEND PROPERTY OBJECT_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/video/VsrExperiment.h")
+        target_include_directories(VsrExperimentTests PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,INCLUDE_DIRECTORIES>)
+        target_compile_definitions(VsrExperimentTests PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,COMPILE_DEFINITIONS>)
+        target_link_libraries(VsrExperimentTests PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,LINK_LIBRARIES>)
+        set_target_properties(VsrExperimentTests PROPERTIES WIN32_EXECUTABLE FALSE)
+        if (MSVC)
+            target_compile_options(VsrExperimentTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+        endif()
+        add_test(NAME VsrExperimentTests COMMAND VsrExperimentTests)
+        set_tests_properties(VsrExperimentTests PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77 LABELS GPU)
+        add_test(NAME SettingsControllerTests COMMAND VsrExperimentTests --settings-controller)
+        set_tests_properties(SettingsControllerTests PROPERTIES TIMEOUT 30)
+    endif()
     add_executable(AudioCallbackTests tests/AudioCallbackTests.cpp ${audio_callback_sources})
     target_include_directories(AudioCallbackTests PRIVATE
         $<TARGET_PROPERTY:LowLatencyCaptureViewer,INCLUDE_DIRECTORIES>)
@@ -294,6 +377,8 @@ if (BUILD_TESTING)
     endif()
     add_test(NAME HdrPipelineTests COMMAND HdrPipelineTests)
     add_test(NAME SdrPipelineTests COMMAND HdrPipelineTests --sdr-only)
+    add_test(NAME OverlayUiTests COMMAND HdrPipelineTests --osd-ui)
+    set_tests_properties(OverlayUiTests PROPERTIES TIMEOUT 60 LABELS GPU)
     set_tests_properties(SdrPipelineTests PROPERTIES TIMEOUT 90 LABELS GPU)
     set_tests_properties(HdrPipelineTests PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77 LABELS GPU)
 
@@ -555,9 +640,31 @@ if (BUILD_TESTING)
         VideoMailboxStress VideoTransitionStress PROPERTIES TIMEOUT 30)
 endif()
 
+# AppSettings is shared across translation units. Localized MSVC include scans
+# must not leave stale objects with an older struct layout after adding a field.
+get_property(llcv_build_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+foreach(llcv_target IN LISTS llcv_build_targets)
+    get_target_property(llcv_sources ${llcv_target} SOURCES)
+    if("src/ui/SettingsView.cpp" IN_LIST llcv_sources OR
+       "src/ui/ViewerHelpWindow.cpp" IN_LIST llcv_sources OR
+       "src/ui/AudioOnlyView.cpp" IN_LIST llcv_sources)
+        target_sources(${llcv_target} PRIVATE src/ui/SettingsFonts.cpp src/ui/SettingsFonts.rc)
+    endif()
+    if("src/ui/SettingsTheme.cpp" IN_LIST llcv_sources)
+        target_link_libraries(${llcv_target} PRIVATE uxtheme)
+    endif()
+    foreach(llcv_source IN LISTS llcv_sources)
+        if(llcv_source MATCHES "\\.cpp$")
+            set_property(SOURCE ${llcv_source} APPEND PROPERTY OBJECT_DEPENDS
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/settings/AppSettings.h")
+        endif()
+    endforeach()
+endforeach()
+
 install(TARGETS LowLatencyCaptureViewer RUNTIME DESTINATION .)
 install(FILES LICENSE README.md README.ko.md DESIGN.txt BUILD_INFO.txt DEPENDENCIES.txt
         "실행안내.txt" GITHUB_PREP.md DESTINATION .)
 install(FILES third_party/asio/LICENSE.txt DESTINATION . RENAME ASIO-SDK-LICENSE.txt)
 install(FILES third_party/asio/HOST-LICENSE.txt DESTINATION . RENAME ASIO-HOST-LICENSE.txt)
+install(FILES third_party/pretendard/LICENSE.txt DESTINATION . RENAME PRETENDARD-LICENSE.txt)
 install(DIRECTORY docs DESTINATION .)

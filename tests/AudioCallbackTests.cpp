@@ -78,28 +78,49 @@ void TestAsioIntegerPacking() {
 void SaveMessage(const wchar_t* message) { savedMessage = message; }
 
 DWORD settingsProbeThread = 0;
-int settingsProbeCalls = 0;
-bool settingsProbeFails = false;
+std::atomic<int> settingsProbeCalls{0};
+std::atomic<bool> settingsProbeFails{false};
+HANDLE settingsProbeGate = nullptr;
 std::vector<PixelFormatSupport> SimulatedSettingsProbe(
     const std::wstring& id, int width, int height, HRESULT* status) {
-    Require(GetCurrentThreadId() == settingsProbeThread,
-            "video capability probe stays synchronous on settings caller thread");
+    Require(GetCurrentThreadId() != settingsProbeThread,
+            "video capability probe runs off the settings caller thread");
     ++settingsProbeCalls;
+    Require(WaitForSingleObject(settingsProbeGate, 2000) == WAIT_OBJECT_0,
+            "bounded simulated driver gate released by UI test");
     FakeVideoPin pin;
-    pin.countFails = settingsProbeFails;
+    pin.countFails = settingsProbeFails.load();
     pin.modes = {{id == L"device-A" ? 120 : 60, width, height}};
     return llcv::video::ProbePixelFormats(&pin, width, height, status);
 }
 
+LRESULT CALLBACK CapabilityReplayProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    // Use the actual completion/refresh controller, without WM_CREATE's
+    // hardware enumeration. Hidden fixture controls are supplied below.
+    if (message == WM_CREATE) return 0;
+    return SettingsWndProc(hwnd, message, wParam, lParam);
+}
+
 void TestSettingsCapabilityRefresh() {
     const auto saved = g_settings;
+    const bool savedSuppress = g_suppressSettingsSave;
+    g_suppressSettingsSave = true;
+    g_settings.audioOnly = false;
     g_settings.videoFrameRate = 0;
     g_settings.pixelFormat = VideoPixelFormat::Auto;
-    HWND parent = CreateWindowExW(0, L"STATIC", L"Hidden capability replay", 0,
-        0, 0, 320, 240, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
-    Require(parent != nullptr, "create hidden settings replay parent");
+    WNDCLASSW wc{};
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpfnWndProc = CapabilityReplayProc;
+    wc.lpszClassName = L"LLCV_CAPABILITY_REPLAY";
+    Require(RegisterClassW(&wc) != 0, "register capability replay class");
+    settingsProbeGate = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    Require(settingsProbeGate != nullptr, "create simulated driver gate");
     {
         SettingsDialogState state;
+        state.activeTab = SettingsTab::VideoWindow;
+        HWND parent = CreateWindowExW(0, wc.lpszClassName, L"Hidden capability replay", WS_POPUP,
+            0, 0, 320, 240, nullptr, nullptr, wc.hInstance, &state);
+        Require(parent != nullptr, "create hidden settings replay parent");
         auto control = [&](const wchar_t* type) {
             HWND child = CreateWindowExW(0, type, L"", WS_CHILD |
                 (std::wcscmp(type, L"COMBOBOX") == 0 ? CBS_DROPDOWNLIST : 0),
@@ -124,29 +145,82 @@ void TestSettingsCapabilityRefresh() {
         g_testVideoCapabilityProbe = SimulatedSettingsProbe;
         settingsProbeThread = GetCurrentThreadId();
         settingsProbeCalls = 0;
-        for (int iteration = 0; iteration < 1000; ++iteration) {
-            SendMessageW(state.captureDeviceCombo, CB_SETCURSEL, 1 + iteration % 2, 0);
-            SendMessageW(state.videoCombo, CB_SETCURSEL, iteration % ARRAYSIZE(kVideoPresets), 0);
-            settingsProbeFails = iteration % 5 == 0;
-            PopulatePixelFormatCombo(&state);
-            Require(settingsProbeCalls == iteration + 1,
-                    "each selection applies exactly one fresh synchronous query");
-            if (settingsProbeFails) {
+        settingsProbeFails = false;
+        int selectedDevice = 0;
+        auto select = [&](int device, int preset) {
+            selectedDevice = device;
+            SendMessageW(state.captureDeviceCombo, CB_SETCURSEL, 1 + device, 0);
+            SendMessageW(state.videoCombo, CB_SETCURSEL, preset, 0);
+        };
+        auto checkResult = [&](bool failure) {
+            Require(!state.videoModesPending, "completed query clears pending status");
+            if (failure) {
                 Require(FAILED(state.videoCapabilityQueryStatus) && state.pixelFormats.empty() && !IsWindowEnabled(state.startButton) &&
                         !IsWindowEnabled(state.frameRateCombo),
                         "query failure has explicit error status and disables start");
             } else {
                 Require(SUCCEEDED(state.videoCapabilityQueryStatus) && state.pixelFormats.size() == 1 &&
-                        state.pixelFormats[0].selectedFps == (iteration % 2 ? 60 : 120) &&
+                        state.pixelFormats[0].selectedFps == (selectedDevice ? 60 : 120) &&
                         IsWindowEnabled(state.startButton) && IsWindowEnabled(state.frameRateCombo),
                         "device/resolution change or recovery replaces stale modes and re-enables UI");
             }
+        };
+        auto query = [&](bool refresh, bool failure) {
+            settingsProbeFails = failure;
+            ResetEvent(settingsProbeGate);
+            const int before = settingsProbeCalls.load();
+            if (refresh) SendMessageW(parent, WM_COMMAND,
+                MAKEWPARAM(IDC_SETTINGS_VIDEO_REFRESH, BN_CLICKED), 0);
+            else PopulatePixelFormatCombo(&state);
+            Require(state.videoModesPending && !IsWindowEnabled(state.startButton) &&
+                    !IsWindowEnabled(state.frameRateCombo),
+                    "pending query prevents starting with stale capabilities");
+            SetEvent(settingsProbeGate);
+            const auto deadline = GetTickCount64() + 3000;
+            while (state.videoModesPending && GetTickCount64() < deadline) {
+                MsgWaitForMultipleObjects(0, nullptr, FALSE, 20, QS_ALLINPUT);
+                MSG message{};
+                while (PeekMessageW(&message, parent, 0, 0, PM_REMOVE))
+                    DispatchMessageW(&message);
+            }
+            Require(settingsProbeCalls == before + 1,
+                    "uncached selection or explicit refresh queries exactly once");
+            checkResult(failure);
+        };
+        for (int device = 0; device < 2; ++device)
+        for (int preset = 0; preset < static_cast<int>(ARRAYSIZE(kVideoPresets)); ++preset) {
+            select(device, preset);
+            query(false, false);
         }
+        const int cachedCalls = settingsProbeCalls.load();
+        for (int iteration = 0; iteration < 1000; ++iteration) {
+            select(iteration % 2, (iteration / 2) % ARRAYSIZE(kVideoPresets));
+            PopulatePixelFormatCombo(&state);
+            checkResult(false);
+        }
+        Require(settingsProbeCalls == cachedCalls,
+                "1000 cached device/resolution changes never rescan");
+        for (int iteration = 0; iteration < 64; ++iteration) {
+            select(iteration % 2, (iteration / 2) % ARRAYSIZE(kVideoPresets));
+            query(true, true);
+            const int failedCalls = settingsProbeCalls.load();
+            PopulatePixelFormatCombo(&state);
+            checkResult(true);
+            Require(settingsProbeCalls == failedCalls,
+                    "failed query is stable until explicit refresh");
+            query(true, false);
+        }
+        // Join before removing the function hook, event or notification HWND.
+        state.videoModeCache.reset();
         g_testVideoCapabilityProbe = nullptr;
+        DestroyWindow(parent);
     }
-    DestroyWindow(parent);
+    CloseHandle(settingsProbeGate);
+    settingsProbeGate = nullptr;
+    UnregisterClassW(wc.lpszClassName, wc.hInstance);
     g_settings = saved;
-    std::puts("Settings capability refresh: 1000 device/resolution/failure/recovery changes passed.");
+    g_suppressSettingsSave = savedSuppress;
+    std::puts("Settings capability refresh: asynchronous completion, 1000 cache hits, 64 failure/recovery pairs passed.");
 }
 
 void TestExclusiveScanResultLifetime() {

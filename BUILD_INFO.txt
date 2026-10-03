@@ -1,4 +1,13 @@
-Low Latency Capture Viewer v1.3.1 x64 (continued from the v0.14.2 rework)
+Low Latency Capture Viewer v2.0.0 x64 (continued from the v0.14.2 rework)
+
+v2.0.0 Settings redesign and optional NVIDIA VSR
+----------------------------------------------
+- Dark/light settings, F1 help and audio-only views with private Pretendard fonts.
+- Opt-in SDR VSR requests with separate capture/display resolution and F6 switching.
+- Native-size or larger output only; no guaranteed activation or zero added GPU latency.
+- Consistent overlays, cached settings queries, symmetric snapping and source-size F5.
+- Production build disables private HDR/VSR diagnostics and per-frame timing.
+- Packages include the Pretendard OFL notice alongside existing ASIO/GPL notices.
 
 v1.3.1 Screenshots and sectioned help
 -----------------------------------

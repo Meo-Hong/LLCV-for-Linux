@@ -1,16 +1,14 @@
 #include "ViewerHelpWindow.h"
-#include "DarkPalette.h"
+#include "SettingsFonts.h"
 #include <algorithm>
 #include <dwmapi.h>
 
 namespace llcv::viewer_help {
 namespace {
 constexpr wchar_t kClass[]=L"LLCV.ViewerHelp", kBodyClass[]=L"LLCV.ViewerHelp.Content";
-constexpr COLORREF kBackground=dark_palette::background, kCard=dark_palette::card, kKey=dark_palette::raised;
-constexpr COLORREF kText=dark_palette::text, kMuted=dark_palette::secondary, kAccent=dark_palette::accent;
 enum Index : unsigned {
-    Tag,Name,Version,Subtitle,KeyboardTitle,FirstKey,VideoHint=FirstKey+16,
-    MouseTitle,WheelLabel,WheelText,DoubleLabel,DoubleText,DragLabel,DragText,
+    Tag,Name,Version,Subtitle,KeyboardTitle,FirstKey,VideoHint=FirstKey+2*kShortcuts.size(),
+    MouseTitle,WheelLabel,WheelText,DragLabel,DragText,
     ShotTitle,ShotSummary,FolderLabel,FolderText,ShotOption,FieldCount
 };
 int Pixels(int dip,UINT dpi) { return MulDiv(dip,dpi ? dpi : 96,96); }
@@ -26,11 +24,12 @@ void Window::Close() {
 void Window::ApplyFont() {
     const UINT dpi=GetDpiForWindow(window_);
     std::array<HFONT,FontCount> next{};
-    const int sizes[]{14,14,23,12};
+    const int points[]{10,10,20,9};
     for (int i=0;i<FontCount;++i) {
-        next[i]=CreateFontW(-Pixels(sizes[i],dpi),0,0,0,i==Strong || i==Title ? FW_SEMIBOLD : FW_NORMAL,
+        const int weight=i==Strong || i==Title ? FW_SEMIBOLD : i==Normal ? FW_MEDIUM : FW_NORMAL;
+        next[i]=CreateFontW(-MulDiv(points[i],dpi,72),0,0,0,weight,
             FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
+            CLEARTYPE_QUALITY,DEFAULT_PITCH,settings_ui::SettingsFontFamily(weight,english_));
         if (!next[i]) { for (auto font:next) if (font) DeleteObject(font); return; }
     }
     for (const auto& field:fields_) SendMessageW(field.hwnd,WM_SETFONT,reinterpret_cast<WPARAM>(next[field.font]),FALSE);
@@ -38,14 +37,36 @@ void Window::ApplyFont() {
     for (auto font:fonts_) if (font) DeleteObject(font);
     fonts_=next;
 }
-bool Window::CreateContent() {
-    HIGHCONTRASTW hc{sizeof(hc)};
-    highContrast_=SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(hc),&hc,0) && (hc.dwFlags&HCF_HIGHCONTRASTON);
-    const COLORREF colors[]{kBackground,kCard,kKey};
+bool Window::UpdateTheme() {
+    const bool highContrast=ui::HighContrastEnabled();
+    const auto palette=ui::ResolvePalette(lightTheme_,highContrast);
+    const COLORREF colors[]{palette.kBackground,palette.kCard,palette.kControl};
+    std::array<HBRUSH,SurfaceCount> next{};
     for (int i=0;i<SurfaceCount;++i) {
-        brushes_[i]=CreateSolidBrush(highContrast_ ? GetSysColor(COLOR_WINDOW) : colors[i]);
-        if (!brushes_[i]) return false;
+        next[i]=CreateSolidBrush(colors[i]);
+        if (!next[i]) { for (auto brush:next) if (brush) DeleteObject(brush); return false; }
     }
+    for (auto brush:brushes_) if (brush) DeleteObject(brush);
+    brushes_=next; palette_=palette; highContrast_=highContrast;
+    const BOOL dark=!highContrast_ && !lightTheme_;
+    DwmSetWindowAttribute(window_,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));
+    const COLORREF caption=highContrast_ ? DWMWA_COLOR_DEFAULT : palette_.kBackground;
+    const COLORREF text=highContrast_ ? DWMWA_COLOR_DEFAULT : palette_.kText;
+    DwmSetWindowAttribute(window_,DWMWA_CAPTION_COLOR,&caption,sizeof(caption));
+    DwmSetWindowAttribute(window_,DWMWA_TEXT_COLOR,&text,sizeof(text));
+    return true;
+}
+void Window::SetLightTheme(bool lightTheme) {
+    if (lightTheme_==lightTheme) return;
+    const bool previous=lightTheme_;
+    lightTheme_=lightTheme;
+    if (window_) {
+        if (!UpdateTheme()) { lightTheme_=previous; return; }
+        RedrawWindow(window_,nullptr,nullptr,RDW_INVALIDATE|RDW_ALLCHILDREN|RDW_FRAME);
+    }
+}
+bool Window::CreateContent() {
+    if (!UpdateTheme()) return false;
     body_=CreateWindowExW(WS_EX_CONTROLPARENT,kBodyClass,english_ ? L"Quick guide" : L"빠른 사용 안내",
         WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_VSCROLL|WS_CLIPCHILDREN,0,0,1,1,window_,
         reinterpret_cast<HMENU>(100),GetModuleHandleW(nullptr),this);
@@ -64,19 +85,17 @@ bool Window::CreateContent() {
         add(shortcut.key,shortcut.key,Strong,Key);
         add(shortcut.korean,shortcut.english,Normal,Card);
     }
-    add(L"F3 · F5 · F12는 영상 모드에서 사용합니다.",L"F3, F5 and F12 are available in video mode.",Small,Card,true);
+    add(VideoOnlyHint(false),VideoOnlyHint(true),Small,Card,true);
     add(L"마우스 조작",L"Mouse controls",Strong,Card);
     add(L"휠",L"Scroll wheel",Strong,Card);
     add(L"음량 5%씩 조절\nL/R 카드 위에서는 개별 조절",L"Adjust volume in 5% steps.\nOver L/R cards: adjust each channel.",Normal,Card,true);
-    add(L"두 번 클릭",L"Double-click",Strong,Card);
-    add(L"음량 영역을 100%로 복원",L"Reset a volume control to 100%.",Normal,Card,true);
     add(L"Shift + 드래그",L"Shift + drag",Strong,Card);
     add(L"스냅 없이 창 이동",L"Move the window without snapping.",Normal,Card,true);
     add(L"스크린샷",L"Screenshots",Strong,Card);
     add(L"F12로 입력 해상도 PNG 저장\nOSD·화면 필터 제외 / HDR은 SDR로 변환",L"F12 saves a source-resolution PNG.\nNo OSD or display filters; HDR to SDR.",Normal,Card,true);
     add(L"저장 위치",L"Save location",Small,Card,true);
     add(L"사진 / LowLatencyCaptureViewer",L"Pictures / LowLatencyCaptureViewer",Small,Card);
-    add(L"클립보드 복사: 영상·창 설정 최하단",L"Clipboard copy: bottom of Video & window settings.",Small,Card,true);
+    add(L"클립보드 복사: 영상 설정의 스크린샷",L"Clipboard copy: Screenshots in Video settings.",Small,Card,true);
     footer_=CreateWindowW(L"STATIC",english_ ? L"Playback continues · F1 / Esc closes this guide" : L"재생은 계속됩니다 · F1 / Esc로 안내창 닫기",
         WS_CHILD|WS_VISIBLE|SS_NOPREFIX,0,0,1,1,window_,nullptr,nullptr,nullptr);
     close_=CreateWindowW(L"BUTTON",english_ ? L"Close" : L"닫기",WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_OWNERDRAW,
@@ -91,7 +110,7 @@ void Window::Layout() {
     const UINT dpi=GetDpiForWindow(window_);
     auto px=[&](int value) { return Pixels(value,dpi); };
     RECT root{}; GetClientRect(window_,&root);
-    const int footerHeight=px(64), margin=px(24), gap=px(16), padding=px(18);
+    const int footerHeight=px(64), margin=px(24), gap=px(16), padding=px(20);
     MoveWindow(body_,0,0,root.right,std::max(1,int(root.bottom)-footerHeight),TRUE);
     MoveWindow(footer_,margin,std::max(0,int(root.bottom)-px(43)),std::max(1,int(root.right)-px(166)),px(38),TRUE);
     MoveWindow(close_,std::max(0,int(root.right)-px(124)),std::max(0,int(root.bottom)-px(48)),px(100),px(34),TRUE);
@@ -135,7 +154,7 @@ void Window::Layout() {
         const int mouseTop=columns ? top : y+gap;
         y=mouseTop+padding;
         y+=field(MouseTitle,rightX+padding,y,rightWidth-2*padding)+px(16);
-        for (unsigned i:{WheelLabel,DoubleLabel,DragLabel}) {
+        for (unsigned i:{WheelLabel,DragLabel}) {
             y+=field(i,rightX+padding,y,rightWidth-2*padding)+px(4);
             y+=field(i+1,rightX+padding,y,rightWidth-2*padding)+px(14);
         }
@@ -169,8 +188,14 @@ void Window::Scroll(int position) {
 }
 void Window::Paint(HDC dc,bool body) {
     RECT r{}; GetClientRect(body ? body_ : window_,&r); FillRect(dc,&r,brushes_[Background]);
-    if (!body) return;
-    HPEN pen=CreatePen(PS_SOLID,1,highContrast_ ? GetSysColor(COLOR_WINDOWTEXT) : dark_palette::cardEdge);
+    if (!body) {
+        RECT line{0,std::max(0,int(r.bottom)-Pixels(64,GetDpiForWindow(window_))),r.right,
+                  std::max(0,int(r.bottom)-Pixels(64,GetDpiForWindow(window_)))+1};
+        SetDCBrushColor(dc,palette_.kCardEdge);
+        FillRect(dc,&line,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+        return;
+    }
+    HPEN pen=CreatePen(PS_SOLID,1,palette_.kCardEdge);
     HGDIOBJ oldPen=SelectObject(dc,pen),oldBrush=SelectObject(dc,brushes_[Card]);
     const int radius=Pixels(14,GetDpiForWindow(window_));
     for (const auto& card:cards_) RoundRect(dc,card.left,card.top-scroll_,card.right,card.bottom-scroll_,radius,radius);
@@ -178,7 +203,7 @@ void Window::Paint(HDC dc,bool body) {
     for (const auto& key:keys_) RoundRect(dc,key.left,key.top-scroll_,key.right,key.bottom-scroll_,radius/2,radius/2);
     SelectObject(dc,oldBrush); SelectObject(dc,oldPen); DeleteObject(pen);
 }
-void Window::Toggle(HWND owner,bool english,const wchar_t* version,int show) {
+void Window::Toggle(HWND owner,bool english,const wchar_t* version,int show,bool lightTheme) {
     if (window_) { Close(); return; }
     if (!IsWindow(owner)) return;
     WNDCLASSEXW wc{sizeof(wc)};
@@ -187,6 +212,7 @@ void Window::Toggle(HWND owner,bool english,const wchar_t* version,int show) {
     wc.lpfnWndProc=BodyProc; wc.lpszClassName=kBodyClass;
     if (!RegisterClassExW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) return;
     owner_=owner; english_=english; version_=version ? version : L""; scroll_=0; wheelRemainder_=0;
+    lightTheme_=lightTheme;
     const UINT dpi=GetDpiForWindow(owner);
     RECT rect{0,0,Pixels(820,dpi),Pixels(680,dpi)};
     constexpr DWORD style=WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_CLIPCHILDREN;
@@ -201,18 +227,17 @@ void Window::Toggle(HWND owner,bool english,const wchar_t* version,int show) {
     window_=CreateWindowExW(WS_EX_CONTROLPARENT,kClass,english ? L"App information & shortcuts" : L"앱 정보 · 단축키",style,
         work.left+(work.right-work.left-width)/2,work.top+(work.bottom-work.top-height)/2,width,height,owner,nullptr,GetModuleHandleW(nullptr),this);
     if (!window_) return;
-    BOOL dark=!highContrast_;
-    DwmSetWindowAttribute(window_,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark));
     Layout(); ShowWindow(window_,show); if (show!=SW_HIDE) SetFocus(close_);
 }
-bool Window::ProcessMessage(MSG& m,HWND owner,bool english,const wchar_t* version) {
+bool Window::ProcessMessage(MSG& m,HWND owner,bool english,const wchar_t* version,bool lightTheme) {
+    if (window_) SetLightTheme(lightTheme);
     if (m.message==WM_KEYUP && m.wParam==VK_ESCAPE && dismissEscape_) { dismissEscape_=false; return true; }
     if (m.message==WM_KEYDOWN && m.wParam==VK_ESCAPE && dismissEscape_) {
         if (m.lParam & (LPARAM{1}<<30)) return true;
         dismissEscape_=false;
     }
     if (m.message==WM_KEYDOWN && m.wParam==kHelpKey) {
-        if (!(m.lParam & (LPARAM{1}<<30))) Toggle(owner,english,version);
+        if (!(m.lParam & (LPARAM{1}<<30))) Toggle(owner,english,version,SW_SHOWNORMAL,lightTheme);
         return true;
     }
     if (window_ && m.message==WM_KEYDOWN && m.wParam==VK_ESCAPE) { dismissEscape_=true; Close(); return true; }
@@ -268,10 +293,10 @@ LRESULT CALLBACK Window::BodyProc(HWND hwnd,UINT message,WPARAM wParam,LPARAM lP
     case WM_CTLCOLORSTATIC: {
         HDC dc=reinterpret_cast<HDC>(wParam);
         for (const auto& field:self->fields_) if (field.hwnd==reinterpret_cast<HWND>(lParam)) {
-            const COLORREF bg[]{kBackground,kCard,kKey};
-            SetBkColor(dc,self->highContrast_ ? GetSysColor(COLOR_WINDOW) : bg[field.surface]);
-            SetTextColor(dc,self->highContrast_ ? GetSysColor(COLOR_WINDOWTEXT) :
-                (field.surface==Key ? kAccent : (field.muted ? kMuted : kText)));
+            const auto& p=self->palette_;
+            const COLORREF bg[]{p.kBackground,p.kCard,p.kControl};
+            SetBkColor(dc,bg[field.surface]);
+            SetTextColor(dc,field.surface==Key ? p.kAccent : (field.muted ? p.kSecondary : p.kText));
             return reinterpret_cast<LRESULT>(self->brushes_[field.surface]);
         } break;
     }
@@ -291,21 +316,33 @@ LRESULT CALLBACK Window::Proc(HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam
     case WM_PAINT: { PAINTSTRUCT ps{}; HDC dc=BeginPaint(hwnd,&ps); self->Paint(dc,false); EndPaint(hwnd,&ps); return 0; }
     case WM_PRINTCLIENT: self->Paint(reinterpret_cast<HDC>(wParam),false); return 0;
     case WM_CTLCOLORSTATIC:
-        SetBkColor(reinterpret_cast<HDC>(wParam),self->highContrast_ ? GetSysColor(COLOR_WINDOW) : kBackground);
-        SetTextColor(reinterpret_cast<HDC>(wParam),self->highContrast_ ? GetSysColor(COLOR_WINDOWTEXT) : kMuted);
+        SetBkColor(reinterpret_cast<HDC>(wParam),self->palette_.kBackground);
+        SetTextColor(reinterpret_cast<HDC>(wParam),self->palette_.kSecondary);
         return reinterpret_cast<LRESULT>(self->brushes_[Background]);
     case WM_DRAWITEM: {
         const auto* item=reinterpret_cast<DRAWITEMSTRUCT*>(lParam);
         if (item->CtlID!=IDCANCEL) break;
-        FillRect(item->hDC,&item->rcItem,self->brushes_[Key]);
-        SetBkMode(item->hDC,TRANSPARENT); SetTextColor(item->hDC,self->highContrast_ ? GetSysColor(COLOR_WINDOWTEXT) : kText);
+        const int saved=SaveDC(item->hDC);
+        const auto& p=self->palette_;
+        FillRect(item->hDC,&item->rcItem,self->brushes_[Background]);
+        SelectObject(item->hDC,GetStockObject(DC_BRUSH));
+        SelectObject(item->hDC,GetStockObject(NULL_PEN));
+        SetDCBrushColor(item->hDC,item->itemState&ODS_SELECTED ? p.kPrimaryPressed : p.kAccent);
+        const int radius=Pixels(14,GetDpiForWindow(hwnd));
+        RoundRect(item->hDC,item->rcItem.left,item->rcItem.top,item->rcItem.right,item->rcItem.bottom,radius,radius);
+        SetBkMode(item->hDC,TRANSPARENT); SetTextColor(item->hDC,p.kOnAccent);
         HGDIOBJ old=SelectObject(item->hDC,self->fonts_[Strong]);
         RECT text=item->rcItem; if (item->itemState&ODS_SELECTED) OffsetRect(&text,1,1);
         DrawTextW(item->hDC,self->english_ ? L"Close" : L"닫기",-1,&text,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
         SelectObject(item->hDC,old);
         if (item->itemState&ODS_FOCUS) { RECT focus=item->rcItem; InflateRect(&focus,-3,-3); DrawFocusRect(item->hDC,&focus); }
+        if (saved) RestoreDC(item->hDC,saved);
         return TRUE;
     }
+    case WM_SETTINGCHANGE: case WM_THEMECHANGED: case WM_SYSCOLORCHANGE:
+        if (self->UpdateTheme())
+            RedrawWindow(hwnd,nullptr,nullptr,RDW_INVALIDATE|RDW_ALLCHILDREN|RDW_FRAME);
+        return 0;
     case WM_SIZE: self->Layout(); return 0;
     case WM_DPICHANGED: {
         self->ApplyFont(); const auto* r=reinterpret_cast<RECT*>(lParam);
