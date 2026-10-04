@@ -132,6 +132,7 @@ struct AppSettings {
     bool relativeWindowSize = false;
     int relativeWindowScalePpm = 0;
     bool borderlessWindow = false;
+    bool roundedCorners = true;
     bool windowSnap = true;
     bool hasWindowPosition = false;
     int windowX = 0;

@@ -117,6 +117,7 @@ static constexpr Member kMembers[] = {
     {&SettingsControls::relativeSizeCheck, "relativeSizeCheck"},
     {&SettingsControls::relativeSizeWarning, "relativeSizeWarning"},
     {&SettingsControls::borderlessCheck, "borderlessCheck"},
+    {&SettingsControls::roundedCornersCheck, "roundedCornersCheck"},
     {&SettingsControls::windowSnapCheck, "windowSnapCheck"},
     {&SettingsControls::saveLogCheck, "saveLogCheck"},
     {&SettingsControls::showConsoleCheck, "showConsoleCheck"},
@@ -167,9 +168,10 @@ static constexpr Geometry kGeometry[] = {
     {&SettingsControls::screenshotFolderButton, "screenshotFolderButton", 600, 544, 544, 182, 28},
     {&SettingsControls::relativeSizeCheck, "relativeSizeCheck", 184, 140, 140, 760, 32},
     {&SettingsControls::borderlessCheck, "borderlessCheck", 184, 180, 180, 760, 32},
-    {&SettingsControls::windowSnapCheck, "windowSnapCheck", 184, 220, 220, 760, 32},
-    {&SettingsControls::fullscreenCursorLabel, "fullscreenCursorLabel", 184, 276, 276, 376, 20},
-    {&SettingsControls::fullscreenCursorCombo, "fullscreenCursorCombo", 184, 300, 300, 376, 30},
+    {&SettingsControls::roundedCornersCheck, "roundedCornersCheck", 184, 220, 220, 760, 32},
+    {&SettingsControls::windowSnapCheck, "windowSnapCheck", 184, 260, 260, 760, 32},
+    {&SettingsControls::fullscreenCursorLabel, "fullscreenCursorLabel", 184, 316, 316, 376, 20},
+    {&SettingsControls::fullscreenCursorCombo, "fullscreenCursorCombo", 184, 340, 340, 376, 30},
     {&SettingsControls::guideVideoHint, "guideVideoHint", 204, 501, 501, 336, 36},
     {&SettingsControls::guideDiagnosticsText, "guideDiagnosticsText", 600, 160, 160, 376, 32},
     {&SettingsControls::saveLogCheck, "saveLogCheck", 600, 208, 208, 376, 32},
@@ -329,7 +331,7 @@ static void CheckWindowBehaviorReflow(SettingsControls& state, HWND parent, UINT
         const RECT borderless = ClientRectOf(parent, state.borderlessCheck);
         const RECT cursor = ClientRectOf(parent, state.fullscreenCursorCombo);
         Check(borderless.top == SettingsPixels(180, dpi) &&
-              cursor.top == SettingsPixels(300, dpi),
+              cursor.top == SettingsPixels(340, dpi),
               "conditional warning never shifts window options");
         Check(ClientRectOf(parent, state.relativeSizeWarning).top >
               ClientRectOf(parent, state.fullscreenCursorHint).bottom,
@@ -434,10 +436,15 @@ static void CheckAllCaptionsFit(SettingsControls& state, UINT dpi, bool english)
 static void TestHelpText() {
     for (bool english : {false, true}) {
         const wchar_t* guide = llcv::ui_text::VsrSetupGuide(english);
+        Check(std::wcsstr(guide,L"NV12/YUY2") && std::wcsstr(guide,L"MJPEG"),
+            "VSR guide includes both raw SDR formats and decoded MJPEG");
         Check(guide && *guide && std::wcsstr(guide, L"F6") &&
               std::wcsstr(guide, L"NVIDIA App") && std::wcsstr(guide, L"NV12") &&
               std::wcsstr(guide, english ? L"latency" : L"지연"),
               "bilingual VSR setup guide explains activation, supported input and latency");
+        Check(std::wcsstr(guide, L"P010 HDR10") &&
+              std::wcsstr(guide, english ? L"native HDR10 is preserved" : L"원래 HDR10을 유지"),
+              "VSR guide describes native HDR without SDR-to-HDR conversion");
         Check(std::wcsstr(guide, english ? L"cannot verify activation" : L"확인하지 못합니다") &&
               !std::wcsstr(guide, L"HRESULT") && !std::wcsstr(guide, L"Request supported"),
               "VSR guide does not present diagnostic acceptance as actual activation");
@@ -579,6 +586,7 @@ static void TestActualControlCreation() {
     {&SettingsControls::pixelCheck, 2003},
     {&SettingsControls::relativeSizeCheck, 2013},
     {&SettingsControls::borderlessCheck, 2007},
+    {&SettingsControls::roundedCornersCheck, 2054},
     {&SettingsControls::windowSnapCheck, 2012},
     {&SettingsControls::saveLogCheck, 2019},
     {&SettingsControls::showConsoleCheck, 2025},
@@ -611,6 +619,7 @@ static void TestActualControlCreation() {
         settings.pixelPerfect = (profile & 2) != 0;
         settings.relativeWindowSize = (profile & 4) != 0;
         settings.borderlessWindow = (profile & 8) != 0;
+        settings.roundedCorners = (profile & 1) != 0;
         settings.windowSnap = (profile & 16) != 0;
         settings.forceHdr10 = !settings.allowVolumeBoost;
         settings.muteWhenBackground = !settings.pixelPerfect;
@@ -685,6 +694,7 @@ static void TestActualControlCreation() {
             {state.pixelCheck, settings.pixelPerfect},
             {state.relativeSizeCheck, settings.relativeWindowSize},
             {state.borderlessCheck, settings.borderlessWindow},
+            {state.roundedCornersCheck, settings.roundedCorners},
             {state.windowSnapCheck, settings.windowSnap},
             {state.forceHdr10Check, settings.forceHdr10},
             {state.muteBackgroundCheck, settings.muteWhenBackground},
@@ -724,6 +734,33 @@ static void TestActualControlCreation() {
             LayoutSettingsControls(&state, textDpi);
             CheckFontHierarchy(state, textDpi, english);
             CheckFieldMetrics(state, parent, textDpi);
+            const auto savedVsrCheck = SendMessageW(state.vsrCheck, BM_GETCHECK, 0, 0);
+            state.activeTab = SettingsTab::VideoWindow;
+            for (bool unknown : {false, true}) {
+                state.vsrGpuUnavailable = true;
+                state.vsrGpuUnknown = unknown;
+                SendMessageW(state.vsrCheck, BM_SETCHECK, BST_CHECKED, 0);
+                UpdateAdvancedControlVisibility(&state, false, VideoPixelFormat::Nv12);
+                Check(!IsWindowEnabled(state.vsrCheck) &&
+                    !IsWindowEnabled(state.vsrCaptureCombo) &&
+                    SendMessageW(state.vsrCheck, BM_GETCHECK, 0, 0) == BST_UNCHECKED,
+                    "GPU gate clears stale ON and disables VSR controls");
+                Check(IsWindowEnabled(state.vsrGuideButton), "VSR guidance remains accessible");
+                CheckCaptionFits(state.vsrStatus, "VSR GPU reason", textDpi, english, 0, false);
+                wchar_t reason[256]{};
+                GetWindowTextW(state.vsrStatus, reason, 256);
+                Check(std::wcsstr(reason, unknown ? (english ? L"failed" : L"실패") : L"NVIDIA") != nullptr,
+                    "unknown GPU and non-NVIDIA are explained separately");
+                state.activeTab = SettingsTab::Audio;
+                UpdateAdvancedControlVisibility(&state, false, VideoPixelFormat::Nv12);
+                state.activeTab = SettingsTab::VideoWindow;
+                UpdateAdvancedControlVisibility(&state, false, VideoPixelFormat::Nv12);
+                Check(!IsWindowEnabled(state.vsrCheck), "page switching cannot bypass GPU gate");
+            }
+            state.vsrGpuUnavailable = state.vsrGpuUnknown = false;
+            SendMessageW(state.vsrCheck, BM_SETCHECK, savedVsrCheck, 0);
+            UpdateAdvancedControlVisibility(&state, false, VideoPixelFormat::Nv12);
+            Check(IsWindowEnabled(state.vsrCheck), "NVIDIA retains selectable VSR");
             for (int page = 0; page < kSettingsNavigationCount; ++page) {
                 state.activeTab = SettingsTabFromNavigationIndex(page);
                 RefreshSettingsPageHeader(&state);
@@ -897,6 +934,7 @@ int main() {
             ExpectVisible(state.relativeSizeWarning, tab == SettingsTab::Window && pixel && relative);
             ExpectVisible(state.fullscreenCursorHint, tab == SettingsTab::Window);
             ExpectVisible(state.windowSnapCheck, tab == SettingsTab::Window);
+            ExpectVisible(state.roundedCornersCheck, tab == SettingsTab::Window);
             ExpectVisible(state.guideLogFolderButton, tab == SettingsTab::GuideDiagnostics);
             ExpectVisible(state.screenshotTitle, tab == SettingsTab::VideoWindow);
             ExpectVisible(state.vsrCheck, video);

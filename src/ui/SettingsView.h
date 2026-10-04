@@ -28,6 +28,9 @@ int SettingsNavigationIndex(SettingsTab tab);
 // asynchronous workers and persistent settings deliberately do not belong here.
 struct SettingsControls {
     bool english = false;
+    // Supplied once by the controller; view refresh never probes hardware.
+    bool vsrGpuUnavailable = false;
+    bool vsrGpuUnknown = false;
     UINT layoutDpi = USER_DEFAULT_SCREEN_DPI;
     HWND brandLabel = nullptr;
     HWND pageTitle = nullptr;
@@ -121,6 +124,7 @@ struct SettingsControls {
     HWND relativeSizeCheck = nullptr;
     HWND relativeSizeWarning = nullptr;
     HWND borderlessCheck = nullptr;
+    HWND roundedCornersCheck = nullptr;
     HWND windowSnapCheck = nullptr;
     HWND saveLogCheck = nullptr;
     HWND showConsoleCheck = nullptr;

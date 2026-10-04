@@ -1,6 +1,7 @@
 // Diagnostic harness: real application handlers, simulated Win32 geometry.
 // No GPU, DWM, capture device, or physical display link is simulated.
 #include <windows.h>
+#include <dwmapi.h>
 #include <shellscalingapi.h>
 #include <algorithm>
 #include <cstdio>
@@ -13,6 +14,20 @@ static LONG_PTR simulatedStyle = WS_POPUP;
 static RECT simulatedWindowRect;
 static POINT cursorPoint;
 static bool shiftHeld = false;
+static bool simulatedMaximized = false;
+static int cornerCalls = 0;
+static DWM_WINDOW_CORNER_PREFERENCE cornerPreference = DWMWCP_DEFAULT;
+static COLORREF viewerBorderColor = DWMWA_COLOR_DEFAULT;
+static BOOL WINAPI FakeIsZoomed(HWND) { return simulatedMaximized; }
+static HRESULT WINAPI FakeDwmSetWindowAttribute(HWND, DWORD attribute, LPCVOID data, DWORD size) {
+    if (attribute == DWMWA_BORDER_COLOR && size == sizeof(viewerBorderColor))
+        viewerBorderColor = *static_cast<const COLORREF*>(data);
+    if (attribute == DWMWA_WINDOW_CORNER_PREFERENCE && size == sizeof(cornerPreference)) {
+        cornerPreference = *static_cast<const DWM_WINDOW_CORNER_PREFERENCE*>(data);
+        ++cornerCalls;
+    }
+    return S_OK;
+}
 static SHORT FakeGetAsyncKeyState(int key) { return key == VK_SHIFT && shiftHeld ? static_cast<SHORT>(-32768) : 0; }
 static HWND testWindow = reinterpret_cast<HWND>(0x12345);
 static HWND simulatedCapture = nullptr;
@@ -102,7 +117,11 @@ static BOOL FakeSetWindowPos(HWND,HWND,int,int,int,int,UINT);
 #define GetCapture FakeGetCapture
 #define ReleaseCapture FakeReleaseCapture
 #define SendMessageW FakeSendMessageW
+#define IsZoomed FakeIsZoomed
+#define DwmSetWindowAttribute FakeDwmSetWindowAttribute
 #include "../src/main.cpp"
+#undef IsZoomed
+#undef DwmSetWindowAttribute
 #undef fwprintf
 #undef EnumDisplayDevicesW
 #undef EnumDisplayMonitors
@@ -817,6 +836,32 @@ int main(int argc, char** argv) {
         Require(g_outputTransition.Depth()==0&&!g_outputTransition.Pending(),"no stranded transition");
         Require(simulatedWindowRect.right>simulatedWindowRect.left&&simulatedWindowRect.bottom>simulatedWindowRect.top,"valid geometry");
         ++scenarios;
+    }
+    // Exercise production WM_SIZE routing for video/audio-only and both frame styles.
+    for (bool audio : {false, true}) for (bool borderless : {false, true}) {
+        g_settings.audioOnly = audio; g_settings.borderlessWindow = borderless;
+        g_settings.roundedCorners = true; g_fullscreen = false;
+        g_viewerCorners.Reset(); simulatedMaximized = false;
+        WndProc(testWindow, WM_SIZE, SIZE_RESTORED, MAKELPARAM(640,360));
+        Require(cornerPreference == DWMWCP_ROUND, "viewer restores standard rounded corners");
+        Require(viewerBorderColor == (borderless ? DWMWA_COLOR_NONE : DWMWA_COLOR_DEFAULT),
+            "video/audio keeps normal frame; only borderless suppresses DWM outline");
+        const int stable = cornerCalls;
+        for (int i=0;i<20;++i) WndProc(testWindow, WM_SIZE, SIZE_RESTORED, MAKELPARAM(640,360));
+        Require(cornerCalls == stable, "ordinary resize/idle does not repeatedly update DWM");
+        simulatedMaximized = true;
+        WndProc(testWindow, WM_SIZE, SIZE_MAXIMIZED, MAKELPARAM(1920,1080));
+        Require(cornerPreference == DWMWCP_DONOTROUND, "maximized viewer square");
+        simulatedMaximized = false; g_fullscreen = true;
+        WndProc(testWindow, WM_SIZE, SIZE_RESTORED, MAKELPARAM(1920,1080));
+        Require(cornerPreference == DWMWCP_DONOTROUND, "borderless fullscreen square");
+        g_fullscreen = false;
+        WndProc(testWindow, WM_SIZE, SIZE_RESTORED, MAKELPARAM(640,360));
+        Require(cornerPreference == DWMWCP_ROUND, "fullscreen exit rounds again");
+        g_settings.roundedCorners = false;
+        WndProc(testWindow, WM_SIZE, SIZE_RESTORED, MAKELPARAM(640,360));
+        Require(cornerPreference == DWMWCP_DONOTROUND, "OFF stays square in both viewer modes");
+        Require(viewerBorderColor == DWMWA_COLOR_DEFAULT, "OFF restores normal window border");
     }
     std::printf("PASS %u topology/order replays: positive geometry, no stranded transition, no idle rebuild loop\n",scenarios);
     std::puts("LIMIT: generations are rebuild requests, not measured GPU recreations or display signal failures.");

@@ -441,7 +441,7 @@ void CheckActualTabOrder() {
                 break;
             case SettingsTab::Window:
                 expected.insert(expected.end(), {c.relativeSizeCheck, c.borderlessCheck,
-                    c.windowSnapCheck, c.fullscreenCursorCombo});
+                    c.roundedCornersCheck, c.windowSnapCheck, c.fullscreenCursorCombo});
                 break;
             case SettingsTab::GuideDiagnostics:
                 expected.insert(expected.end(), {c.saveLogCheck, c.showConsoleCheck, c.guideLogFolderButton});

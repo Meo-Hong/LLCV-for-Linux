@@ -1,4 +1,14 @@
-Low Latency Capture Viewer v2.0.0 x64 (continued from the v0.14.2 rework)
+Low Latency Capture Viewer v2.0.1 x64 (continued from the v0.14.2 rework)
+
+v2.0.1 VSR format expansion and window refinements
+------------------------------------------------
+- Adds native P010 HDR10 and direct YUY2 SDR VSR requests alongside NV12/MJPEG.
+- Disables VSR controls and F6 on non-NVIDIA/unknown rendering adapters.
+- Keeps native HDR output on same-frame VSR rejection fallback.
+- Adds matching Windows 11 rounded corners; only borderless windows hide the outline.
+- Avoids text/layout/paint work for hidden overlay panels.
+- No extra frame queue, GPU wait or automatic VSR quality reduction.
+- Actual driver enhancement and physical latency remain hardware-dependent.
 
 v2.0.0 Settings redesign and optional NVIDIA VSR
 ----------------------------------------------

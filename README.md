@@ -10,14 +10,14 @@ capture-device window used alongside other work or viewed directly.
 
 No FFmpeg, codec pack, or separate Visual C++ Redistributable is required.
 
-## What's new in 2.0.0
+## What's new in 2.0.1
 
-See the [2.0.0 release notes](docs/release-notes-v2.0.0.md) for the changes.
+See the [2.0.1 release notes](docs/release-notes-v2.0.1.md) for the changes.
 
-- Redesigned settings with a sidebar, clearer grouping, dark/light themes, and consistent typography.
-- Optional NVIDIA VSR with independent capture/display resolutions, same-size processing requests, and an F6 toggle.
-- Unified styling for F1 help, audio-only controls, and in-video overlays, with clearer volume-boost and VSR request status.
-- Smoother settings transitions, cached format/FPS queries, and refined window snapping and 1:1 size restoration.
+- Expanded experimental VSR requests to P010 HDR10 and YUY2 SDR, alongside NV12/MJPEG.
+- Disabled VSR controls and F6 on non-NVIDIA rendering GPUs, with a clear explanation.
+- Added optional Windows 11 rounded viewer corners for video and audio-only windows.
+- Reduced hidden-overlay update work and simplified VSR ON/OFF notifications.
 
 ## Features at a glance
 
@@ -25,7 +25,7 @@ See the [2.0.0 release notes](docs/release-notes-v2.0.0.md) for the changes.
 | --- | --- |
 | Low-latency video | Latest-frame-first presentation; Immediate, VSync, and Compatibility output |
 | Video formats | NV12/YUY2, MJPEG, and experimental P010 HDR10 input |
-| NVIDIA VSR | Experimental SDR enhancement requests at native size or larger; independent input/display sizes and F6 toggle |
+| NVIDIA VSR | Experimental SDR / HDR10 enhancement requests at native size or larger; independent input/display sizes and F6 toggle |
 | Audio outputs | WASAPI Shared/Exclusive, experimental ASIO, and following the Windows default output device |
 | Console LPCM 5.1 | Experimental 5.1 playback on supported equipment; WASAPI Shared only |
 | Audio-only view | Audio without video, with master/L/R volume, level meters, and clipping status |
@@ -180,6 +180,16 @@ baseline to the restored capture-sized window, including when VSR's display size
 differs. The window position is saved. Edge snap can be enabled or disabled and
 uses the same edge-distance threshold for snapping and releasing; hold Shift to bypass it.
 
+**Since 2.0.1:** **Window → Rounded corners (Windows 11)** uses the same standard
+system-drawn radius for regular/borderless video and audio-only windows (default
+ON, saved between launches). Regular windows retain their system border; only
+borderless windows hide the DWM outline while rounding is enabled.
+Maximized and fullscreen windows stay square.
+Turn it off to retain every corner pixel. It does not rescale video or add an
+app-side mask/render pass; unsupported systems keep their existing appearance.
+Windows may suppress rounding in snapped/remote environments; see
+[Microsoft's rounding policy](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-rounded-corners).
+
 Enable **Allow volume boost above 100%** in audio settings to raise master volume
 up to 200%. Individual L/R volume is capped at 100%; boosting loud input can
 cause clipping. **Background auto-mute** silences output while another window
@@ -203,25 +213,42 @@ automatically; accepting the prompt opens the installer link in your browser.
 
 ## NVIDIA VSR (experimental)
 
+**Since 2.0.1:** HDR10/YUY2 + VSR support below is not included in v2.0.0.
+
+At startup, the viewer checks its default D3D11 rendering adapter once, before
+showing settings. On Intel/AMD or an unidentified adapter, VSR and its capture-size
+selector are disabled; F6 cannot enable it. Identification failure has a separate
+message. This vendor check does not certify RTX support or actual enhancement,
+does not change GPU selection, and is not repeated on tab changes or per frame.
+
 The **Video** page has an opt-in NVIDIA VSR checkbox and a **Setup guide**
 button. VSR defaults to OFF; the checkbox and F6 preference are saved on normal
-exit. Supported viewer routes are NV12 SDR (including MJPEG decoded to NV12)
+exit. Supported viewer routes are NV12/YUY2 SDR, MJPEG decoded to NV12, and P010 HDR10
 displayed at the source size or larger. Same-size output can request native-resolution
 de-artifacting. With VSR enabled in settings, the main resolution selects display
 size and **VSR capture** selects the input resolution independently. **Lock display
 size** keeps that selected window size; disable it for manual resizing. F6 changes
 only the effect, without restarting capture or changing either resolution. F5
 restores source-size display. Detected formats/FPS and screenshots follow the input
-resolution. HDR/P010, YUY2 and downscaling in either dimension bypass VSR. Capture resolutions
+resolution. YUY2 uses the existing processor directly, with no extra app-side conversion pass.
+Downscaling in either dimension bypasses VSR. Capture resolutions
 include 1280x720, 1920x1080, 2560x1440 and 3840x2160, subject to device support.
+
+For native HDR, select **P010** and keep the usual HDR10/Windows HDR setup.
+The existing P010 → 10-bit BT.2020/PQ output is retained; no SDR intermediate or
+RTX Video HDR (SDR-to-HDR conversion) is enabled. Use a recent NVIDIA driver:
+[NVIDIA added HDR VSR upscaling in January 2025](https://nvidia.custhelp.com/app/answers/detail/a_id/5448/).
+If a driver accepts the VSR request but cannot process the frame, the viewer
+turns VSR off and retries that frame once, preserving the HDR route. The request
+status reports rejection; ordinary HDR rendering errors are not suppressed.
 
 For example, choose **VSR capture: 1920 × 1080** and **Display resolution: 2560 × 1440**
 for 1080p capture in a 1440p-sized window. Choose 1920 × 1080 for both to request
 same-size processing. These options configure the viewer/capture path; they do
 not change the console's HDMI output mode or the monitor's desktop resolution.
 
-**Tab** shows the renderer's VSR request state and input → displayed video size.
-“ON requested” is not proof that NVIDIA activated the effect. Rejected, unavailable,
+**Tab** shows VSR ON/OFF and input → displayed video size.
+ON means the feature is enabled in the viewer, not that driver activation has been detected. Rejected, unavailable,
 and failed/unknown states are distinguished. No VSR-added-latency number is shown:
 CPU call time is not equivalent to actual added display latency.
 
@@ -265,7 +292,7 @@ Use F1, Esc, or its Close button to dismiss it; Esc here does not exit the viewe
 | Monitor briefly loses signal in Low latency mode | The graphics driver may be incompatible with the tearing presentation path. Change Presentation to **VSync**; borderless mode can remain enabled |
 | No audio | Select the audio input that belongs to the chosen video device |
 | Occasional audio breakup | Check for buffer shortage in Tab diagnostics, then raise the PCM target in 5 ms steps and test again |
-| VSR appears to have no effect | Check NV12/MJPEG SDR input, native-size or larger output, the Tab request state, and NVIDIA's active indicator; a successful request alone does not confirm activation |
+| VSR appears to have no effect | Check NV12/YUY2/MJPEG SDR or P010 HDR10 input, a supported NVIDIA rendering GPU/driver, native-size or larger output, the Tab state, and NVIDIA's active indicator; a successful request alone does not confirm activation |
 | Need more evidence | Enable logging in Guide & logs, reproduce the issue, then send the newest `.log` file from **Open log folder** together with screenshots of settings and Tab diagnostics |
 
 Settings and optional logs are stored in `%LOCALAPPDATA%\LowLatencyCaptureViewer`.
@@ -309,6 +336,7 @@ and monitor.
 
 ## Learn more
 
+- [2.0.1 release notes](docs/release-notes-v2.0.1.md)
 - [2.0.0 release notes](docs/release-notes-v2.0.0.md)
 - [Video formats, scaling, and fullscreen](docs/VIDEO.md)
 - [Audio modes, buffers, and clock correction](docs/AUDIO.md)
