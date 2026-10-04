@@ -356,12 +356,12 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         468, 104, 84, 28, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_VIDEO_REFRESH)), instance, nullptr);
     state->vsrCheck = CreateWindowExW(0, L"BUTTON",
-        L"NVIDIA VSR · F6",
+        L"NVIDIA VSR (F6)",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
         34, 444, 295, 26, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_VSR)), instance, nullptr);
     SendMessageW(state->vsrCheck, BM_SETCHECK,
-        initial.settings.vsrEnabled ? BST_CHECKED : BST_UNCHECKED, 0);
+        initial.settings.vsrEnabled && !state->vsrGpuUnavailable ? BST_CHECKED : BST_UNCHECKED, 0);
     state->vsrGuideButton = CreateWindowExW(0, L"BUTTON",
         initial.english ? L"Setup guide" : L"설정 안내",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
@@ -379,8 +379,8 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
             SendMessageW(state->vsrCaptureCombo, CB_SETCURSEL, index, 0);
     }
     state->vsrStatus = makeLabel(initial.english
-        ? L"NV12 / MJPEG SDR · F6 toggles the effect"
-        : L"NV12 / MJPEG SDR · F6 효과만 전환", 34, 474);
+        ? L"SDR / HDR10 · Toggle with F6"
+        : L"SDR / HDR10 · F6으로 전환", 34, 474);
     state->screenshotClipboardCheck = CreateWindowExW(
         0, L"BUTTON", initial.english ? L"Also copy to clipboard" : L"클립보드에도 복사",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
@@ -775,6 +775,15 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     SendMessageW(state->borderlessCheck, BM_SETCHECK,
                  initial.settings.borderlessWindow ? BST_CHECKED : BST_UNCHECKED, 0);
 
+    state->roundedCornersCheck = CreateWindowExW(
+        0, L"BUTTON", initial.english ? L"Rounded corners (Windows 11)" : L"둥근 모서리 (Windows 11)",
+        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
+        24, 464, 330, 28, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_ROUNDED_CORNERS)),
+        instance, nullptr);
+    SendMessageW(state->roundedCornersCheck, BM_SETCHECK,
+                 initial.settings.roundedCorners ? BST_CHECKED : BST_UNCHECKED, 0);
+
     state->windowSnapCheck = CreateWindowExW(
         0, L"BUTTON", initial.english ? L"Snap to monitor edges" : L"모니터 가장자리에 창 맞추기",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
@@ -874,7 +883,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
 
         state->videoWindowSection,
         state->relativeSizeCheck, state->relativeSizeWarning,
-        state->borderlessCheck, state->windowSnapCheck,
+        state->borderlessCheck, state->roundedCornersCheck, state->windowSnapCheck,
         // Keep the hint above the combo in Z order, including before layout's
         // existing hint-to-front safeguard, and the actual label next to it.
         state->fullscreenCursorHint, state->fullscreenCursorLabel, state->fullscreenCursorCombo,

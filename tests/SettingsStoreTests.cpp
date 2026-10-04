@@ -47,6 +47,7 @@ void TestDefaults(const std::wstring& path) {
           "default resolution");
     Check(loaded.settings.checkForUpdates,
           "automatic update check defaults on");
+    Check(loaded.settings.roundedCorners, "rounded corners default on for old/new profiles");
     Check(loaded.settings.hdrChromaLocation == llcv::hdr::ChromaLocation::Auto,
           "old and fresh profiles keep automatic HDR chroma");
 }
@@ -130,6 +131,7 @@ void TestRoundTrip(const std::wstring& path) {
     saved.relativeWindowSize = true;
     saved.relativeWindowScalePpm = 666'667;
     saved.borderlessWindow = true;
+    saved.roundedCorners = false;
     saved.windowSnap = false;
     saved.saveLog = true;
     saved.screenshotClipboard = true;
@@ -144,6 +146,7 @@ void TestRoundTrip(const std::wstring& path) {
     const LoadResult result = LoadFromIni(path);
     Check(result.settings.consoleSurround51, "surround preference round trip");
     const AppSettings& loaded = result.settings;
+    Check(!loaded.roundedCorners, "rounded corners OFF persists");
     Check(loaded.audioOnlyWidth == 640 && loaded.audioOnlyHeight == 360,
           "audio-only size round trip independent from video scale");
     Check(loaded.hdrChromaLocation == saved.hdrChromaLocation, "HDR chroma round trip");
@@ -309,6 +312,12 @@ int main() {
     TestDefaults(path);
     TestResolutionRoundTrips(path);
     TestRoundTrip(path);
+    {
+        auto settings = llcv::settings::LoadFromIni(path).settings;
+        settings.roundedCorners = true;
+        llcv::settings::SaveToIni(path, settings);
+        Check(llcv::settings::LoadFromIni(path).settings.roundedCorners, "rounded corners ON persists");
+    }
     for (const wchar_t* value : {L"Dark", L"invalid", L"LIGHT"}) {
         WritePrivateProfileStringW(L"General", L"SettingsTheme", value, path.c_str());
         Check(llcv::settings::LoadFromIni(path).settings.settingsLightTheme ==

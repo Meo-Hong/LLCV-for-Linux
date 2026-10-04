@@ -259,12 +259,13 @@ static void LayoutWindowBehaviorControls(SettingsControls* state) {
     // when Pixel-perfect/relative sizing changes.
     place(state->videoWindowSection, 184, 112, 792, 20);
     place(state->relativeSizeCheck, 184, 140, 760, 32);
-    place(state->relativeSizeWarning, 184, 388, 792, 56);
+    place(state->relativeSizeWarning, 184, 428, 792, 56);
     place(state->borderlessCheck, 184, 180, 760, 32);
-    place(state->windowSnapCheck, 184, 220, 760, 32);
-    place(state->fullscreenCursorLabel, 184, 276, 376, 20);
-    place(state->fullscreenCursorCombo, 184, 300, 376, 120);
-    place(state->fullscreenCursorHint, 184, 340, 376, 24);
+    place(state->roundedCornersCheck, 184, 220, 760, 32);
+    place(state->windowSnapCheck, 184, 260, 760, 32);
+    place(state->fullscreenCursorLabel, 184, 316, 376, 20);
+    place(state->fullscreenCursorCombo, 184, 340, 376, 120);
+    place(state->fullscreenCursorHint, 184, 380, 376, 24);
     if (state->fullscreenCursorHint)
         SetWindowPos(state->fullscreenCursorHint, HWND_TOP, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -437,6 +438,7 @@ void UpdateWindowBehaviorVisibility(SettingsControls* state) {
     SetSettingsControlVisible(state->windowSnapCheck, visible);
     SetSettingsControlVisible(state->relativeSizeCheck, visible);
     SetSettingsControlVisible(state->borderlessCheck, visible);
+    SetSettingsControlVisible(state->roundedCornersCheck, visible);
     SetSettingsControlVisible(state->fullscreenCursorLabel, visible);
     SetSettingsControlVisible(state->fullscreenCursorCombo, visible);
     SetSettingsControlVisible(state->fullscreenCursorHint, visible);
@@ -530,7 +532,10 @@ void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
     SetSettingsControlVisible(state->guideDiagnosticsText, guide);
     SetSettingsControlVisible(state->guideLogFolderButton, guide);
     SetSettingsControlVisible(state->screenshotTitle, video);
-    SetSettingsControlVisible(state->vsrCheck, video);
+    if (state->vsrGpuUnavailable &&
+        SendMessageW(state->vsrCheck, BM_GETCHECK, 0, 0) != BST_UNCHECKED)
+        SendMessageW(state->vsrCheck, BM_SETCHECK, BST_UNCHECKED, 0);
+    SetSettingsControlVisible(state->vsrCheck, video, !state->vsrGpuUnavailable);
     SetSettingsControlVisible(state->vsrGuideButton, video);
     SetSettingsControlVisible(state->vsrStatus, video);
     const bool vsr = SendMessageW(state->vsrCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
@@ -542,9 +547,12 @@ void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
     SetSettingsText(state->pixelCheck, vsr
         ? (state->english ? L"Lock display size" : L"표시 크기 고정")
         : L"Pixel-perfect (1:1)");
-    SetSettingsText(state->vsrStatus, state->english
-        ? L"NV12 / MJPEG SDR · F6 toggles the effect"
-        : L"NV12 / MJPEG SDR · F6 효과만 전환");
+    SetSettingsText(state->vsrStatus, state->vsrGpuUnavailable
+        ? (state->vsrGpuUnknown
+            ? (state->english ? L"GPU check failed · Restart to retry" : L"GPU 확인 실패 · 앱을 다시 실행하세요")
+            : (state->english ? L"Unavailable · Requires an NVIDIA rendering GPU" : L"사용 불가 · NVIDIA 렌더링 GPU가 필요합니다"))
+        : (state->english ? L"SDR / HDR10 · Toggle with F6"
+                          : L"SDR / HDR10 · F6으로 전환"));
     SetSettingsControlVisible(state->screenshotClipboardCheck, video);
     SetSettingsControlVisible(state->screenshotHelp, video);
     SetSettingsControlVisible(state->screenshotFolderButton, video);

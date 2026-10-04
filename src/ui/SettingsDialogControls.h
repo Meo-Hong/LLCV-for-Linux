@@ -62,6 +62,7 @@ inline constexpr int IDC_SETTINGS_VSR_GUIDE = 2050;
 inline constexpr int IDC_SETTINGS_VSR_CAPTURE = 2051;
 inline constexpr int IDC_SETTINGS_VIDEO_REFRESH = 2052;
 inline constexpr int IDC_SETTINGS_THEME = 2053;
+inline constexpr int IDC_SETTINGS_ROUNDED_CORNERS = 2054;
 } // namespace control_id
 
 // Borrowed for the duration of creation only; no settings/device list copies.

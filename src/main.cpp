@@ -100,6 +100,7 @@
 #include <cstdarg>
 #include <unordered_map>
 #include <filesystem>
+#include "ui/WindowCorners.h"
 
 static llcv::screenshot::Service g_screenshots;
 static llcv::viewer_help::Window g_viewerHelp; // Modeless, sectioned help; no capture-thread ownership.
@@ -117,6 +118,7 @@ static bool g_useScrgbPrototype = false;
 #include "video/VsrExperiment.h"
 // UI publishes intent only; the capture/render thread owns all D3D calls.
 static std::atomic<llcv::vsr::Mode> g_vsrMode{llcv::vsr::Mode::Disabled};
+static std::atomic<UINT> g_vsrGpuVendor{0};
 #endif
 
 // -----------------------------------------------------------------------------
@@ -131,9 +133,9 @@ constexpr int kSampleRate = 48000;
 constexpr int kChannels = 2;
 constexpr int kBitsPerSample = 16;
 #ifdef LLCV_VSR_EXPERIMENT
-constexpr wchar_t kAppVersionLabel[] = L"v2.0.0-vsr-test";
+constexpr wchar_t kAppVersionLabel[] = L"v2.0.1-vsr-test";
 #else
-constexpr wchar_t kAppVersionLabel[] = L"v2.0.0";
+constexpr wchar_t kAppVersionLabel[] = L"v2.0.1";
 #endif
 
 constexpr int kRecommendedCaptureBufferMs = 20;
@@ -314,6 +316,10 @@ static void ShowTransientHud(TransientHudContent content);
 static bool HandleVsrTestKey(WPARAM key, LPARAM flags) {
     if (key != VK_F6) return false;
     if ((flags & (LPARAM{1} << 30)) != 0 || g_settings.audioOnly) return true;
+    if (!llcv::vsr::NvidiaAdapter(g_vsrGpuVendor.load(std::memory_order_acquire))) {
+        ShowTransientHud(TransientHudContent::VsrUnavailable);
+        return true;
+    }
     const auto current = g_vsrMode.load(std::memory_order_acquire);
     g_settings.vsrEnabled = current != llcv::vsr::Mode::On;
     // Publish pending before the request, so a fast render-thread acknowledgement
@@ -1962,6 +1968,7 @@ struct DirectD3D11Renderer {
     bool pixelPerfectBorders = false;
     uint64_t outputConfigurationGeneration = 0;
     uint64_t cachedOverlayGeneration = 0;
+    unsigned cachedOverlayMask = 0;
     UINT nextUploadSurface = 0;
     UINT activeUploadSurface = 0;
     bool allowTearing = false;
@@ -1988,10 +1995,10 @@ struct DirectD3D11Renderer {
     UINT vsrDisplayWidth = 0, vsrDisplayHeight = 0;
     std::wstring vsrOsdLine() const {
         const bool english = IsEnglishUi();
-        const wchar_t* status = english ? L"OFF requested" : L"요청 OFF";
+        const wchar_t* status = L"OFF";
         switch (vsrState) {
         case llcv::vsr::State::Requested:
-            status = english ? L"ON requested (activation unverified)" : L"요청 ON (실제 활성 미확인)"; break;
+            status = L"ON"; break;
         case llcv::vsr::State::Bypassed:
             status = english ? L"Unavailable" : L"적용 불가"; break;
         case llcv::vsr::State::Rejected:
@@ -2018,6 +2025,9 @@ struct DirectD3D11Renderer {
         };
         print(L"CPU VideoProcessorBlt call", data.cpuBlt);
         print(L"capture callback -> Present return (not HDMI latency)", data.captureToPresent);
+        print(L"CPU upload", data.upload);
+        print(L"CPU Present", data.present);
+        print(L"Present return intervals", data.intervals);
 #endif
     }
     HRESULT applyVsrMode(bool initializing = false) {
@@ -2199,6 +2209,7 @@ struct DirectD3D11Renderer {
         pixelPerfectBorders = false;
         outputConfigurationGeneration = 0;
         cachedOverlayGeneration = 0;
+        cachedOverlayMask = 0;
         nextUploadSurface = 0;
         activeUploadSurface = 0;
         allowTearing = false;
@@ -2335,6 +2346,10 @@ struct DirectD3D11Renderer {
         factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
         DXGI_ADAPTER_DESC adapterDesc{};
         adapter->GetDesc(&adapterDesc);
+#ifdef LLCV_VSR_FEATURE
+        // Actual renderer is authoritative if the startup adapter has changed.
+        g_vsrGpuVendor.store(adapterDesc.VendorId, std::memory_order_release);
+#endif
         fwprintf(stderr,
                  L"[video-output] create: app=%s path=%s size=%ux%u "
                  L"fullscreen=%d generation=%llu flags=0x%X result=0x%08X "
@@ -2858,9 +2873,12 @@ struct DirectD3D11Renderer {
     }
 
     void upload(const BYTE* pixels, UINT32 stride) {
-        // Rotate upload targets so the CPU never updates the NV12 surface that
-        // the GPU is still reading. This avoids UpdateSubresource's contended
-        // two-copy path without introducing a video-frame queue.
+#ifdef LLCV_VSR_EXPERIMENT
+        const auto uploadStart = llcv::vsr::Timing::Clock::now();
+#endif
+        // Rotate upload targets to reduce CPU/GPU contention without an
+        // application frame queue. Under GPU overload the driver may still
+        // synchronize reuse; a three-surface ring is not a completion fence.
         activeUploadSurface = nextUploadSurface;
         nextUploadSurface = (nextUploadSurface + 1) % kUploadSurfaceCount;
         ID3D11Texture2D* target = nv12Textures[activeUploadSurface];
@@ -2870,169 +2888,179 @@ struct DirectD3D11Renderer {
         } else {
             context->UpdateSubresource(target, 0, nullptr, pixels, stride, 0);
         }
+#ifdef LLCV_VSR_EXPERIMENT
+        vsrTiming.AddUpload(std::chrono::duration<double,std::milli>(
+            llcv::vsr::Timing::Clock::now()-uploadStart).count());
+#endif
     }
 
-    HRESULT refreshOverlayLayouts() {
-        const uint64_t generation =
-            g_overlayGeneration.load(std::memory_order_acquire);
-        if (cachedOverlayGeneration == generation) return S_OK;
-        cachedOverlayGeneration = generation;
-        SafeRelease(osdTextLayout);
-        SafeRelease(volumeTextLayout);
-
-        // Keep the diagnostics panel at a stable size. Device names are kept
-        // verbatim; the output device has its own line so long names do not
-        // need an ellipsis just to share a line with the audio mode.
-        std::wstring osdText;
-        HRESULT hr = E_FAIL;
-        osdText = BuildRuntimeOsdText(
-            static_cast<int>(outputWidth), static_cast<int>(outputHeight));
-#ifdef LLCV_VSR_FEATURE
-        // Keep VSR beside Input/Display. These are applied renderer state and
-        // actual video rectangles, not UI intent or a claim of driver activation.
-        size_t videoEnd = 0;
-        for (int line = 0; line < 5; ++line) {
-            const auto end = osdText.find(L'\n', videoEnd);
-            if (end == std::wstring::npos) break;
-            videoEnd = end + 1;
-        }
-        osdText.insert(videoEnd, vsrOsdLine());
-#endif
-        hr = dwriteFactory->CreateTextLayout(
-            osdText.c_str(), static_cast<UINT32>(osdText.size()),
-            osdTextFormat, kOsdTextWidth, kOsdTextHeight, &osdTextLayout);
-        if (FAILED(hr)) return hr;
-        const auto headingEnd = osdText.find(L'\n');
-        if (headingEnd != std::wstring::npos) {
-            osdTextLayout->SetFontWeight(DWRITE_FONT_WEIGHT_SEMI_BOLD,
-                DWRITE_TEXT_RANGE{0, static_cast<UINT32>(headingEnd)});
-        }
-
-        const TransientHudContent hudContent =
-            g_transientHudContent.load(std::memory_order_acquire);
+    // Each generation may update visible panels at different times. In
+    // particular, F3/audio-meter updates must not rebuild hidden Tab/HUD text.
+    HRESULT refreshOverlayLayouts(bool diagnostics = true, bool notification = true,
+                                  bool audio = true) {
+        const unsigned visibleMask = (diagnostics ? 1u : 0u) |
+            (notification ? 2u : 0u) | (audio ? 4u : 0u);
+        if (!visibleMask) return S_OK;
+        const uint64_t generation = g_overlayGeneration.load(std::memory_order_acquire);
+        const unsigned refreshMask = visibleMask &
+            ~(cachedOverlayGeneration == generation ? cachedOverlayMask : 0u);
+        if (!refreshMask) return S_OK;
+        HRESULT hr = S_OK;
         const int overlayMaster = g_volumePercent.load(std::memory_order_acquire);
         const bool masterBoosted = g_settings.allowVolumeBoost && overlayMaster > 100;
-        wchar_t volumeText[96]{};
+
+        if (refreshMask & 1u) {
+            SafeRelease(osdTextLayout);
+            // Keep the diagnostics panel at a stable size. Device names are kept
+            // verbatim; the output device has its own line so long names do not
+            // need an ellipsis just to share a line with the audio mode.
+            std::wstring osdText;
+            osdText = BuildRuntimeOsdText(
+                static_cast<int>(outputWidth), static_cast<int>(outputHeight));
 #ifdef LLCV_VSR_FEATURE
-        if (hudContent >= TransientHudContent::VsrPending) {
-            const wchar_t* ko = L"VSR 비교: F6\n현재: 기본 출력";
-            const wchar_t* en = L"VSR compare: F6\nOriginal output";
-            switch (hudContent) {
-            case TransientHudContent::VsrPending: ko=L"VSR 전환 대기"; en=L"VSR switch pending"; break;
-            case TransientHudContent::VsrOn: ko=L"VSR ON 요청\nF6: 끄기"; en=L"VSR ON requested\nF6: OFF"; break;
-            case TransientHudContent::VsrOff: ko=L"VSR OFF\nF6: 켜기"; en=L"VSR OFF\nF6: ON"; break;
-            case TransientHudContent::VsrUnavailable: ko=L"VSR 적용 불가\n입력·표시 조건 확인"; en=L"VSR unavailable\nCheck format / size"; break;
-            case TransientHudContent::VsrRejected: ko=L"VSR 요청 거부\nOFF로 복귀"; en=L"VSR rejected\nBack to OFF"; break;
-            case TransientHudContent::VsrFailed: ko=L"VSR 전환 실패\n진단 로그 확인"; en=L"VSR switch failed\nSee diagnostic log"; break;
-            default: break;
+            // Keep VSR beside Input/Display. These are applied renderer state and
+            // actual video rectangles, not UI intent or a claim of driver activation.
+            size_t videoEnd = 0;
+            for (int line = 0; line < 5; ++line) {
+                const auto end = osdText.find(L'\n', videoEnd);
+                if (end == std::wstring::npos) break;
+                videoEnd = end + 1;
             }
-            wcscpy_s(volumeText, IsEnglishUi() ? en : ko);
-        } else
+            osdText.insert(videoEnd, vsrOsdLine());
 #endif
-        if (hudContent >= TransientHudContent::ScreenshotPending) {
-            const wchar_t* ko = L"스크린샷 실패\n진단 로그 확인";
-            const wchar_t* en = L"Screenshot failed\nCheck diagnostic log";
-            switch (hudContent) {
-            case TransientHudContent::ScreenshotPending: ko=L"스크린샷 처리 중"; en=L"Saving screenshot"; break;
-            case TransientHudContent::ScreenshotBusy: ko=L"촬영 대기 중\n잠시 후 다시 시도"; en=L"Not ready / busy\nPlease try again"; break;
-            case TransientHudContent::ScreenshotSaved: ko=L"PNG 저장 완료"; en=L"PNG saved"; break;
-            case TransientHudContent::ScreenshotCopied: ko=L"PNG 저장 완료\n클립보드 복사 완료"; en=L"PNG saved\nCopied to clipboard"; break;
-            case TransientHudContent::ScreenshotClipboardFailed: ko=L"PNG 저장 완료\n클립보드 복사 실패"; en=L"PNG saved\nClipboard failed"; break;
-            case TransientHudContent::ScreenshotTimeout: ko=L"촬영 시간 초과\n입력 영상 확인"; en=L"Screenshot timed out\nCheck video input"; break;
-            default: break;
+            hr = dwriteFactory->CreateTextLayout(
+                osdText.c_str(), static_cast<UINT32>(osdText.size()),
+                osdTextFormat, kOsdTextWidth, kOsdTextHeight, &osdTextLayout);
+            if (FAILED(hr)) return hr;
+            const auto headingEnd = osdText.find(L'\n');
+            if (headingEnd != std::wstring::npos) {
+                osdTextLayout->SetFontWeight(DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                    DWRITE_TEXT_RANGE{0, static_cast<UINT32>(headingEnd)});
             }
-            wcscpy_s(volumeText, IsEnglishUi() ? en : ko);
-        } else if (hudContent == TransientHudContent::OneToOne) {
-            const auto& video = CurrentCapturePreset();
-            swprintf_s(volumeText,
-                       IsEnglishUi() ? L"1:1 Pixel-perfect\n%d x %d"
-                                     : L"1:1 Pixel-perfect\n%d x %d",
-                       video.width, video.height);
-        } else if (hudContent ==
-                   TransientHudContent::OneToOneUnavailable) {
-            wcscpy_s(volumeText,
-                     IsEnglishUi() ? L"1:1 unavailable\nLarger than this display"
-                                   : L"1:1 표시 불가\n현재 모니터보다 큼");
-        } else {
-            swprintf_s(volumeText, UI_TEXT(L"음량  %d%%"),
-                       overlayMaster);
+            osdCacheTarget->BeginDraw();
+            osdCacheTarget->Clear(D2D1::ColorF(0, 0.0f));
+            osdCacheTarget->FillRoundedRectangle(
+                D2D1::RoundedRect(D2D1::RectF(
+                                      0.0f, 0.0f,
+                                      static_cast<float>(kOsdOverlayWidth),
+                                      static_cast<float>(kOsdOverlayHeight)),
+                                  12.0f, 12.0f),
+                osdCacheBackgroundBrush);
+            osdCacheTarget->DrawRoundedRectangle(
+                D2D1::RoundedRect(D2D1::RectF(0.5f, 0.5f,
+                    kOsdOverlayWidth - 0.5f, kOsdOverlayHeight - 0.5f), 12, 12),
+                osdCacheEdgeBrush, 1.0f);
+            osdCacheTarget->DrawTextLayout(
+                D2D1::Point2F(16.0f, 12.0f), osdTextLayout,
+                osdCacheTextBrush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            hr = osdCacheTarget->EndDraw();
+            if (FAILED(hr)) return hr;
         }
-        hr = dwriteFactory->CreateTextLayout(
-            volumeText, static_cast<UINT32>(wcslen(volumeText)),
-            volumeTextFormat, 228.0f, 62.0f, &volumeTextLayout);
-        if (FAILED(hr)) return hr;
-        if (hudContent != TransientHudContent::Volume)
-            volumeTextLayout->SetFontSize(20.0f,
-                DWRITE_TEXT_RANGE{0, static_cast<UINT32>(wcslen(volumeText))});
-        // Keep the existing GPU texture/quad; only the painted panel follows
-        // the cached text height. Volume retains space for its gain bar.
-        DWRITE_TEXT_METRICS hudMetrics{};
-        hr = volumeTextLayout->GetMetrics(&hudMetrics);
-        if (FAILED(hr)) return hr;
-        volumePanelHeight = hudContent == TransientHudContent::Volume ? 82.0f
-            : std::clamp(std::ceil(hudMetrics.height) + 20.0f, 40.0f, 82.0f);
-        const bool bottomHud = g_settings.volumeHudPosition == VolumeHudPosition::BottomLeft ||
-            g_settings.volumeHudPosition == VolumeHudPosition::BottomRight;
-        // Bottom notifications keep the same screen-edge margin even when
-        // shorter. Unused texture rows are transparent, never stretched.
-        volumePanelTop = bottomHud ? 82.0f - volumePanelHeight : 0.0f;
-
-        osdCacheTarget->BeginDraw();
-        osdCacheTarget->Clear(D2D1::ColorF(0, 0.0f));
-        osdCacheTarget->FillRoundedRectangle(
-            D2D1::RoundedRect(D2D1::RectF(
-                                  0.0f, 0.0f,
-                                  static_cast<float>(kOsdOverlayWidth),
-                                  static_cast<float>(kOsdOverlayHeight)),
-                              12.0f, 12.0f),
-            osdCacheBackgroundBrush);
-        osdCacheTarget->DrawRoundedRectangle(
-            D2D1::RoundedRect(D2D1::RectF(0.5f, 0.5f,
-                kOsdOverlayWidth - 0.5f, kOsdOverlayHeight - 0.5f), 12, 12),
-            osdCacheEdgeBrush, 1.0f);
-        osdCacheTarget->DrawTextLayout(
-            D2D1::Point2F(16.0f, 12.0f), osdTextLayout,
-            osdCacheTextBrush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
-        hr = osdCacheTarget->EndDraw();
-        if (FAILED(hr)) return hr;
-
-        volumeCacheTarget->BeginDraw();
-        volumeCacheTarget->Clear(D2D1::ColorF(0, 0.0f));
-        volumeCacheTarget->FillRoundedRectangle(
-            D2D1::RoundedRect(D2D1::RectF(0.0f, volumePanelTop, 260.0f, volumePanelTop + volumePanelHeight),
-                              12.0f, 12.0f),
-            volumeCacheBackgroundBrush);
-        volumeCacheTarget->DrawRoundedRectangle(
-            D2D1::RoundedRect(D2D1::RectF(0.5f, volumePanelTop + 0.5f,
-                259.5f, volumePanelTop + volumePanelHeight - 0.5f), 12, 12),
-            volumeCacheBarBackgroundBrush, 1.0f);
-        volumeCacheTarget->DrawTextLayout(
-            D2D1::Point2F(16.0f, volumePanelTop +
-                (hudContent == TransientHudContent::Volume ? 6.0f : 10.0f)), volumeTextLayout,
-            hudContent == TransientHudContent::Volume && masterBoosted
-                ? volumeCacheBoostBrush : volumeCacheTextBrush,
-            D2D1_DRAW_TEXT_OPTIONS_CLIP);
-        if (hudContent == TransientHudContent::Volume) {
-            const D2D1_RECT_F volumeBarBackground =
-                D2D1::RectF(16.0f, 57.0f, 244.0f, 66.0f);
+        if (refreshMask & 2u) {
+            SafeRelease(volumeTextLayout);
+            const TransientHudContent hudContent =
+                g_transientHudContent.load(std::memory_order_acquire);
+            wchar_t volumeText[96]{};
+#ifdef LLCV_VSR_FEATURE
+            if (hudContent >= TransientHudContent::VsrPending) {
+                const wchar_t* ko = L"VSR 비교: F6\n현재: 기본 출력";
+                const wchar_t* en = L"VSR compare: F6\nOriginal output";
+                switch (hudContent) {
+                case TransientHudContent::VsrPending: ko=L"VSR 전환 대기"; en=L"VSR switch pending"; break;
+                case TransientHudContent::VsrOn: ko=L"VSR ON\nF6: 끄기"; en=L"VSR ON\nF6: OFF"; break;
+                case TransientHudContent::VsrOff: ko=L"VSR OFF\nF6: 켜기"; en=L"VSR OFF\nF6: ON"; break;
+                case TransientHudContent::VsrUnavailable: ko=L"VSR 적용 불가\n입력·표시 조건 확인"; en=L"VSR unavailable\nCheck format / size"; break;
+                case TransientHudContent::VsrRejected: ko=L"VSR 요청 거부\nOFF로 복귀"; en=L"VSR rejected\nBack to OFF"; break;
+                case TransientHudContent::VsrFailed: ko=L"VSR 전환 실패\n진단 로그 확인"; en=L"VSR switch failed\nSee diagnostic log"; break;
+                default: break;
+                }
+                wcscpy_s(volumeText, IsEnglishUi() ? en : ko);
+            } else
+#endif
+            if (hudContent >= TransientHudContent::ScreenshotPending) {
+                const wchar_t* ko = L"스크린샷 실패\n진단 로그 확인";
+                const wchar_t* en = L"Screenshot failed\nCheck diagnostic log";
+                switch (hudContent) {
+                case TransientHudContent::ScreenshotPending: ko=L"스크린샷 처리 중"; en=L"Saving screenshot"; break;
+                case TransientHudContent::ScreenshotBusy: ko=L"촬영 대기 중\n잠시 후 다시 시도"; en=L"Not ready / busy\nPlease try again"; break;
+                case TransientHudContent::ScreenshotSaved: ko=L"PNG 저장 완료"; en=L"PNG saved"; break;
+                case TransientHudContent::ScreenshotCopied: ko=L"PNG 저장 완료\n클립보드 복사 완료"; en=L"PNG saved\nCopied to clipboard"; break;
+                case TransientHudContent::ScreenshotClipboardFailed: ko=L"PNG 저장 완료\n클립보드 복사 실패"; en=L"PNG saved\nClipboard failed"; break;
+                case TransientHudContent::ScreenshotTimeout: ko=L"촬영 시간 초과\n입력 영상 확인"; en=L"Screenshot timed out\nCheck video input"; break;
+                default: break;
+                }
+                wcscpy_s(volumeText, IsEnglishUi() ? en : ko);
+            } else if (hudContent == TransientHudContent::OneToOne) {
+                const auto& video = CurrentCapturePreset();
+                swprintf_s(volumeText,
+                           IsEnglishUi() ? L"1:1 Pixel-perfect\n%d x %d"
+                                         : L"1:1 Pixel-perfect\n%d x %d",
+                           video.width, video.height);
+            } else if (hudContent ==
+                       TransientHudContent::OneToOneUnavailable) {
+                wcscpy_s(volumeText,
+                         IsEnglishUi() ? L"1:1 unavailable\nLarger than this display"
+                                       : L"1:1 표시 불가\n현재 모니터보다 큼");
+            } else {
+                swprintf_s(volumeText, UI_TEXT(L"음량  %d%%"),
+                           overlayMaster);
+            }
+            hr = dwriteFactory->CreateTextLayout(
+                volumeText, static_cast<UINT32>(wcslen(volumeText)),
+                volumeTextFormat, 228.0f, 62.0f, &volumeTextLayout);
+            if (FAILED(hr)) return hr;
+            if (hudContent != TransientHudContent::Volume)
+                volumeTextLayout->SetFontSize(20.0f,
+                    DWRITE_TEXT_RANGE{0, static_cast<UINT32>(wcslen(volumeText))});
+            // Keep the existing GPU texture/quad; only the painted panel follows
+            // the cached text height. Volume retains space for its gain bar.
+            DWRITE_TEXT_METRICS hudMetrics{};
+            hr = volumeTextLayout->GetMetrics(&hudMetrics);
+            if (FAILED(hr)) return hr;
+            volumePanelHeight = hudContent == TransientHudContent::Volume ? 82.0f
+                : std::clamp(std::ceil(hudMetrics.height) + 20.0f, 40.0f, 82.0f);
+            const bool bottomHud = g_settings.volumeHudPosition == VolumeHudPosition::BottomLeft ||
+                g_settings.volumeHudPosition == VolumeHudPosition::BottomRight;
+            // Bottom notifications keep the same screen-edge margin even when
+            // shorter. Unused texture rows are transparent, never stretched.
+            volumePanelTop = bottomHud ? 82.0f - volumePanelHeight : 0.0f;
+            volumeCacheTarget->BeginDraw();
+            volumeCacheTarget->Clear(D2D1::ColorF(0, 0.0f));
             volumeCacheTarget->FillRoundedRectangle(
-                D2D1::RoundedRect(volumeBarBackground, 4, 4), volumeCacheBarBackgroundBrush);
-            D2D1_RECT_F volumeBar = volumeBarBackground;
-            const int volumeBarMaximum = g_settings.allowVolumeBoost
-                ? kMaximumVolumePercent : 100;
-            volumeBar.right = volumeBar.left +
-                (volumeBarBackground.right - volumeBarBackground.left) *
-                    overlayMaster /
-                    static_cast<float>(volumeBarMaximum);
-            if (volumeBar.right > volumeBar.left) {
-                volumeCacheTarget->FillRoundedRectangle(D2D1::RoundedRect(volumeBar, 4, 4),
-                                                       volumeCacheBarBrush);
+                D2D1::RoundedRect(D2D1::RectF(0.0f, volumePanelTop, 260.0f, volumePanelTop + volumePanelHeight),
+                                  12.0f, 12.0f),
+                volumeCacheBackgroundBrush);
+            volumeCacheTarget->DrawRoundedRectangle(
+                D2D1::RoundedRect(D2D1::RectF(0.5f, volumePanelTop + 0.5f,
+                    259.5f, volumePanelTop + volumePanelHeight - 0.5f), 12, 12),
+                volumeCacheBarBackgroundBrush, 1.0f);
+            volumeCacheTarget->DrawTextLayout(
+                D2D1::Point2F(16.0f, volumePanelTop +
+                    (hudContent == TransientHudContent::Volume ? 6.0f : 10.0f)), volumeTextLayout,
+                hudContent == TransientHudContent::Volume && masterBoosted
+                    ? volumeCacheBoostBrush : volumeCacheTextBrush,
+                D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            if (hudContent == TransientHudContent::Volume) {
+                const D2D1_RECT_F volumeBarBackground =
+                    D2D1::RectF(16.0f, 57.0f, 244.0f, 66.0f);
+                volumeCacheTarget->FillRoundedRectangle(
+                    D2D1::RoundedRect(volumeBarBackground, 4, 4), volumeCacheBarBackgroundBrush);
+                D2D1_RECT_F volumeBar = volumeBarBackground;
+                const int volumeBarMaximum = g_settings.allowVolumeBoost
+                    ? kMaximumVolumePercent : 100;
+                volumeBar.right = volumeBar.left +
+                    (volumeBarBackground.right - volumeBarBackground.left) *
+                        overlayMaster /
+                        static_cast<float>(volumeBarMaximum);
+                if (volumeBar.right > volumeBar.left) {
+                    volumeCacheTarget->FillRoundedRectangle(D2D1::RoundedRect(volumeBar, 4, 4),
+                                                           volumeCacheBarBrush);
+                }
             }
+            hr = volumeCacheTarget->EndDraw();
+            if (FAILED(hr)) return hr;
         }
-        hr = volumeCacheTarget->EndDraw();
-        if (FAILED(hr)) return hr;
-
-        if (g_audioOsdVisible.load(std::memory_order_acquire)) {
+        if (refreshMask & 4u) {
             const int maximum = g_settings.allowVolumeBoost
                 ? kMaximumVolumePercent : 100;
             constexpr int channelMaximum = 100;
@@ -3118,7 +3146,13 @@ struct DirectD3D11Renderer {
             audioSmallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             hr = audioCacheTarget->EndDraw();
         }
-        return hr;
+        if (FAILED(hr)) return hr;
+        // Publish cache validity only after every requested draw succeeded.
+        // A failed refresh must be retried, including in the same generation.
+        if (cachedOverlayGeneration != generation) cachedOverlayMask = 0;
+        cachedOverlayMask |= refreshMask;
+        cachedOverlayGeneration = generation;
+        return S_OK;
     }
 
     HRESULT prepareHdrOverlay(LONG left, LONG top, LONG right, LONG bottom) {
@@ -3171,7 +3205,7 @@ struct DirectD3D11Renderer {
         const bool audioVisible =
             g_audioOsdVisible.load(std::memory_order_acquire);
         if (!osdVisible && !volumeVisible && !audioVisible) return S_OK;
-        HRESULT hr = refreshOverlayLayouts();
+        HRESULT hr = refreshOverlayLayouts(osdVisible, volumeVisible, audioVisible);
         if (FAILED(hr)) return hr;
 
         const D3D11_VIEWPORT viewport{
@@ -3264,6 +3298,28 @@ struct DirectD3D11Renderer {
         return S_OK;
     }
 
+    HRESULT processVideo(D3D11_VIDEO_PROCESSOR_STREAM& stream) {
+        auto blit = [&] {
+            return videoContext->VideoProcessorBlt(processor, outputView, 0, 1, &stream);
+        };
+#ifdef LLCV_VSR_FEATURE
+        const auto previous = vsrState;
+        const HRESULT hr = llcv::vsr::ProcessWithFallback(vsrState, blit, [&] {
+            return llcv::vsr::SetRequest(videoContext, processor, false);
+        });
+        if (previous != vsrState) {
+            cachedOverlayGeneration = 0;
+            ShowTransientHud(vsrState == llcv::vsr::State::Rejected
+                ? TransientHudContent::VsrRejected : TransientHudContent::VsrFailed);
+            fwprintf(stderr, L"[vsr] processor fallback: %s; result=0x%08X; HDR=%d\n",
+                llcv::vsr::StateName(vsrState), static_cast<unsigned>(hr), hdrOutput ? 1 : 0);
+        }
+        return hr;
+#else
+        return blit();
+#endif
+    }
+
     HRESULT presentUploaded() {
 #ifdef LLCV_VSR_FEATURE
         // Apply on the render owner immediately before processing the next
@@ -3309,7 +3365,7 @@ struct DirectD3D11Renderer {
                                                outputWidth, outputHeight, activeUploadSurface);
         else
 #endif
-        hr = videoContext->VideoProcessorBlt(processor, outputView, 0, 1, &stream);
+        hr = processVideo(stream);
 #ifdef LLCV_VSR_EXPERIMENT
         vsrTiming.End(context, SUCCEEDED(hr));
 #endif
@@ -3334,7 +3390,14 @@ struct DirectD3D11Renderer {
         const UINT syncInterval = vsync ? 1u : 0u;
         const UINT flags = !vsync && allowTearing
                                ? DXGI_PRESENT_ALLOW_TEARING : 0u;
+#ifdef LLCV_VSR_EXPERIMENT
+        const auto presentStart = llcv::vsr::Timing::Clock::now();
+#endif
         hr = swapChain->Present(syncInterval, flags);
+#ifdef LLCV_VSR_EXPERIMENT
+        if (hr == S_OK) vsrTiming.AddPresent(std::chrono::duration<double,std::milli>(
+            llcv::vsr::Timing::Clock::now()-presentStart).count());
+#endif
 #ifdef LLCV_GPU_DIAGNOSTICS
         diagnosticPresentUs = std::chrono::duration<double, std::micro>(
             std::chrono::steady_clock::now() - diagnosticOverlayEnd).count();
@@ -5190,6 +5253,7 @@ static void PopulatePixelFormatCombo(SettingsDialogState* state) {
     if (!state || !state->pixelFormatCombo || !state->frameRateCombo ||
         !state->videoCombo) return;
     const LRESULT videoIndex = SendMessageW(
+        !state->vsrGpuUnavailable &&
         SendMessageW(state->vsrCheck, BM_GETCHECK, 0, 0) == BST_CHECKED
             ? state->vsrCaptureCombo : state->videoCombo, CB_GETCURSEL, 0, 0);
     if (videoIndex < 0 || videoIndex >=
@@ -5441,7 +5505,7 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
             state->saveLogCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
         g_settings.screenshotClipboard = SendMessageW(
             state->screenshotClipboardCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
-        g_settings.vsrEnabled = SendMessageW(
+        g_settings.vsrEnabled = !state->vsrGpuUnavailable && SendMessageW(
             state->vsrCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
         g_settings.showDiagnosticConsole = SendMessageW(
             state->showConsoleCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
@@ -5513,6 +5577,8 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
         }
         g_settings.borderlessWindow = SendMessageW(
             state->borderlessCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
+        g_settings.roundedCorners = SendMessageW(
+            state->roundedCornersCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
         g_settings.windowSnap = SendMessageW(
             state->windowSnapCheck, BM_GETCHECK, 0, 0) == BST_CHECKED;
         // The user has explicitly accepted a new settings profile, so do not
@@ -5559,6 +5625,9 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
 
     case WM_CREATE: {
         const HINSTANCE instance = reinterpret_cast<LPCREATESTRUCTW>(lParam)->hInstance;
+        const UINT vendor = g_vsrGpuVendor.load(std::memory_order_acquire);
+        state->vsrGpuUnavailable = !llcv::vsr::NvidiaAdapter(vendor);
+        state->vsrGpuUnknown = vendor == 0;
         const llcv::settings_ui::SettingsControlInitialValues initial{
             g_settings, IsEnglishUi(), state->asioAvailable, kAppVersionLabel,
             state->initialVideoPreset, state->captureDevices,
@@ -5936,6 +6005,11 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
         if (((LOWORD(wParam) == IDC_SETTINGS_VIDEO || LOWORD(wParam) == IDC_SETTINGS_VSR_CAPTURE) &&
              HIWORD(wParam) == CBN_SELCHANGE) ||
             (LOWORD(wParam) == IDC_SETTINGS_VSR && HIWORD(wParam) == BN_CLICKED)) {
+            if (state && state->vsrGpuUnavailable &&
+                LOWORD(wParam) != IDC_SETTINGS_VIDEO) {
+                UpdateAdvancedControlVisibility(state);
+                return 0;
+            }
             PopulatePixelFormatCombo(state);
             UpdateAdvancedControlVisibility(state);
             return 0;
@@ -6744,6 +6818,13 @@ static LRESULT BorderlessHitTest(HWND hwnd, LPARAM lParam) {
         g_settings.audioOnly || !g_settings.pixelPerfect);
 }
 
+static llcv::window_corners::State g_viewerCorners;
+static void ApplyViewerCorners(HWND hwnd) {
+    (void)g_viewerCorners.Apply(hwnd, g_settings.roundedCorners,
+        g_fullscreen.load(std::memory_order_acquire), IsZoomed(hwnd) != FALSE,
+        g_settings.borderlessWindow || g_fullscreen.load(std::memory_order_acquire));
+}
+
 static DWORD ViewerWindowStyle(const AppSettings& settings) {
     if (settings.borderlessWindow) return WS_POPUP | WS_VISIBLE;
     const DWORD fixed =
@@ -6859,6 +6940,7 @@ static void ToggleFullscreen(HWND hwnd, bool automaticStartup = false,
                      SWP_NOZORDER | SWP_NOOWNERZORDER);
         g_autoFullscreen = false;
     }
+    ApplyViewerCorners(hwnd);
     EndOutputTransition(updateOutput);
 }
 
@@ -7552,6 +7634,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         g_audioOnlyResizePending = false;
         g_audioOnlyDragPending = false;
         g_audioOnlyPaintBuffer.Release();
+        g_viewerCorners.Reset();
+        ApplyViewerCorners(hwnd);
         if (g_settings.audioOnly) RefreshAudioOnlyTheme(hwnd);
         g_relativeMoveMonitor = nullptr;
         if (!g_settings.audioOnly) {
@@ -7570,6 +7654,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         return 0;
 
     case WM_SIZE:
+        ApplyViewerCorners(hwnd);
         if (g_videoHost) {
             MoveWindow(g_videoHost, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
         }
@@ -7640,7 +7725,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (g_settings.audioOnly) return 1;
         break;
 
+    case WM_DWMCOMPOSITIONCHANGED:
     case WM_SETTINGCHANGE: case WM_THEMECHANGED: case WM_SYSCOLORCHANGE:
+        g_viewerCorners.Reset();
+        ApplyViewerCorners(hwnd);
         if (g_settings.audioOnly) {
             RefreshAudioOnlyTheme(hwnd);
             InvalidateRect(hwnd, nullptr, FALSE);
@@ -8190,6 +8278,22 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
 #endif
     LoadSettings();
 #ifdef LLCV_VSR_EXPERIMENT
+    // Reproducible, session-only live-capture experiment. Same input/output
+    // plan for ON and OFF, no migration/profile writes and no capture restart.
+    const auto vsrLiveTest = CommandLineOptionValue(L"--vsr-live-test");
+    if (!vsrLiveTest.empty()) {
+        if (vsrLiveTest != L"on" && vsrLiveTest != L"off") return 2;
+        g_settings.videoPreset = VideoPreset::R2560x1440;
+        g_settings.vsrCapturePreset = VideoPreset::R1920x1080;
+        g_settings.vsrEnabled = true;
+        g_settings.videoFrameRate = 120;
+        g_settings.pixelFormat = VideoPixelFormat::Nv12;
+        g_settings.presentationMode = PresentationMode::AllowTearing;
+        g_settings.scalingMode = ScalingMode::Smooth;
+        g_settings.pixelPerfect = true;
+        g_settings.relativeWindowSize = false;
+        g_settings.skipStartupSettings = true;
+    }
     if (!vsrOption.empty()) g_settings.vsrEnabled = vsrOption == L"on";
 #endif
 #ifdef LLCV_HDR_SCRGB_PROTOTYPE
@@ -8262,6 +8366,11 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
     }
     const bool shiftLaunch = !smokeTest &&
         (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    // Identify the default renderer once, before settings or immediate start.
+    // No extension requests, capture probes or per-frame checks are added.
+    const auto vsrAdapter = llcv::vsr::ProbeDefaultAdapter();
+    g_vsrGpuVendor.store(vsrAdapter.vendor, std::memory_order_release);
+    if (!llcv::vsr::NvidiaAdapter(vsrAdapter.vendor)) g_settings.vsrEnabled = false;
     const bool showStartupSettings = !smokeTest && !exclusiveProbe &&
         (forceSettings || shiftLaunch || !g_settings.skipStartupSettings ||
          !llcv::presentation::SupportsCapture(g_settings.presentationMode,
@@ -8284,6 +8393,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
     g_vsrMode.store(g_settings.vsrEnabled ? llcv::vsr::Mode::On
                                          : llcv::vsr::Mode::Disabled,
                     std::memory_order_release);
+#ifdef LLCV_VSR_EXPERIMENT
+    if (vsrLiveTest == L"off") g_vsrMode = llcv::vsr::Mode::Off;
+#endif
     // Allocate a console for prototype diagnostics.
 #ifdef LLCV_VSR_EXPERIMENT
     g_settings.checkForUpdates = false;

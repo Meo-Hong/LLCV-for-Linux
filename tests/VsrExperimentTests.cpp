@@ -15,6 +15,18 @@ static void TestPolicy() {
     using namespace llcv::vsr;
     Require(Eligible(0x10de, DXGI_FORMAT_NV12, false, 1280,720,1920,1080), "720p to 1080p eligible");
     const auto savedSettings = g_settings;
+    const UINT savedVendor = g_vsrGpuVendor.load();
+    for (UINT vendor : {0u, 0x8086u, 0x1002u, 0x1414u}) {
+        g_vsrGpuVendor = vendor;
+        g_settings.audioOnly = false;
+        g_settings.vsrEnabled = false;
+        g_vsrMode = Mode::Disabled;
+        Require(HandleVsrTestKey(VK_F6, 0) && !g_settings.vsrEnabled &&
+            g_vsrMode.load() == Mode::Disabled &&
+            g_transientHudContent.load() == TransientHudContent::VsrUnavailable,
+            "Intel/AMD/unknown adapter cannot enable VSR through F6");
+    }
+    g_vsrGpuVendor = 0x10de;
     g_settings.videoPreset = VideoPreset::R1280x720;
     g_settings.videoFrameRate = 0;
     Require(CurrentVideoPreset().width == 1280 && CurrentVideoPreset().height == 720 &&
@@ -51,11 +63,19 @@ static void TestPolicy() {
     g_vsrResolutionPlan = false;
     g_vsrMode.store(Mode::Disabled);
     g_settings = savedSettings;
+    g_vsrGpuVendor = savedVendor;
     Require(Eligible(0x10de, DXGI_FORMAT_NV12, false, 1920,1080,3840,2160), "NV12 upscale eligible");
     Require(!Eligible(0x1002, DXGI_FORMAT_NV12, false, 1920,1080,3840,2160), "AMD untouched");
     Require(!Eligible(0x8086, DXGI_FORMAT_NV12, false, 1920,1080,3840,2160), "Intel untouched");
-    Require(!Eligible(0x10de, DXGI_FORMAT_P010, true, 1920,1080,3840,2160), "HDR untouched");
-    Require(!Eligible(0x10de, DXGI_FORMAT_YUY2, false, 1920,1080,3840,2160), "YUY2 deferred");
+    Require(Eligible(0x10de, DXGI_FORMAT_P010, true, 1920,1080,3840,2160), "HDR10 upscale eligible");
+    Require(Eligible(0x10de, DXGI_FORMAT_P010, true, 1920,1080,1920,1080), "HDR10 native eligible");
+    Require(!Eligible(0x10de, DXGI_FORMAT_P010, true, 1920,1080,1919,2160), "HDR width downscale bypass");
+    Require(!Eligible(0x10de, DXGI_FORMAT_P010, true, 1920,1080,3840,1079), "HDR height downscale bypass");
+    Require(!Eligible(0x1002, DXGI_FORMAT_P010, true, 1920,1080,3840,2160), "HDR AMD bypass");
+    Require(!Eligible(0x8086, DXGI_FORMAT_P010, true, 1920,1080,3840,2160), "HDR Intel bypass");
+    Require(Eligible(0x10de, DXGI_FORMAT_YUY2, false, 1920,1080,3840,2160), "YUY2 upscale eligible");
+    Require(Eligible(0x10de, DXGI_FORMAT_YUY2, false, 1920,1080,1920,1080), "YUY2 native eligible");
+    Require(!Eligible(0x10de, DXGI_FORMAT_YUY2, true, 1920,1080,3840,2160), "YUY2 is SDR only");
     Require(Eligible(0x10de, DXGI_FORMAT_NV12, false, 1280,720,1280,720), "720p native eligible");
     Require(Eligible(0x10de, DXGI_FORMAT_NV12, false, 1920,1080,1920,1080), "1080p native eligible");
     Require(!Eligible(0x10de, DXGI_FORMAT_NV12, false, 1920,1080,1280,720), "downscale bypass");
@@ -71,6 +91,37 @@ static void TestPolicy() {
     Require(!Eligible(0x10de, DXGI_FORMAT_P010, false, 1920,1080,1920,1080), "native P010 bypass");
     Require(!Eligible(0x1002, DXGI_FORMAT_NV12, false, 1920,1080,1920,1080), "native AMD bypass");
     Require(SetRequest(nullptr, nullptr, true) == E_POINTER, "null API guard");
+    // Deterministic fault injection into the exact production retry policy.
+    int blits = 0, disables = 0;
+    State state = State::Requested;
+    auto disable = [&] { ++disables; return S_OK; };
+    auto failThenPass = [&] { return ++blits == 1 ? E_INVALIDARG : S_OK; };
+    Require(ProcessWithFallback(state, failThenPass, disable) == S_OK &&
+        state == State::Rejected && blits == 2 && disables == 1, "same-frame OFF fallback");
+    Require(ProcessWithFallback(state, [&] { ++blits; return E_FAIL; }, disable) == E_FAIL &&
+        blits == 3 && disables == 1, "rejected VSR never retries every frame");
+    for (auto initial : {State::Untouched, State::Bypassed, State::Off, State::Rejected, State::Unknown}) {
+        state = initial; blits = disables = 0;
+        Require(ProcessWithFallback(state, [&] { ++blits; return E_FAIL; }, disable) == E_FAIL &&
+            state == initial && blits == 1 && disables == 0, "ordinary failures propagate without VSR retry");
+    }
+    state = State::Requested; blits = disables = 0;
+    Require(ProcessWithFallback(state, [&] { ++blits; return S_OK; }, disable) == S_OK &&
+        state == State::Requested && blits == 1 && disables == 0, "successful frame adds no driver calls");
+    for (HRESULT off : {E_FAIL, S_FALSE}) {
+        state = State::Requested; blits = disables = 0;
+        Require(FAILED(ProcessWithFallback(state, [&] { ++blits; return E_INVALIDARG; },
+            [&] { ++disables; return off; })) && state == State::Unknown &&
+            blits == 1 && disables == 1, "failed OFF cannot be claimed as safe fallback");
+    }
+    state = State::Requested; blits = disables = 0;
+    Require(ProcessWithFallback(state, [&] { ++blits; return E_INVALIDARG; }, disable) == E_INVALIDARG &&
+        state == State::Rejected && blits == 2, "failed fallback not hidden");
+    for (HRESULT removed : {DXGI_ERROR_DEVICE_REMOVED, DXGI_ERROR_DEVICE_RESET, DXGI_ERROR_DEVICE_HUNG}) {
+        state = State::Requested; blits = disables = 0;
+        Require(ProcessWithFallback(state, [&] { ++blits; return removed; }, disable) == removed &&
+            state == State::Requested && blits == 1 && disables == 0, "device loss remains a device recovery error");
+    }
     Distribution d;
     d.Add(-1); d.Add(std::numeric_limits<double>::infinity());
     d.Add(std::numeric_limits<double>::quiet_NaN());
@@ -460,6 +511,18 @@ static void TestSettingsModeFlow() {
     SendMessageW(window,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_VIDEO_REFRESH,BN_CLICKED),0);
     complete();
     Require(modeQueryCalls == 3, "only explicit refresh repeats the same query");
+    state.vsrGpuUnavailable = true;
+    // A stale check or forged notification must not select the VSR capture plan.
+    SendMessageW(state.vsrCheck, BM_SETCHECK, BST_CHECKED, 0);
+    SendMessageW(window, WM_COMMAND, MAKEWPARAM(IDC_SETTINGS_VSR, BN_CLICKED), 0);
+    Require(modeQueryCalls == 3 && !state.videoModesPending &&
+        SendMessageW(state.vsrCheck, BM_GETCHECK, 0, 0) == BST_UNCHECKED &&
+        !IsWindowEnabled(state.vsrCheck), "blocked VSR notification cannot rescan or enable");
+    SendMessageW(state.vsrCheck, BM_SETCHECK, BST_CHECKED, 0);
+    PopulatePixelFormatCombo(&state);
+    complete();
+    Require(state.pixelFormats.front().selectedFps == 60,
+        "unavailable VSR uses ordinary capture size even with a stale check");
     state.videoModeCache.reset();
     DestroyWindow(window);
     UnregisterClassW(wc.lpszClassName,wc.hInstance);
@@ -529,10 +592,11 @@ static void TestNativeControls(HWND window, int width, int height, const std::ve
     g_vsrMode = llcv::vsr::Mode::Disabled;
 }
 
-static void TestLiveToggle(HWND window, int width, int height, const std::vector<BYTE>& pixels) {
+static void TestLiveToggle(HWND window, int width, int height, const std::vector<BYTE>& pixels,
+                           VideoPixelFormat format = VideoPixelFormat::Nv12) {
     g_vsrMode.store(llcv::vsr::Mode::Disabled);
     DirectD3D11Renderer renderer;
-    Check(renderer.initialize(window,width,height,60,VideoPixelFormat::Nv12), "toggle renderer init");
+    Check(renderer.initialize(window,width,height,60,format), "toggle renderer init");
     const auto* originalDevice = renderer.device;
     const auto* originalProcessor = renderer.processor;
     const auto* originalSwapchain = renderer.swapChain;
@@ -540,7 +604,7 @@ static void TestLiveToggle(HWND window, int width, int height, const std::vector
     const auto originalGeneration = g_outputConfigurationGeneration.load();
     const auto originalRendererGeneration = renderer.outputConfigurationGeneration;
     auto renderHash = [&] {
-        renderer.upload(pixels.data(), static_cast<UINT32>(width));
+        renderer.upload(pixels.data(), static_cast<UINT32>(width*(format == VideoPixelFormat::Yuy2 ? 2 : 1)));
         D3D11_VIDEO_PROCESSOR_STREAM stream{};
         stream.Enable = TRUE; stream.pInputSurface = renderer.inputViews[renderer.activeUploadSurface];
         Check(renderer.videoContext->VideoProcessorBlt(renderer.processor,renderer.outputView,0,1,&stream),
@@ -548,6 +612,15 @@ static void TestLiveToggle(HWND window, int width, int height, const std::vector
         return OutputHash(renderer);
     };
     const uint64_t baseline = renderHash();
+    if (!llcv::vsr::NvidiaAdapter(g_vsrGpuVendor.load())) {
+        const bool savedPreference = g_settings.vsrEnabled;
+        g_settings.audioOnly = false;
+        Require(HandleVsrTestKey(VK_F6, 0) &&
+            g_vsrMode.load() == llcv::vsr::Mode::Disabled &&
+            g_settings.vsrEnabled == savedPreference &&
+            renderHash() == baseline, "actual non-NVIDIA renderer rejects F6 without changing video");
+        return;
+    }
     Require(!HandleVsrTestKey(VK_F5,0), "other shortcuts untouched");
     g_settings.audioOnly = true;
     Require(HandleVsrTestKey(VK_F6,0) && g_vsrMode.load() == llcv::vsr::Mode::Disabled,
@@ -595,7 +668,7 @@ static void TestLiveToggle(HWND window, int width, int height, const std::vector
     HandleVsrTestKey(VK_F6,0); // preserve ON intent through real output changes
     Require(SetWindowPos(window,nullptr,0,0,width,height,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE) != 0,
         "hidden 1:1 output");
-    Check(renderer.initialize(window,width,height,60,VideoPixelFormat::Nv12), "recreate 1:1");
+    Check(renderer.initialize(window,width,height,60,format), "recreate 1:1");
     Require(renderer.vsrEligible == originalVsrEligible &&
         renderer.vsrAppliedMode == llcv::vsr::Mode::On &&
         renderer.vsrState == (renderer.vsrEligible ? llcv::vsr::State::Requested : llcv::vsr::State::Bypassed) &&
@@ -603,18 +676,25 @@ static void TestLiveToggle(HWND window, int width, int height, const std::vector
             : TransientHudContent::VsrUnavailable), "native-size ON intent and acknowledged HUD");
     Require(SetWindowPos(window,nullptr,0,0,width/2,height/2,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE) != 0,
         "hidden downscaled output");
-    Check(renderer.initialize(window,width,height,60,VideoPixelFormat::Nv12), "recreate downscale");
+    Check(renderer.initialize(window,width,height,60,format), "recreate downscale");
     Require(!renderer.vsrEligible && renderer.vsrState == llcv::vsr::State::Bypassed &&
         g_transientHudContent.load() == TransientHudContent::VsrUnavailable, "downscale bypass with visible explanation");
     Require(SetWindowPos(window,nullptr,0,0,width*2,height*2,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE) != 0,
         "restore hidden upscale output");
-    Check(renderer.initialize(window,width,height,60,VideoPixelFormat::Nv12), "recreate upscale");
+    Check(renderer.initialize(window,width,height,60,format), "recreate upscale");
     Require(renderer.vsrAppliedMode == llcv::vsr::Mode::On &&
         renderer.vsrState == (renderer.vsrEligible ? llcv::vsr::State::Requested : llcv::vsr::State::Bypassed),
         "ON intent reapplied after actual resize");
     const auto savedLanguage = g_settings.uiLanguage;
     for (const auto language : {UiLanguage::Korean, UiLanguage::English}) {
         g_settings.uiLanguage = language;
+        const auto savedState = renderer.vsrState;
+        renderer.vsrState = llcv::vsr::State::Requested;
+        const auto onLine = renderer.vsrOsdLine();
+        Require(onLine.find(L"ON") != std::wstring::npos &&
+            onLine.find(L"requested") == std::wstring::npos &&
+            onLine.find(L"요청") == std::wstring::npos, "Tab ON uses concise label");
+        renderer.vsrState = savedState;
         for (const auto content : {TransientHudContent::VsrPending, TransientHudContent::VsrOn,
                 TransientHudContent::VsrOff, TransientHudContent::VsrUnavailable,
                 TransientHudContent::VsrRejected, TransientHudContent::VsrFailed}) {
@@ -778,7 +858,14 @@ int main(int argc, char** argv) {
     const bool native = nativeColor || (argc > 1 && std::string(argv[1]) == "--bench-native");
     const bool bench720To4k = argc > 1 && std::string(argv[1]) == "--bench-720p-4k";
     const bool bench720 = bench720To4k || (argc > 1 && std::string(argv[1]) == "--bench-720p");
-    const bool benchmark = native || bench720 || (argc > 1 && std::string(argv[1]) == "--bench");
+    const bool benchFhdQhd = argc > 1 && std::string(argv[1]) == "--bench-fhd-qhd";
+    const bool benchmark = native || bench720 || benchFhdQhd || (argc > 1 && std::string(argv[1]) == "--bench");
+    bool yuy2 = false;
+    int benchFps = 60;
+    for (int i = 2; i < argc; ++i) {
+        yuy2 |= std::string(argv[i]) == "--yuy2";
+        if (std::string(argv[i]) == "--120") benchFps = 120;
+    }
     const bool reverse = argc > 2 && std::string(argv[2]) == "--reverse";
     const bool hd720 = argc > 1 && std::string(argv[1]) == "--720p";
     Check(CoInitializeEx(nullptr, COINIT_MULTITHREADED), "COM");
@@ -793,6 +880,10 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (argc > 1 && std::string(argv[1]) == "--probe") {
+        const auto adapter = llcv::vsr::ProbeDefaultAdapter();
+        Check(adapter.result, "default renderer adapter probe");
+        Require(adapter.vendor != 0, "default adapter identifies a vendor");
+        std::printf("Default adapter vendor=0x%04X (not an RTX capability check)\n", adapter.vendor);
         const auto mode = g_vsrMode.load();
         for (int i = 0; i < 3; ++i) {
             const auto result = llcv::vsr::ProbeSupport();
@@ -811,15 +902,15 @@ int main(int argc, char** argv) {
     Require(RegisterClassW(&wc) != 0, "test class");
     const int width = bench720 ? 1280 : benchmark ? 1920 : hd720 ? 1280 : 640;
     const int height = bench720 ? 720 : benchmark ? 1080 : hd720 ? 720 : 360;
-    const int targetWidth = native ? width : bench720To4k ? 3840 : hd720 ? 1920 : width*2;
-    const int targetHeight = native ? height : bench720To4k ? 2160 : hd720 ? 1080 : height*2;
+    const int targetWidth = benchFhdQhd ? 2560 : native ? width : bench720To4k ? 3840 : hd720 ? 1920 : width*2;
+    const int targetHeight = benchFhdQhd ? 1440 : native ? height : bench720To4k ? 2160 : hd720 ? 1080 : height*2;
     HWND window = CreateWindowW(wc.lpszClassName, L"Hidden VSR test", WS_POPUP,
         0,0,targetWidth,targetHeight,
         nullptr,nullptr,wc.hInstance,nullptr);
     Require(window != nullptr, "hidden window");
-    if (benchmark) std::printf("BENCH input=%dx%d output=%dx%d fps=60 reverse=%d; synthetic NV12, "
+    if (benchmark) std::printf("BENCH input=%dx%d output=%dx%d fps=%d reverse=%d YUY2=%d; synthetic input, "
         "Smooth, no Present, driver quality unchanged/unverified\n",
-        width,height,targetWidth,targetHeight,reverse);
+        width,height,targetWidth,targetHeight,benchFps,reverse,yuy2);
     g_settings.pixelPerfect = false; g_settings.scalingMode = ScalingMode::Smooth;
     g_settings.presentationMode = PresentationMode::AllowTearing;
     g_suppressSettingsSave = true;
@@ -832,6 +923,23 @@ int main(int argc, char** argv) {
     for (int y = 0; y < height; ++y) for (int x = 0; x < width; ++x)
         pixels[static_cast<size_t>(y)*width+x] = static_cast<BYTE>(16 +
             ((x / 3 + y / 5 + ((x/40+y/40)%2)*90) % 220));
+    // Prepare moving input before measuring. Generating/packing a full HD
+    // pattern on every iteration can itself miss a 120fps deadline.
+    std::array<std::vector<BYTE>,24> prepared;
+    if (benchmark) for (size_t f = 0; f < prepared.size(); ++f) {
+        auto nv12 = pixels;
+        for (int y = 0; y < height; ++y) for (int x = 0; x < width; ++x)
+            nv12[static_cast<size_t>(y)*width+x] = static_cast<BYTE>(16 +
+                (((x+static_cast<int>(f)*3)/3+y/5+(((x+static_cast<int>(f)*3)/40+y/40)%2)*90)%220));
+        if (!yuy2) { prepared[f] = std::move(nv12); continue; }
+        auto& p = prepared[f]; p.resize(static_cast<size_t>(width)*height*2);
+        for (int y = 0; y < height; ++y) for (int x = 0; x < width; x += 2) {
+            const size_t out = (static_cast<size_t>(y)*width+x)*2;
+            const size_t uv = static_cast<size_t>(width)*height+static_cast<size_t>(y/2)*width+x;
+            p[out] = nv12[static_cast<size_t>(y)*width+x]; p[out+1] = nv12[uv];
+            p[out+2] = nv12[static_cast<size_t>(y)*width+x+1]; p[out+3] = nv12[uv+1];
+        }
+    }
     const int phases = benchmark ? 6 : 3;
     uint64_t defaultHash = 0;
     std::vector<BYTE> firstOff, firstOn;
@@ -839,7 +947,8 @@ int main(int argc, char** argv) {
         g_vsrMode = benchmark ? ((static_cast<bool>(phase % 2) != reverse) ? llcv::vsr::Mode::On : llcv::vsr::Mode::Off)
             : (phase == 0 ? llcv::vsr::Mode::Disabled : llcv::vsr::Mode::Off);
         DirectD3D11Renderer renderer;
-        const HRESULT init = renderer.initialize(window,width,height,60,VideoPixelFormat::Nv12);
+        const HRESULT init = renderer.initialize(window,width,height,benchFps,
+            yuy2 ? VideoPixelFormat::Yuy2 : VideoPixelFormat::Nv12);
         if (FAILED(init)) {
             std::printf("GPU/extension unavailable: 0x%08X (not a successful VSR test)\n", static_cast<unsigned>(init));
             return 77;
@@ -847,7 +956,7 @@ int main(int argc, char** argv) {
         if (phase == 0 && !benchmark)
             Require(renderer.vsrState == llcv::vsr::State::Untouched, "default initialization untouched");
         if (benchmark && renderer.vsrState == llcv::vsr::State::Bypassed) {
-            std::puts("SKIP: NVIDIA NV12 native/upscale route not available"); return 77;
+            std::puts("SKIP: NVIDIA SDR native/upscale route not available"); return 77;
         }
         if (benchmark) {
             Require(renderer.vsrEligible, "benchmark uses production eligibility without overrides");
@@ -872,15 +981,17 @@ int main(int argc, char** argv) {
             desc.Usage = D3D11_USAGE_STAGING; desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
             Check(renderer.device->CreateTexture2D(&desc,nullptr,&completionPixel), "completion dependency");
         }
-        const int frames = (native || bench720) ? 360 : benchmark ? 240 : 1;
-        const int warmup = (native || bench720) ? 120 : 60;
+        const int frames = benchFhdQhd ? benchFps * 6 : (native || bench720) ? 360 : benchmark ? 240 : 1;
+        const int warmup = benchFhdQhd ? benchFps * 2 : (native || bench720) ? 120 : 60;
+        llcv::vsr::Distribution uploadTime, blitTime, readbackTime;
+        uint64_t overBudget = 0;
         auto next = std::chrono::steady_clock::now();
+        const auto phaseStart = next;
         for (int frame = 0; frame < frames; ++frame) {
-            if (benchmark) for (int y = 0; y < height; ++y) for (int x = 0; x < width; ++x)
-                pixels[static_cast<size_t>(y)*width+x] = static_cast<BYTE>(16 +
-                    (((x+frame*3) / 3 + y / 5 + (((x+frame*3)/40+y/40)%2)*90) % 220));
+            const auto& sourcePixels = benchmark ? prepared[frame%prepared.size()] : pixels;
             const auto completionStart = std::chrono::steady_clock::now();
-            renderer.upload(pixels.data(), static_cast<UINT32>(width));
+            renderer.upload(sourcePixels.data(), static_cast<UINT32>(width*(yuy2 ? 2 : 1)));
+            const auto uploadEnd = std::chrono::steady_clock::now();
             D3D11_VIDEO_PROCESSOR_STREAM stream{};
             stream.Enable = TRUE; stream.pInputSurface = renderer.inputViews[renderer.activeUploadSurface];
             renderer.vsrTiming.Begin(renderer.context);
@@ -888,6 +999,7 @@ int main(int argc, char** argv) {
                 renderer.outputView,0,1,&stream);
             renderer.vsrTiming.End(renderer.context,SUCCEEDED(hr));
             Check(hr, "video processor blit");
+            const auto blitEnd = std::chrono::steady_clock::now();
             // Test-only submission: no Present to a hidden window. Not an
             // input-to-display benchmark. The application uses normal Present.
             renderer.context->Flush();
@@ -898,12 +1010,22 @@ int main(int argc, char** argv) {
                 D3D11_MAPPED_SUBRESOURCE mapped{};
                 Check(renderer.context->Map(completionPixel.Get(),0,D3D11_MAP_READ,0,&mapped), "serialized completion");
                 renderer.context->Unmap(completionPixel.Get(),0);
-                if (frame >= warmup) completed.Add(std::chrono::duration<double,std::milli>(
-                    std::chrono::steady_clock::now()-completionStart).count());
-                next += std::chrono::microseconds(16667);
+                if (frame >= warmup) {
+                    const auto end = std::chrono::steady_clock::now();
+                    const double ms = std::chrono::duration<double,std::milli>(end-completionStart).count();
+                    completed.Add(ms);
+                    overBudget += ms > 1000.0/benchFps;
+                    uploadTime.Add(std::chrono::duration<double,std::milli>(uploadEnd-completionStart).count());
+                    blitTime.Add(std::chrono::duration<double,std::milli>(blitEnd-uploadEnd).count());
+                    readbackTime.Add(std::chrono::duration<double,std::milli>(end-blitEnd).count());
+                }
+                next += std::chrono::microseconds(1000000/benchFps);
                 std::this_thread::sleep_until(next);
             }
         }
+        if (benchmark) std::printf("CADENCE frames=%d elapsed=%.3f s average=%.3f fps (serialized test only)\n",
+            frames,std::chrono::duration<double>(std::chrono::steady_clock::now()-phaseStart).count(),
+            frames/std::chrono::duration<double>(std::chrono::steady_clock::now()-phaseStart).count());
         const uint64_t hash = OutputHash(renderer); // blocks only after benchmark
         if (benchmark) {
             auto current = OutputPixels(renderer);
@@ -925,10 +1047,17 @@ int main(int argc, char** argv) {
             phase,completed.count,completed.Mean(),completed.Percentile(.95),
             completed.Percentile(.99),completed.maximum);
         if (benchmark) Require(completed.count > 100, "enough completion timing samples");
+        if (benchmark) std::printf("DETAIL over_budget=%llu/%llu upload_mean=%.4f max=%.4f blit_mean=%.4f max=%.4f readback_mean=%.4f max=%.4f ms\n",
+            overBudget,completed.count,uploadTime.Mean(),uploadTime.maximum,blitTime.Mean(),blitTime.maximum,
+            readbackTime.Mean(),readbackTime.maximum);
     }
     if (native) TestNativeControls(window,width,height,pixels);
     if (!benchmark) {
         TestLiveToggle(window,width,height,pixels);
+        std::vector<BYTE> yuyPixels(static_cast<size_t>(width)*height*2,128);
+        for (int y = 0; y < height; ++y) for (int x = 0; x < width; ++x)
+            yuyPixels[(static_cast<size_t>(y)*width+x)*2] = pixels[static_cast<size_t>(y)*width+x];
+        TestLiveToggle(window,width,height,yuyPixels,VideoPixelFormat::Yuy2);
         TestCenteredPixelPerfect(window,width,height,pixels);
         TestSplitResolutionRenderer(window);
     }

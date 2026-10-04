@@ -1,5 +1,19 @@
 # NVIDIA VSR integration and experiment history
 
+## Post-2.0.0 development: all capture formats and 120fps investigation
+
+The viewer now permits native YUY2 SDR as well as NV12, decoded MJPEG and P010
+HDR10. ON/OFF captions are concise; activation caveats remain in the setup guide.
+See [format and live-capture validation](vsr-all-formats-validation.md).
+Intermittent display stutter has **not** been certified fixed. No extra buffering,
+VSync change, forced quality reduction or speculative wait policy was introduced.
+
+## Post-2.0.0 development: native HDR10 + VSR
+
+The development route now also accepts P010 HDR10 without an SDR conversion.
+See [implementation and validation](vsr-hdr-validation.md). SDR-only restrictions
+in the dated release/experiment history below describe those earlier builds.
+
 ## Final v2.0.0 release validation (2026-10-04)
 
 Clean x64 Release build with all three private diagnostic options OFF passed

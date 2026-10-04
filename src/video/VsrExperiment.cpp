@@ -4,6 +4,23 @@
 #include <dxgi.h>
 
 namespace llcv::vsr {
+AdapterProbe ProbeDefaultAdapter() {
+    AdapterProbe probe;
+    using Microsoft::WRL::ComPtr;
+    ComPtr<ID3D11Device> device;
+    probe.result = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+        D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
+        nullptr, 0, D3D11_SDK_VERSION, &device, nullptr, nullptr);
+    if (FAILED(probe.result)) return probe;
+    ComPtr<IDXGIDevice> dxgi;
+    ComPtr<IDXGIAdapter> adapter;
+    DXGI_ADAPTER_DESC desc{};
+    if (FAILED(probe.result = device.As(&dxgi)) ||
+        FAILED(probe.result = dxgi->GetAdapter(&adapter)) ||
+        FAILED(probe.result = adapter->GetDesc(&desc))) return probe;
+    probe.vendor = desc.VendorId;
+    return probe;
+}
 SupportProbe ProbeSupport() {
     SupportProbe probe;
     using Microsoft::WRL::ComPtr;
@@ -107,6 +124,7 @@ HRESULT Timing::Initialize(ID3D11Device* device, unsigned warmupFrames) {
 }
 void Timing::Reset() {
     results_ = {}; warmup_ = 0; ready_ = false; sample_ = false;
+    previousPresent_ = {};
 }
 void Timing::Begin(ID3D11DeviceContext* context) {
     sample_ = false;
@@ -123,6 +141,17 @@ void Timing::End(ID3D11DeviceContext* context, bool success) {
 }
 void Timing::AddCaptureToPresent(double ms) {
     if (sample_) results_.captureToPresent.Add(ms);
+}
+void Timing::AddUpload(double ms) {
+    if (ready_ && !warmup_) results_.upload.Add(ms);
+}
+void Timing::AddPresent(double ms) {
+    if (!sample_) return;
+    results_.present.Add(ms);
+    const auto now = Clock::now();
+    if (previousPresent_ != Clock::time_point{})
+        results_.intervals.Add(std::chrono::duration<double,std::milli>(now-previousPresent_).count());
+    previousPresent_ = now;
 }
 Timing::Results Timing::Snapshot() const {
     return results_;

@@ -323,6 +323,7 @@ LoadResult LoadFromIni(const std::wstring& path) {
 
     settings.preferredDisplayMonitor = ReadString(path, L"Video", L"DisplayMonitor");
     settings.windowSnap = ReadBool(path, L"Window", L"Snap", true);
+    settings.roundedCorners = ReadBool(path, L"Window", L"RoundedCorners", true);
     const std::wstring windowX = ReadString(path, L"Window", L"X");
     const std::wstring windowY = ReadString(path, L"Window", L"Y");
     if (!windowX.empty() && !windowY.empty()) {
@@ -472,6 +473,7 @@ void SaveToIni(const std::wstring& path, const AppSettings& settings) {
 
     WriteString(path, L"Video", L"DisplayMonitor", settings.preferredDisplayMonitor.c_str());
     WriteInt(path, L"Window", L"Snap", settings.windowSnap ? 1 : 0);
+    WriteInt(path, L"Window", L"RoundedCorners", settings.roundedCorners ? 1 : 0);
     WriteInt(path, L"Diagnostics", L"SaveLog", settings.saveLog ? 1 : 0);
     WriteInt(path, L"Screenshot", L"CopyToClipboard", settings.screenshotClipboard ? 1 : 0);
     WriteInt(path, L"Video", L"VsrEnabled", settings.vsrEnabled ? 1 : 0);

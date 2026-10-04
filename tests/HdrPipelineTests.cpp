@@ -400,6 +400,85 @@ static void SaveOverlayPreview(DirectD3D11Renderer& renderer, ID3D11Texture2D* t
     Require(output.good(), "preview written");
 }
 
+static void TestOverlayRefreshIsolation(DirectD3D11Renderer& r) {
+    const bool savedOsd = g_osdVisible.load();
+    const bool savedAudio = g_audioOsdVisible.load();
+    const auto savedUntil = g_volumeHudUntilMs.load();
+    const auto savedContent = g_transientHudContent.load();
+    const int savedVolume = g_volumePercent.load();
+    g_osdVisible = false; g_audioOsdVisible = false; g_volumeHudUntilMs = 0;
+    g_overlayGeneration.fetch_add(1);
+    Check(r.drawOverlayQuads(), "hidden panels skip refresh");
+    Require(!r.osdTextLayout && !r.volumeTextLayout && !r.cachedOverlayMask,
+        "hidden panels allocate no layouts");
+
+    g_audioOsdVisible = true;
+    Check(r.drawOverlayQuads(), "audio-only visible refresh");
+    Require(!r.osdTextLayout && !r.volumeTextLayout && r.cachedOverlayMask == 4,
+        "audio updates do not create hidden diagnostic or notification layouts");
+    g_audioOsdVisible = false;
+    g_transientHudContent = TransientHudContent::Volume;
+    g_volumeHudUntilMs = GetTickCount64() + 60000;
+    Check(r.drawOverlayQuads(), "notification revealed in same generation");
+    Require(!r.osdTextLayout && r.volumeTextLayout && r.cachedOverlayMask == 6,
+        "newly visible notification is not skipped by shared generation");
+    g_volumeHudUntilMs = 0; g_osdVisible = true;
+    Check(r.drawOverlayQuads(), "diagnostics revealed in same generation");
+    Require(r.osdTextLayout && r.cachedOverlayMask == 7,
+        "newly visible diagnostics are refreshed");
+
+    auto* savedDiagnosticLayout = r.osdTextLayout;
+    auto* savedNotificationLayout = r.volumeTextLayout;
+    savedDiagnosticLayout->AddRef(); savedNotificationLayout->AddRef();
+    const auto pixels = [&](ID3D11Texture2D* texture) {
+        llcv::hdr_audit::Image image;
+        Check(llcv::hdr_audit::Read(r.context, texture, image), "isolation readback");
+        return image.bytes;
+    };
+    const auto diagnosticPixels = pixels(r.osdOverlayTexture);
+    const auto notificationPixels = pixels(r.volumeOverlayTexture);
+    const auto audioPixels = pixels(r.audioOverlayTexture);
+    g_osdVisible = false; g_audioOsdVisible = true;
+    for (int update = 0; update < 32; ++update) {
+        g_volumePercent = 20 + update;
+        g_overlayGeneration.fetch_add(1);
+        Check(r.drawOverlayQuads(), "isolated audio meter update");
+        Require(r.osdTextLayout == savedDiagnosticLayout &&
+            r.volumeTextLayout == savedNotificationLayout && r.cachedOverlayMask == 4,
+            "repeated audio updates preserve hidden layouts");
+    }
+    Require(pixels(r.osdOverlayTexture) == diagnosticPixels &&
+        pixels(r.volumeOverlayTexture) == notificationPixels,
+        "hidden panel textures are unchanged");
+    Require(pixels(r.audioOverlayTexture) != audioPixels, "visible audio panel still updates");
+    Check(r.refreshOverlayLayouts(true, true, true), "reveal stale panels");
+    Require(r.osdTextLayout != savedDiagnosticLayout &&
+        r.volumeTextLayout != savedNotificationLayout && r.cachedOverlayMask == 7,
+        "stale hidden layouts refresh when revealed");
+    savedDiagnosticLayout->Release(); savedNotificationLayout->Release();
+    const auto selectiveNotification = pixels(r.volumeOverlayTexture);
+    const auto selectiveAudio = pixels(r.audioOverlayTexture);
+    g_overlayGeneration.fetch_add(1);
+    Check(r.refreshOverlayLayouts(), "full refresh reference");
+    Require(pixels(r.volumeOverlayTexture) == selectiveNotification &&
+        pixels(r.audioOverlayTexture) == selectiveAudio,
+        "selective refresh preserves output pixels");
+
+    const auto validGeneration = r.cachedOverlayGeneration;
+    g_overlayGeneration.fetch_add(1);
+    r.osdCacheTarget->BeginDraw(); // A second BeginDraw causes a recoverable D2D error.
+    Require(FAILED(r.refreshOverlayLayouts(true, false, false)), "failed draw injected");
+    Require(r.cachedOverlayGeneration == validGeneration, "failed draw never publishes cache");
+    Check(r.refreshOverlayLayouts(true, false, false), "failed generation is retried");
+    Require(r.cachedOverlayGeneration == g_overlayGeneration.load() &&
+        r.cachedOverlayMask == 1, "retry publishes only successful panel");
+
+    g_osdVisible = savedOsd; g_audioOsdVisible = savedAudio;
+    g_volumeHudUntilMs = savedUntil; g_transientHudContent = savedContent;
+    g_volumePercent = savedVolume;
+    g_overlayGeneration.fetch_add(1);
+}
+
 static int TestOverlayUi(const char* directory) {
     Check(CoInitializeEx(nullptr, COINIT_MULTITHREADED), "overlay COM");
     HWND hwnd = CreateWindowExW(0, L"STATIC", L"Hidden OSD UI test", WS_POPUP,
@@ -414,6 +493,7 @@ static int TestOverlayUi(const char* directory) {
         g_settings.uiLanguage = english ? UiLanguage::English : UiLanguage::Korean;
         DirectD3D11Renderer r;
         Check(r.initialize(hwnd, 64, 64, 60, VideoPixelFormat::Nv12), "overlay initialize");
+        TestOverlayRefreshIsolation(r);
         Require(r.overlayFonts.Available(), "embedded DirectWrite fonts loaded");
         for (auto* format : {r.osdTextFormat, r.volumeTextFormat, r.audioTextFormat,
                             r.audioValueFormat, r.audioSmallFormat}) {
@@ -461,8 +541,10 @@ static int TestOverlayUi(const char* directory) {
                 "VSR diagnostics use actual input and video rectangle sizes");
             Require(line.find(L"ms") == std::wstring::npos, "no unverified VSR latency number");
             if (state == llcv::vsr::State::Requested)
-                Require(line.find(english ? L"activation unverified" : L"실제 활성 미확인") != std::wstring::npos,
-                    "accepted ON request never claims confirmed activation");
+                Require(line.find(L"ON") != std::wstring::npos &&
+                    line.find(L"requested") == std::wstring::npos &&
+                    line.find(L"요청") == std::wstring::npos,
+                    "ON UI is concise; activation caveat remains in setup guide");
             if (state == llcv::vsr::State::Unknown)
                 Require(line.find(L"OFF") == std::wstring::npos, "unknown state never claims OFF");
             fits(line.substr(0, line.size() - 1).c_str(), r.osdTextFormat, r.kOsdTextWidth, 20);
@@ -583,13 +665,169 @@ static int TestOverlayUi(const char* directory) {
         Require(!r.overlayFonts.Available() && !r.audioValueFormat && !r.audioSmallFormat &&
             !r.audioCacheCardBrush && !r.osdCacheEdgeBrush &&
             !r.audioCacheBoostBrush && !r.volumeCacheBoostBrush, "OSD resources released on reset");
+        Require(r.cachedOverlayGeneration == 0 && r.cachedOverlayMask == 0,
+            "reset invalidates all panel caches");
     }
     DestroyWindow(hwnd); CoUninitialize();
     std::puts("OSD UI: embedded font weights, bilingual text fit, gain/clip states, all notifications, cache reuse and reset passed.");
     return 0;
 }
 
+// Native HDR VSR uses the production processor, not an SDR intermediate.
+static int TestHdrVsr(bool paced = false) {
+    using namespace llcv::vsr;
+    Check(CoInitializeEx(nullptr, COINIT_MULTITHREADED), "VSR HDR COM");
+    HWND hwnd = CreateWindowExW(0, L"STATIC", L"Hidden HDR VSR test", WS_POPUP,
+        0, 0, 1280, 720, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    Require(hwnd != nullptr, "VSR HDR hidden window");
+    g_settings.pixelPerfect = false;
+    g_settings.audioOnly = false;
+    g_settings.presentationMode = PresentationMode::VSync;
+    g_osdVisible = false; g_audioOsdVisible = false; g_volumeHudUntilMs = 0;
+    unsigned requestedFrames = 0, fallbackFrames = 0, bypassFrames = 0, changedPatterns = 0, patterns = 0;
+    for (SIZE inputSize : {SIZE{1280,720}, SIZE{1920,1080}, SIZE{2560,1440}}) {
+    if (paced && inputSize.cx != 1280) continue;
+    const UINT width = static_cast<UINT>(inputSize.cx), height = static_cast<UINT>(inputSize.cy);
+    const size_t pixels = size_t{width} * height;
+    std::vector<unsigned short> frame(pixels * 3 / 2, 512 << 6);
+    for (auto chroma : {DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020,
+                       DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_TOPLEFT_P2020}) {
+        if (paced && chroma != DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020) continue;
+        for (SIZE size : {SIZE{1280,720}, SIZE{1920,1080}, SIZE{2560,1440}, SIZE{3840,2160}}) {
+            if (paced && size.cx != 2560) continue;
+            Require(SetWindowPos(hwnd, nullptr, 0, 0, size.cx, size.cy,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE), "HDR VSR output size");
+            // Include startup-ON as well as F6 enabling from a disabled start.
+            g_vsrMode.store(size.cx == 1280 ? Mode::Disabled : Mode::On);
+            DirectD3D11Renderer r;
+            const HRESULT init = r.initialize(hwnd, width, height, 60,
+                VideoPixelFormat::P010, true, {}, chroma);
+            if (init == DXGI_ERROR_UNSUPPORTED || init == DXGI_ERROR_SDK_COMPONENT_MISSING) {
+                std::puts("SKIP: HDR GPU conversion/debug layer unavailable");
+                DestroyWindow(hwnd); CoUninitialize(); return 77;
+            }
+            Check(init, "HDR VSR initialize");
+            Microsoft::WRL::ComPtr<IDXGIDevice> dxgi;
+            Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+            Check(r.device->QueryInterface(IID_PPV_ARGS(&dxgi)), "HDR VSR adapter device");
+            Check(dxgi->GetAdapter(&adapter), "HDR VSR adapter");
+            DXGI_ADAPTER_DESC adapterDesc{};
+            Check(adapter->GetDesc(&adapterDesc), "HDR VSR adapter description");
+            Require(r.vsrEligible == Eligible(adapterDesc.VendorId, DXGI_FORMAT_P010, true,
+                width, height, static_cast<UINT>(size.cx), static_cast<UINT>(size.cy)),
+                "HDR processor eligibility follows real adapter and scaling policy");
+            Require(r.hdrOutput && !r.scrgbOutput, "native HDR10 route retained");
+            Require(r.vsrInputWidth == width && r.vsrInputHeight == height &&
+                r.vsrDisplayWidth == static_cast<UINT>(size.cx) &&
+                r.vsrDisplayHeight == static_cast<UINT>(size.cy), "HDR VSR input/display dimensions");
+            auto* const processor = r.processor;
+            auto* const swapChain = r.swapChain;
+            auto* const upload = r.nv12Textures[0];
+            auto verifyRoute = [&] {
+                Require(r.processor == processor && r.swapChain == swapChain &&
+                    r.nv12Textures[0] == upload, "F6 never rebuilds HDR processor/swapchain/upload ring");
+                D3D11_TEXTURE2D_DESC input{}, output{};
+                r.nv12Textures[0]->GetDesc(&input); r.backBuffer->GetDesc(&output);
+                Require(input.Format == DXGI_FORMAT_P010 && output.Format == DXGI_FORMAT_R10G10B10A2_UNORM,
+                    "HDR stays ten-bit end to end");
+                DXGI_COLOR_SPACE_TYPE in{}, out{};
+                r.videoContext1->VideoProcessorGetStreamColorSpace1(r.processor, 0, &in);
+                r.videoContext1->VideoProcessorGetOutputColorSpace1(r.processor, &out);
+                Require(in == chroma && out == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
+                    "F6 preserves PQ/BT2020/range/chroma interpretation");
+                Require(r.hdrOverlayBackground == nullptr, "VSR adds no HDR UI scratch surface");
+            };
+            for (const std::array<double,3>& rgb : {
+                std::array<double,3>{0,0,0}, {Pq(1),Pq(1),Pq(1)}, {Pq(100),Pq(100),Pq(100)},
+                {Pq(203),Pq(203),Pq(203)}, {Pq(1000),Pq(1000),Pq(1000)},
+                {Pq(4000),Pq(4000),Pq(4000)}, {0.7,0.3,0.1}, {0.1,0.3,0.7}}) {
+                const double y = .2627*rgb[0] + .6780*rgb[1] + .0593*rgb[2];
+                const int yc = static_cast<int>(std::lround(64+876*y));
+                const int uc = static_cast<int>(std::lround(512+896*(rgb[2]-y)/1.8814));
+                const int vc = static_cast<int>(std::lround(512+896*(rgb[0]-y)/1.4746));
+                std::fill_n(frame.begin(), pixels, static_cast<unsigned short>(yc << 6));
+                for (size_t i=pixels; i<frame.size(); i+=2) {
+                    frame[i]=static_cast<unsigned short>(uc<<6); frame[i+1]=static_cast<unsigned short>(vc<<6);
+                }
+                std::array<unsigned,3> baseline{};
+                for (int stage=0; stage<3; ++stage) {
+                    if (stage == 0) g_vsrMode.store(Mode::Off);
+                    else Require(HandleVsrTestKey(VK_F6, 0), "HDR F6 handled");
+                    Check(r.applyVsrMode(), "HDR F6 apply");
+                    r.upload(reinterpret_cast<const BYTE*>(frame.data()), width*2);
+                    D3D11_VIDEO_PROCESSOR_STREAM stream{};
+                    stream.Enable=TRUE; stream.pInputSurface=r.inputViews[r.activeUploadSurface];
+                    Check(r.processVideo(stream), "HDR VSR production blit with fallback");
+                    verifyRoute();
+                    const auto actual = Read(r, static_cast<UINT>(size.cx/2), static_cast<UINT>(size.cy/2));
+                    for (size_t c=0; c<3; ++c) Near(actual[c], rgb[c]*1023, 4, "VSR HDR uniform patch luminance/color");
+                    if (stage == 0) baseline = actual;
+                    if (stage == 2) Require(actual == baseline, "F6 OFF restores unfiltered HDR exactly");
+                    if (stage == 1) {
+                        if (r.vsrState == State::Requested) ++requestedFrames;
+                        else if (r.vsrState == State::Rejected) ++fallbackFrames;
+                        else { Require(r.vsrState == State::Bypassed, "HDR ON state truthful"); ++bypassFrames; }
+                    }
+                }
+            }
+            // Fine structured detail: report actual ON/OFF pixel differences,
+            // without failing hosts where NVIDIA's global enhancement is OFF.
+            for (UINT y=0; y<height; ++y) for (UINT x=0; x<width; ++x) {
+                const unsigned pattern = 250 + ((x/3 + y/3) % 2)*240 + ((x*13+y*7)%29);
+                frame[size_t{y}*width+x] = static_cast<unsigned short>(pattern << 6);
+            }
+            std::fill(frame.begin()+pixels, frame.end(), static_cast<unsigned short>(512 << 6));
+            auto renderPattern = [&](Mode mode) {
+                g_vsrMode.store(mode);
+                Check(r.applyVsrMode(), "HDR pattern request");
+                auto next = std::chrono::steady_clock::now();
+                for (int warm=0; warm<(paced ? 360 : 12); ++warm) {
+                    if (paced) for (UINT y=0; y<height; ++y) for (UINT x=0; x<width; ++x)
+                        frame[size_t{y}*width+x] = static_cast<unsigned short>((64 + 4 *
+                            (((x+warm*3)/3 + y/5 + (((x+warm*3)/40+y/40)%2)*90)%220)) << 6);
+                    r.upload(reinterpret_cast<const BYTE*>(frame.data()), width*2);
+                    D3D11_VIDEO_PROCESSOR_STREAM stream{};
+                    stream.Enable=TRUE; stream.pInputSurface=r.inputViews[r.activeUploadSurface];
+                    Check(r.processVideo(stream), "HDR pattern blit");
+                    if (paced) {
+                        // Test-only completion/pacing lets asynchronous driver
+                        // model initialization settle. NEVER used by the viewer.
+                        r.context->Flush();
+                        (void)Read(r, 0, 0);
+                        next += std::chrono::microseconds(16667);
+                        std::this_thread::sleep_until(next);
+                    }
+                }
+                llcv::hdr_audit::Image image;
+                Check(llcv::hdr_audit::Read(r.context, r.backBuffer, image), "HDR pattern test-only readback");
+                return image.bytes;
+            };
+            const auto baseline = renderPattern(Mode::Off);
+            const auto enabled = renderPattern(Mode::On);
+            Require(enabled.size() == baseline.size(), "HDR VSR pattern size unchanged");
+            const bool changed = enabled != baseline;
+            changedPatterns += changed ? 1 : 0;
+            ++patterns;
+            std::printf("HDR pattern %ux%u -> %ldx%ld chroma=%d ON differs=%d\n",
+                width, height, size.cx, size.cy, static_cast<int>(chroma), changed ? 1 : 0);
+            Require(renderPattern(Mode::Off) == baseline, "HDR pattern OFF restores exact image");
+            verifyRoute();
+            RequireCleanGpu(r);
+        }
+    }
+    }
+    g_vsrMode.store(Mode::Disabled);
+    DestroyWindow(hwnd); CoUninitialize();
+    std::printf("HDR VSR: 720p/1080p/1440p input, 720p/1080p/1440p/4K output, both chroma placements; "
+        "ON frames requested=%u fallback=%u bypass=%u, changed patterns=%u/%u. "
+        "Request success is NOT proof of NVIDIA enhancement activation.\n",
+        requestedFrames, fallbackFrames, bypassFrames, changedPatterns, patterns);
+    return 0;
+}
+
 int main(int argc, char** argv) {
+    if (argc == 2 && std::string(argv[1]) == "--vsr-hdr-paced") return TestHdrVsr(true);
+    if (argc == 2 && std::string(argv[1]) == "--vsr-hdr") return TestHdrVsr();
     if (argc >= 2 && std::string(argv[1]) == "--osd-ui") return TestOverlayUi(argc >= 3 ? argv[2] : nullptr);
     if (argc == 2 && std::string(argv[1]) == "--sdr-only") return TestRawSdr();
     Check(CoInitializeEx(nullptr, COINIT_MULTITHREADED), "COM");

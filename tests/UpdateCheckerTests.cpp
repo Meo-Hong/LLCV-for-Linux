@@ -20,6 +20,15 @@ void TestReleaseResponses() {
     using namespace llcv::update;
     CheckResult result;
     Expect(ParseLatestReleaseResponse(
+               R"({"tag_name":"v2.0.1","assets":[{"browser_download_url":"https://github.com/seria-aa/LowLatencyCaptureViewer/releases/download/v2.0.1/LowLatencyCaptureViewer_v2.0.1_Setup.exe"}]})",
+               L"v2.0.0", result) && result.success && result.newer &&
+               result.installerUrl == L"https://github.com/seria-aa/LowLatencyCaptureViewer/releases/download/v2.0.1/LowLatencyCaptureViewer_v2.0.1_Setup.exe",
+           "v2.0.0 users discover the v2.0.1 installer");
+    Expect(!IsNewerReleaseTag(L"v2.0.0", L"v2.0.1") &&
+           !IsNewerReleaseTag(L"v2.0.1", L"v2.0.1") &&
+           IsNewerReleaseTag(L"v2.0.2", L"v2.0.1"),
+           "v2.0.1 rejects older/equal releases and accepts a later patch");
+    Expect(ParseLatestReleaseResponse(
                R"({"tag_name":"v2.0.0","assets":[{"browser_download_url":"https://github.com/seria-aa/LowLatencyCaptureViewer/releases/download/v2.0.0/LowLatencyCaptureViewer_v2.0.0_Setup.exe"}]})",
                L"v1.3.1", result) && result.success && result.newer &&
                result.installerUrl == L"https://github.com/seria-aa/LowLatencyCaptureViewer/releases/download/v2.0.0/LowLatencyCaptureViewer_v2.0.0_Setup.exe",

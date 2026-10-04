@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(LowLatencyCaptureViewer VERSION 2.0.0 LANGUAGES CXX)
+project(LowLatencyCaptureViewer VERSION 2.0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,6 +69,7 @@ set_property(SOURCE src/main.cpp src/ui/SettingsView.cpp src/ui/SettingsTheme.cp
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsTheme.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsFonts.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/OverlayStyle.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/WindowCorners.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsModeCache.h")
 set_property(SOURCE tests/SettingsModeCacheTests.cpp APPEND PROPERTY OBJECT_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsModeCache.h")
@@ -376,6 +377,8 @@ if (BUILD_TESTING)
         target_compile_options(HdrPolicyTests PRIVATE /W4 /EHsc /permissive- /utf-8)
     endif()
     add_test(NAME HdrPipelineTests COMMAND HdrPipelineTests)
+    add_test(NAME HdrVsrPipelineTests COMMAND HdrPipelineTests --vsr-hdr)
+    set_tests_properties(HdrVsrPipelineTests PROPERTIES TIMEOUT 90 SKIP_RETURN_CODE 77 LABELS GPU)
     add_test(NAME SdrPipelineTests COMMAND HdrPipelineTests --sdr-only)
     add_test(NAME OverlayUiTests COMMAND HdrPipelineTests --osd-ui)
     set_tests_properties(OverlayUiTests PROPERTIES TIMEOUT 60 LABELS GPU)
@@ -616,6 +619,16 @@ if (BUILD_TESTING)
             /W4 /EHsc /permissive- /utf-8)
     endif()
     add_test(NAME WindowGeometryTests COMMAND WindowGeometryTests)
+
+    add_executable(WindowCornersTests tests/WindowCornersTests.cpp)
+    target_include_directories(WindowCornersTests PRIVATE src)
+    target_compile_definitions(WindowCornersTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(WindowCornersTests PRIVATE dwmapi user32 gdi32)
+    set_target_properties(WindowCornersTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    if(MSVC)
+        target_compile_options(WindowCornersTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+    endif()
+    add_test(NAME WindowCornersTests COMMAND WindowCornersTests)
 
     add_executable(AudioErrorHistoryTests
         tests/AudioErrorHistoryTests.cpp
