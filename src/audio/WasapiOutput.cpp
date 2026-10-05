@@ -2,6 +2,7 @@
 #include "audio/SharedDeadlineMonitor.h"
 
 #include "audio/AudioDeviceCapabilities.h"
+#include "audio/ExclusiveEventStream.h"
 
 #include <audioclient.h>
 #include <avrt.h>
@@ -75,38 +76,6 @@ private:
     std::atomic<uint64_t>* generation_ = nullptr;
 };
 
-// Setup-only retry. A failed alignment initialization still consumes the
-// client's connection; retry on a newly activated client, never the old one.
-HRESULT InitializeExclusiveAligned(IMMDevice* device, IAudioClient*& client,
-                                   WAVEFORMATEX& format, REFERENCE_TIME duration,
-                                   const Host& host) {
-    HRESULT hr = client->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE,
-        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, duration, duration, &format, nullptr);
-    if (hr != AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED) return hr;
-
-    UINT32 frames = 0;
-    hr = client->GetBufferSize(&frames);
-    if (FAILED(hr) || frames == 0 || format.nSamplesPerSec == 0) {
-        if (SUCCEEDED(hr)) hr = E_INVALIDARG;
-        LogHresult(host, L"IAudioClient::GetBufferSize(alignment)", hr);
-        return hr;
-    }
-    duration = static_cast<REFERENCE_TIME>(
-        (10'000'000ULL * frames + format.nSamplesPerSec / 2) / format.nSamplesPerSec);
-    diagnostics::LogMessage(host.log,
-        L"[audio] WASAPI exclusive period aligned: %u frames (%.2f ms)\n",
-        frames, 1000.0 * frames / format.nSamplesPerSec);
-    SafeRelease(client);
-    hr = device->Activate(__uuidof(IAudioClient), CLSCTX_INPROC_SERVER, nullptr,
-                          reinterpret_cast<void**>(&client));
-    if (FAILED(hr)) {
-        LogHresult(host, L"Activate(IAudioClient alignment retry)", hr);
-        return hr;
-    }
-    return client->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE,
-        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, duration, duration, &format, nullptr);
-}
-
 bool IsRunning(const Host& host) {
     return host.running && host.running->load(std::memory_order_acquire);
 }
@@ -125,6 +94,7 @@ RunResult Run(const Configuration& configuration, const Host& host,
     }
 
     const bool exclusive = configuration.mode == Mode::Exclusive;
+    const bool trackExclusive = exclusive && configuration.detailedDiagnostics;
     const bool followDefault = configuration.endpointId.empty();
     std::atomic<uint64_t> defaultGeneration{0};
     uint64_t watchedDefaultGeneration = 0;
@@ -401,7 +371,7 @@ RunResult Run(const Configuration& configuration, const Host& host,
                 L"%.2f ms (same-duration event mode)\n",
                 static_cast<double>(duration) / 10'000.0,
                 static_cast<double>(duration) / 10'000.0);
-            hr = InitializeExclusiveAligned(device, client, format, duration, host);
+            hr = audio_device::InitializeExclusiveEvent(device, client, format, duration);
             if (FAILED(hr)) {
                 LogHresult(
                     host,
@@ -428,7 +398,7 @@ RunResult Run(const Configuration& configuration, const Host& host,
         }
 
         UINT64 exclusiveClockFrequency = 0;
-        if (exclusive) {
+        if (trackExclusive) {
             const HRESULT clockHr = client->GetService(IID_PPV_ARGS(&clock));
             if (SUCCEEDED(clockHr) && clock) {
                 const HRESULT frequencyHr =
@@ -535,7 +505,7 @@ RunResult Run(const Configuration& configuration, const Host& host,
                 2000.0 * bufferFrames / audio_device::kSampleRate)) + 2;
 
         const auto emitDiagnostics = [&](uint64_t nowMs) {
-            if (!exclusive || nowMs < windowStartMs + 1000) return;
+            if (!trackExclusive || nowMs < windowStartMs + 1000) return;
             const double averageEventMs = eventCount > 1
                 ? static_cast<double>(eventIntervalTotalMs) /
                       static_cast<double>(eventCount - 1)
@@ -605,7 +575,7 @@ RunResult Run(const Configuration& configuration, const Host& host,
                     LogHresult(host, L"WASAPI buffer-ready wait", hr);
                     break;
                 }
-                if (exclusive && waitResult == WAIT_TIMEOUT) {
+                if (trackExclusive && waitResult == WAIT_TIMEOUT) {
                     ++waitTimeoutCount;
                     if (!lastTimeoutLogMs ||
                         eventNowMs >= lastTimeoutLogMs + 1000) {
@@ -621,7 +591,7 @@ RunResult Run(const Configuration& configuration, const Host& host,
             }
 
             lastSignalMs = eventNowMs;
-            if (exclusive) {
+            if (trackExclusive) {
                 if (clock && exclusiveClockFrequency) {
                     UINT64 position = 0;
                     if (SUCCEEDED(clock->GetPosition(&position, nullptr))) {
@@ -695,7 +665,7 @@ RunResult Run(const Configuration& configuration, const Host& host,
                 std::memcpy(
                     output, temp.data(), supplied * format.nBlockAlign);
             }
-            if (exclusive) {
+            if (trackExclusive) {
                 requestedFrames += writable;
                 writtenFrames += supplied;
             }
@@ -705,7 +675,7 @@ RunResult Run(const Configuration& configuration, const Host& host,
                 std::memset(
                     output + supplied * format.nBlockAlign, 0,
                     static_cast<size_t>(missing) * format.nBlockAlign);
-                if (exclusive && latestFill.audioStarted &&
+                if (trackExclusive && latestFill.audioStarted &&
                     latestFill.trackingActive) {
                     missingFrames += missing;
                     if (!lastStarvationLogMs ||

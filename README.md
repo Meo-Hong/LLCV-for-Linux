@@ -1,8 +1,8 @@
-# Low Latency Capture Viewer
+# LLCV - Low Latency Capture Viewer
 
 > [한국어](README.ko.md) · [Download the latest release](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)
 
-A lightweight Windows viewer for showing HDMI capture-device video and audio
+LLCV is a lightweight Windows viewer for showing HDMI capture-device video and audio
 with low latency. It receives video through DirectShow, presents it directly
 with D3D11, and sends capture audio to the chosen output device. Stale video
 frames are discarded in favor of the latest frame, making it well suited to a
@@ -10,24 +10,26 @@ capture-device window used alongside other work or viewed directly.
 
 No FFmpeg, codec pack, or separate Visual C++ Redistributable is required.
 
-## What's new in 2.0.1
+## What's new in 2.0.2
 
-See the [2.0.1 release notes](docs/release-notes-v2.0.1.md) for the changes.
+See the [2.0.2 release notes](docs/release-notes-v2.0.2.md) for the changes.
 
-- Expanded experimental VSR requests to P010 HDR10 and YUY2 SDR, alongside NV12/MJPEG.
-- Disabled VSR controls and F6 on non-NVIDIA rendering GPUs, with a clear explanation.
-- Added optional Windows 11 rounded viewer corners for video and audio-only windows.
-- Reduced hidden-overlay update work and simplified VSR ON/OFF notifications.
+- Unified the app name and viewer title as **LLCV**. Detailed playback information is available with Tab.
+- Simplified capture-device and HDR10/MJPEG/ASIO/console LPCM 5.1 labels.
+- Improved WASAPI Exclusive device checks and result reuse. Completed results survive closing settings mid-scan, and valid user-selected output buffers are preserved.
+- Completed the English Exclusive device-status and rescan guidance.
+- Added installation choices for Start Menu and desktop shortcuts, with improved DPI-aware spacing.
+- Reduced unnecessary work and allocations in audio-buffer copying, optional diagnostics, and English text lookup, retaining latest-frame-first presentation and audio defaults.
 
 ## Features at a glance
 
 | Feature | What it offers |
 | --- | --- |
 | Low-latency video | Latest-frame-first presentation; Immediate, VSync, and Compatibility output |
-| Video formats | NV12/YUY2, MJPEG, and experimental P010 HDR10 input |
+| Video formats | NV12/YUY2, MJPEG compatibility mode, and P010 HDR10 input |
 | NVIDIA VSR | Experimental SDR / HDR10 enhancement requests at native size or larger; independent input/display sizes and F6 toggle |
-| Audio outputs | WASAPI Shared/Exclusive, experimental ASIO, and following the Windows default output device |
-| Console LPCM 5.1 | Experimental 5.1 playback on supported equipment; WASAPI Shared only |
+| Audio outputs | WASAPI Shared/Exclusive, ASIO with an installed driver, and following the Windows default output device |
+| Console LPCM 5.1 | 5.1 playback on supported equipment; WASAPI Shared only |
 | Audio-only view | Audio without video, with master/L/R volume, level meters, and clipping status |
 | App theme | Shared dark/light colors and Pretendard typography across settings, F1 help, and audio-only view |
 | Window controls | 1:1 display, aspect-ratio resizing, fullscreen/borderless, startup monitor selection, and edge snap |
@@ -38,7 +40,8 @@ See the [2.0.1 release notes](docs/release-notes-v2.0.1.md) for the changes.
 
 Get one of the files from the [latest release](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest):
 
-- **Setup.exe — recommended:** installs shortcuts and an uninstaller.
+- **Setup.exe — recommended:** installs the app and an uninstaller. Start Menu
+  and desktop shortcuts are optional choices during setup.
 - **x64.zip — portable:** extract it, then run `LowLatencyCaptureViewer.exe`.
 
 Windows 10/11 x64 and a capture-device driver are required.
@@ -103,11 +106,11 @@ source and capture device actually support.
 | Output buffer | The value marked as recommended in settings |
 | PCM buffer target | **25 ms** |
 | Clock-drift correction | **Auto** |
-| Console LPCM 5.1 | **Off (default)**. Experimental, WASAPI Shared only; requires multichannel capture and playback equipment |
+| Console LPCM 5.1 | **Off (default)**. WASAPI Shared only; requires multichannel capture and playback equipment |
 
 WASAPI Shared is the default mode for compatibility with other applications
-and Windows effects. ASIO is experimental and appears only when an ASIO driver
-is installed. WASAPI Exclusive is available only on output devices that pass
+and Windows effects. ASIO appears only when an ASIO driver
+is installed. WASAPI Exclusive playback requires an output device that passes
 the app's playback-event check. Use WASAPI Shared unless you have a specific
 reason to choose another mode.
 
@@ -116,7 +119,22 @@ PCM target in 5 ms steps from its current value (e.g. `20 → 25 → 30 ms`) onl
 when **buffer shortage** or **resampler output shortage** repeats.
 Leave it alone when there are no errors.
 
-### Using console LPCM 5.1 (experimental)
+### Using WASAPI Exclusive
+
+Select **WASAPI Exclusive** as the audio output mode to check output devices
+that have no saved result. Use an available device with an output buffer at
+or above its verified minimum.
+
+- Completed results are saved per device. Closing settings while other devices are still being checked retains results that have already completed.
+- **Retry required** means the check could not establish compatibility, for example because the device was busy, disconnected, or had unstable timing. It does not trigger repeated automatic checks; inspect the device, then choose **Recheck all devices** to retry.
+- Another device completing its check preserves the current device's valid output-buffer choice. Only invalid choices, such as a value below the verified minimum, are adjusted.
+- Version 2.0.2 refreshes older probe records once. Results completed under the new criteria are reused across mode switches and launches.
+
+Exclusive reserves the output device, which can limit simultaneous use by other
+apps and bypass Windows audio effects. Console LPCM 5.1 requires **WASAPI Shared**.
+See the [audio guide](docs/AUDIO.md) for details.
+
+### Using console LPCM 5.1
 
 1. Set the console's audio output to **5.1 LPCM**.
 2. Check that the capture card exposes **48 kHz 6-channel or 8-channel PCM**
@@ -292,13 +310,14 @@ Use F1, Esc, or its Close button to dismiss it; Esc here does not exit the viewe
 | Monitor briefly loses signal in Low latency mode | The graphics driver may be incompatible with the tearing presentation path. Change Presentation to **VSync**; borderless mode can remain enabled |
 | No audio | Select the audio input that belongs to the chosen video device |
 | Occasional audio breakup | Check for buffer shortage in Tab diagnostics, then raise the PCM target in 5 ms steps and test again |
+| Exclusive shows retry required | Check the device connection and whether another app is using it, then select **Recheck all devices**. Use WASAPI Shared to resume playback without an Exclusive check |
 | VSR appears to have no effect | Check NV12/YUY2/MJPEG SDR or P010 HDR10 input, a supported NVIDIA rendering GPU/driver, native-size or larger output, the Tab state, and NVIDIA's active indicator; a successful request alone does not confirm activation |
 | Need more evidence | Enable logging in Guide & logs, reproduce the issue, then send the newest `.log` file from **Open log folder** together with screenshots of settings and Tab diagnostics |
 
 Settings and optional logs are stored in `%LOCALAPPDATA%\LowLatencyCaptureViewer`.
 The uninstaller can remove this user data on request.
 
-## Compatibility and experimental features
+## Compatibility and feature requirements
 
 AVerMedia GC573 is the primary development and test device. Other DirectShow
 capture devices are supported, but driver differences mean that every model
@@ -310,10 +329,12 @@ cannot be guaranteed.
   When colors still differ from another application, **MJPEG color
   interpretation** appears for an explicit MJPEG selection and permits a manual
   matrix/range override.
-- Experimental: NVIDIA VSR, ASIO output, P010 10-bit HDR10, and console LPCM 5.1
+- HDR10 requires supported P010 input and an HDR-capable display/output path; ASIO requires a compatible installed driver.
+- Console LPCM 5.1 requires 48 kHz multichannel PCM capture and WASAPI Shared output.
+- Experimental: NVIDIA VSR
 - Not supported: H.264/AVC, MPEG-4, automatic device reconnect
 
-### Viewing HDR (experimental)
+### Viewing HDR
 
 Enable HDR on the source, select **P010 10-bit HDR10**, and enable **Windows HDR
 on the monitor displaying the app**. Use Immediate or VSync presentation.
@@ -336,6 +357,7 @@ and monitor.
 
 ## Learn more
 
+- [2.0.2 release notes](docs/release-notes-v2.0.2.md)
 - [2.0.1 release notes](docs/release-notes-v2.0.1.md)
 - [2.0.0 release notes](docs/release-notes-v2.0.0.md)
 - [Video formats, scaling, and fullscreen](docs/VIDEO.md)

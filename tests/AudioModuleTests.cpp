@@ -5,10 +5,12 @@
 #include "ui/AudioOnlyView.h"
 
 #include <cmath>
+#include <algorithm>
 #include <climits>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <deque>
 
 namespace {
 bool Check(bool condition, const char* message) {
@@ -21,6 +23,43 @@ bool Check(bool condition, const char* message) {
 int main() {
     using namespace llcv;
     bool ok = true;
+
+    // Compare every PCM value against a simple FIFO through wrap, overflow,
+    // oversized writes, zero-sized operations and resets, for stereo and 5.1.
+    for (const size_t channels : {size_t{2}, size_t{6}}) {
+        for (const size_t capacity : {size_t{1}, size_t{3}, size_t{31}, size_t{480}}) {
+            std::atomic<UINT32> depth{0};
+            audio::PcmRing tested(capacity, &depth);
+            tested.ConfigureChannels(channels);
+            std::deque<int16_t> reference;
+            uint32_t random = 1234567;
+            const auto next = [&]() { random = random * 1664525u + 1013904223u; return random; };
+            for (size_t step = 0; step < 4000; ++step) {
+                const unsigned operation = next() % 10;
+                const size_t frames = next() % (capacity * 2 + 1);
+                if (operation < 5) {
+                    std::vector<int16_t> input(frames * channels);
+                    for (auto& value : input) value = static_cast<int16_t>(next() >> 16);
+                    tested.Push(input.data(), frames);
+                    for (auto value : input) reference.push_back(value);
+                    while (reference.size() > capacity * channels) reference.pop_front();
+                } else if (operation < 9) {
+                    std::vector<int16_t> output(frames * channels + 2, int16_t{12345});
+                    const size_t expected = (std::min)(frames, reference.size() / channels);
+                    const size_t got = tested.Pop(output.data() + 1, frames);
+                    ok &= Check(got == expected, "bulk ring read count equals reference");
+                    for (size_t i = 0; i < expected * channels; ++i) {
+                        ok &= Check(output[i + 1] == reference.front(), "bulk ring PCM is bit-identical");
+                        reference.pop_front();
+                    }
+                    ok &= Check(output.front() == 12345 && output[expected * channels + 1] == 12345,
+                                "ring read does not overwrite guards or unused tail");
+                } else { tested.Clear(); reference.clear(); }
+                ok &= Check(tested.AvailableFrames() == reference.size() / channels &&
+                            depth.load() == reference.size() / channels, "ring occupancy unchanged");
+            }
+        }
+    }
 
     int16_t untouched[] = {1000, -2000};
     audio::StereoGain gain{};

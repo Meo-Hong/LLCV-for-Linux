@@ -11,6 +11,7 @@ namespace {
 
 constexpr int kMaximumVolumePercent = 200;
 constexpr size_t kMaximumExclusiveEndpointCacheEntries = 32;
+constexpr int kExclusiveProbeVersion = 2;
 constexpr int kRelativeScaleUnit = 1'000'000;
 constexpr std::array<int, 6> kExclusiveBufferOptionsMs{5, 10, 15, 20, 30, 40};
 constexpr std::array<int, 5> kPcmQueueOptionsMs{10, 15, 20, 25, 30};
@@ -222,10 +223,16 @@ LoadResult LoadFromIni(const std::wstring& path) {
     settings.muteWhenBackground =
         ReadBool(path, L"Audio", L"MuteWhenBackground");
 
-    const UINT cacheCount = (std::min)(
+    const bool currentExclusiveProbe = ReadInt(
+        path, L"ExclusiveEndpointCache", L"ProbeVersion", 0) == kExclusiveProbeVersion;
+    if (!currentExclusiveProbe) {
+        settings.exclusiveVerifiedEndpointId.clear();
+        settings.exclusiveVerifiedBufferMs = 0;
+    }
+    const UINT cacheCount = currentExclusiveProbe ? (std::min)(
         GetPrivateProfileIntW(
             L"ExclusiveEndpointCache", L"Count", 0, path.c_str()),
-        static_cast<UINT>(kMaximumExclusiveEndpointCacheEntries));
+        static_cast<UINT>(kMaximumExclusiveEndpointCacheEntries)) : 0;
     for (UINT index = 0; index < cacheCount; ++index) {
         wchar_t idKey[32]{};
         wchar_t stateKey[32]{};
@@ -242,11 +249,12 @@ LoadResult LoadFromIni(const std::wstring& path) {
         const bool supported = _wcsicmp(state.c_str(), L"Supported") == 0;
         const bool unsupported =
             _wcsicmp(state.c_str(), L"Unsupported") == 0;
+        const bool inconclusive = _wcsicmp(state.c_str(), L"RetryRequired") == 0;
         if (!endpointId.empty() &&
-            (unsupported ||
+            (unsupported || inconclusive ||
              (supported && IsExclusiveLowLatencyBuffer(bufferMs)))) {
             settings.exclusiveEndpointCache.push_back(
-                {endpointId, supported, supported ? bufferMs : 0});
+                {endpointId, supported, supported ? bufferMs : 0, inconclusive});
         }
     }
     if (settings.exclusiveEndpointCache.empty() &&
@@ -406,6 +414,7 @@ void SaveToIni(const std::wstring& path, const AppSettings& settings) {
 
     WritePrivateProfileStringW(
         L"ExclusiveEndpointCache", nullptr, nullptr, path.c_str());
+    WriteInt(path, L"ExclusiveEndpointCache", L"ProbeVersion", kExclusiveProbeVersion);
     const size_t cacheCount = (std::min)(
         settings.exclusiveEndpointCache.size(),
         kMaximumExclusiveEndpointCacheEntries);
@@ -422,6 +431,7 @@ void SaveToIni(const std::wstring& path, const AppSettings& settings) {
         WriteString(path, L"ExclusiveEndpointCache", idKey,
                     entry.endpointId.c_str());
         WriteString(path, L"ExclusiveEndpointCache", stateKey,
+                    entry.inconclusive ? L"RetryRequired" :
                     entry.supported ? L"Supported" : L"Unsupported");
         WriteInt(path, L"ExclusiveEndpointCache", bufferKey,
                  entry.recommendedBufferMs);

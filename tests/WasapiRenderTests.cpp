@@ -19,6 +19,7 @@ struct Trace {
     unsigned initialized[2]{}, destroyed[2]{}, activated = 0;
     UINT32 lastRequested = 0, observedPadding = UINT32_MAX;
     HANDLE event = nullptr;
+    unsigned clockServices = 0, clockReads = 0, clockReleased = 0;
 };
 static Trace* activeTrace = nullptr;
 
@@ -42,6 +43,23 @@ public:
     }
 private:
     Trace& t; ULONG refs = 1; int16_t data[960]{};
+};
+
+class Clock final : public IAudioClock {
+public:
+    explicit Clock(Trace& trace) : t(trace) {}
+    STDMETHODIMP QueryInterface(REFIID, void** p) override { *p = nullptr; return E_NOINTERFACE; }
+    STDMETHODIMP_(ULONG) AddRef() override { return ++refs; }
+    STDMETHODIMP_(ULONG) Release() override {
+        const auto n = --refs; if (!n) { ++t.clockReleased; delete this; } return n;
+    }
+    STDMETHODIMP GetFrequency(UINT64* value) override { *value = 48000; return S_OK; }
+    STDMETHODIMP GetPosition(UINT64* value, UINT64* qpc) override {
+        *value = ++t.clockReads * t.frames; if (qpc) *qpc = 0; return S_OK;
+    }
+    STDMETHODIMP GetCharacteristics(DWORD* value) override { *value = 0; return S_OK; }
+private:
+    Trace& t; ULONG refs = 1;
 };
 
 class Client final : public IAudioClient {
@@ -81,6 +99,9 @@ public:
     STDMETHODIMP SetEventHandle(HANDLE event) override { t.event = event; return S_OK; }
     STDMETHODIMP GetService(REFIID iid, void** p) override {
         *p = nullptr;
+        if (iid == __uuidof(IAudioClock)) {
+            ++t.clockServices; *p = static_cast<IAudioClock*>(new Clock(t)); return S_OK;
+        }
         if (iid != __uuidof(IAudioRenderClient)) return E_NOINTERFACE;
         *p = static_cast<IAudioRenderClient*>(new Renderer(t)); return S_OK;
     }
@@ -132,7 +153,7 @@ static void Padding(void* context, UINT32 frames) { static_cast<Trace*>(context)
 static void QuietLog(const wchar_t*) {}
 
 int main() {
-    for (bool exclusive : {true, false}) {
+    for (bool diagnostics : {true, false}) for (bool exclusive : {true, false}) {
         for (unsigned scenario = 0; scenario < 6; ++scenario) {
             const UINT32 values[] = {0, 1, 240, 480, UINT32_MAX, 0};
             Trace trace; trace.exclusive = exclusive; trace.padding = values[scenario];
@@ -141,9 +162,14 @@ int main() {
             llcv::wasapi::Configuration config;
             config.mode = exclusive ? llcv::wasapi::Mode::Exclusive : llcv::wasapi::Mode::Shared;
             config.endpointId = L"mock";
+            config.detailedDiagnostics = diagnostics;
             llcv::wasapi::Host host; host.context = &trace; host.running = &running;
             host.fill = Fill; host.paddingChanged = Padding; host.log = QuietLog;
             const auto result = llcv::wasapi::Run(config, host);
+            Check(trace.clockServices == (exclusive && diagnostics ? 1u : 0u) &&
+                  trace.clockReads == (exclusive && diagnostics ? 4u : 0u) &&
+                  trace.clockReleased == trace.clockServices,
+                  "diagnostics off skips clock COM calls; on retains reads and cleanup");
             if (exclusive) {
                 Check(result == llcv::wasapi::RunResult::Stopped && trace.paddingCalls == 0 &&
                       trace.renderCalls == 5 && trace.fills == 4 && trace.observedPadding == 0,
@@ -162,5 +188,5 @@ int main() {
                 Check(trace.destroyed[i] == 1, "every activated client released");
         }
     }
-    std::puts("WASAPI: 6 Exclusive and 6 Shared event/padding scenarios passed; no audio device opened.");
+    std::puts("WASAPI: 24 event/padding/diagnostics scenarios passed; no audio device opened.");
 }

@@ -1,4 +1,5 @@
 #include "audio/AudioDeviceCapabilities.h"
+#include "audio/ExclusiveEventStream.h"
 
 #include <avrt.h>
 #include <functiondiscoverykeys_devpkey.h>
@@ -10,6 +11,9 @@
 
 namespace llcv::audio_device {
 namespace {
+
+constexpr uint64_t kProbeDurationMs = 5000;
+constexpr double kMinimumSupplyRatio = 0.98;
 
 template<class T>
 void SafeRelease(T*& value) {
@@ -31,6 +35,7 @@ ExclusiveProbe ProbeExclusiveCompatibility(
     if (hr == RPC_E_CHANGED_MODE) hr = S_OK;
     if (FAILED(hr)) {
         probe.result = hr;
+        probe.inconclusive = true;
         probe.summary = L"COM 초기화 실패";
         return probe;
     }
@@ -74,16 +79,9 @@ ExclusiveProbe ProbeExclusiveCompatibility(
             break;
         }
 
-        REFERENCE_TIME defaultPeriod = 0;
-        REFERENCE_TIME minimumPeriod = 0;
-        hr = client->GetDevicePeriod(&defaultPeriod, &minimumPeriod);
-        if (FAILED(hr)) break;
-
         const REFERENCE_TIME requestedDuration =
             static_cast<REFERENCE_TIME>(std::max(1, requestedMs)) * 10'000;
-        hr = client->Initialize(
-            AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-            requestedDuration, requestedDuration, &format, nullptr);
+        hr = InitializeExclusiveEvent(device, client, format, requestedDuration);
         if (FAILED(hr)) break;
 
         hr = client->GetBufferSize(&probe.actualBufferFrames);
@@ -101,20 +99,14 @@ ExclusiveProbe ProbeExclusiveCompatibility(
         hr = client->GetService(IID_PPV_ARGS(&render));
         if (FAILED(hr)) break;
 
-        BYTE* bytes = nullptr;
-        hr = render->GetBuffer(probe.actualBufferFrames, &bytes);
-        if (SUCCEEDED(hr)) {
-            hr = render->ReleaseBuffer(
-                probe.actualBufferFrames, AUDCLNT_BUFFERFLAGS_SILENT);
-        }
+        hr = SubmitExclusiveSilence(render, probe.actualBufferFrames);
         if (FAILED(hr)) break;
         hr = client->Start();
         if (FAILED(hr)) break;
         started = true;
         runBeganMs = GetTickCount64();
 
-        constexpr uint64_t kProbeDurationMs = 5000;
-        uint64_t previousEventMs = 0;
+        std::chrono::steady_clock::time_point previousEvent{};
         double intervalTotalMs = 0.0;
         UINT32 intervalCount = 0;
         while (!cancel || !cancel->load(std::memory_order_acquire)) {
@@ -127,33 +119,25 @@ ExclusiveProbe ProbeExclusiveCompatibility(
                 break;
             }
 
-            const uint64_t eventNow = GetTickCount64();
+            // GetTickCount64 can advance in ~15.6ms steps, falsely rejecting
+            // healthy 5/10ms endpoints. Do not change system timer resolution.
+            const auto eventNow = std::chrono::steady_clock::now();
             ++probe.events;
-            if (previousEventMs) {
-                const double interval =
-                    static_cast<double>(eventNow - previousEventMs);
+            if (probe.events > 1) {
+                const double interval = std::chrono::duration<double, std::milli>(
+                    eventNow - previousEvent).count();
                 intervalTotalMs += interval;
                 ++intervalCount;
                 probe.maximumEventMs =
                     std::max(probe.maximumEventMs, interval);
             }
-            previousEventMs = eventNow;
+            previousEvent = eventNow;
 
-            UINT32 padding = 0;
-            hr = client->GetCurrentPadding(&padding);
+            // Exclusive event mode always submits a complete packet; padding
+            // subtraction is only valid for the Shared renderer.
+            hr = SubmitExclusiveSilence(render, probe.actualBufferFrames);
             if (FAILED(hr)) break;
-            const UINT32 writable = probe.actualBufferFrames > padding
-                ? probe.actualBufferFrames - padding : 0;
-            if (writable) {
-                bytes = nullptr;
-                hr = render->GetBuffer(writable, &bytes);
-                if (SUCCEEDED(hr)) {
-                    hr = render->ReleaseBuffer(
-                        writable, AUDCLNT_BUFFERFLAGS_SILENT);
-                    if (SUCCEEDED(hr)) probe.submittedFrames += writable;
-                }
-                if (FAILED(hr)) break;
-            }
+            probe.submittedFrames += probe.actualBufferFrames;
         }
         if (runBeganMs) {
             probe.testDurationMs = GetTickCount64() - runBeganMs;
@@ -179,6 +163,8 @@ ExclusiveProbe ProbeExclusiveCompatibility(
 
     probe.result = hr;
     if (FAILED(hr)) {
+        probe.inconclusive = hr != AUDCLNT_E_UNSUPPORTED_FORMAT &&
+            hr != AUDCLNT_E_INVALID_DEVICE_PERIOD && hr != AUDCLNT_E_BUFFER_SIZE_ERROR;
         wchar_t message[128]{};
         swprintf_s(
             message, L"Exclusive 초기화/실행 실패 (0x%08X)",
@@ -189,21 +175,11 @@ ExclusiveProbe ProbeExclusiveCompatibility(
 
     const double requestedPeriodMs =
         1000.0 * probe.requestedFrames / kSampleRate;
-    const double expectedEvents = 5000.0 / requestedPeriodMs;
-    const double maximumAllowedInterval = requestedPeriodMs * 1.25 + 1.0;
-    const bool bufferMatches =
-        probe.actualBufferFrames <= probe.requestedFrames + 1;
-    const bool eventsAreTimely =
-        probe.events >= static_cast<UINT32>(
-                            std::floor(expectedEvents * 0.90)) &&
-        probe.maximumEventMs <= maximumAllowedInterval;
     const double expectedSubmittedFrames =
-        kSampleRate * std::max(1.0, probe.testDurationMs / 1000.0);
-    const bool outputSupplyMatchesClock =
-        probe.submittedFrames >= static_cast<uint64_t>(
-            std::floor(expectedSubmittedFrames * 0.98));
-    probe.compatible =
-        bufferMatches && eventsAreTimely && outputSupplyMatchesClock;
+        kSampleRate * (probe.testDurationMs / 1000.0);
+    const auto timingResult = EvaluateExclusiveTiming(probe);
+    probe.compatible = timingResult == ExclusiveTimingResult::Passed;
+    probe.inconclusive = !probe.compatible;
 
     wchar_t message[256]{};
     if (probe.compatible) {
@@ -212,29 +188,49 @@ ExclusiveProbe ProbeExclusiveCompatibility(
             L"통과 · 실제 %.2f ms · 이벤트 평균/최대 %.2f/%.2f ms",
             probe.expectedPeriodMs, probe.averageEventMs,
             probe.maximumEventMs);
-    } else if (!bufferMatches) {
+    } else if (timingResult == ExclusiveTimingResult::InvalidBuffer) {
         swprintf_s(
             message, L"미통과 · 요청 %.2f ms, 실제 버퍼 %.2f ms",
             requestedPeriodMs, probe.expectedPeriodMs);
-    } else if (!outputSupplyMatchesClock) {
+    } else if (timingResult == ExclusiveTimingResult::InsufficientDuration) {
+        swprintf_s(message, L"미통과 · 검사 시간 부족 (%llu ms)",
+                   static_cast<unsigned long long>(probe.testDurationMs));
+    } else if (timingResult == ExclusiveTimingResult::InsufficientSupply) {
         const double suppliedPercent = expectedSubmittedFrames > 0.0
             ? 100.0 * probe.submittedFrames / expectedSubmittedFrames : 0.0;
         swprintf_s(
-            message, L"미통과 · 출력 공급 %.1f%% (목표 98%% 이상)",
-            suppliedPercent);
+            message, L"미통과 · 출력 공급 %.1f%% (목표 %.0f%% 이상)",
+            suppliedPercent, kMinimumSupplyRatio * 100.0);
     } else {
         swprintf_s(
             message,
             L"미통과 · 이벤트 %u회, 평균/최대 %.2f/%.2f ms "
             L"(목표 %.2f ms)",
             probe.events, probe.averageEventMs, probe.maximumEventMs,
-            requestedPeriodMs);
+            probe.expectedPeriodMs);
     }
     probe.summary = message;
     return probe;
 }
 
 }  // namespace
+
+ExclusiveTimingResult EvaluateExclusiveTiming(const ExclusiveProbe& probe) {
+    if (!probe.actualBufferFrames ||
+        probe.actualBufferFrames > static_cast<UINT32>(
+            kSampleRate * kExclusiveBufferOptionsMs.back() / 1000))
+        return ExclusiveTimingResult::InvalidBuffer;
+    if (probe.testDurationMs < kProbeDurationMs)
+        return ExclusiveTimingResult::InsufficientDuration;
+    const double periodMs = 1000.0 * probe.actualBufferFrames / kSampleRate;
+    const double durationSeconds = probe.testDurationMs / 1000.0;
+    if (probe.submittedFrames < std::floor(kSampleRate * durationSeconds * kMinimumSupplyRatio))
+        return ExclusiveTimingResult::InsufficientSupply;
+    if (!(probe.events >= std::floor(probe.testDurationMs / periodMs * 0.90) &&
+          probe.maximumEventMs <= periodMs * 1.25 + 1.0))
+        return ExclusiveTimingResult::IrregularEvents;
+    return ExclusiveTimingResult::Passed;
+}
 
 WAVEFORMATEX PcmOutputFormat() {
     WAVEFORMATEX format{};
@@ -430,6 +426,7 @@ ExclusiveProbe ProbeExclusiveBufferRecommendation(
     const std::wstring& endpointId, const std::atomic<bool>* cancel,
     LogCallback logCallback) {
     ExclusiveProbe last{};
+    bool hadInconclusive = false;
     for (const int candidateMs : kExclusiveBufferOptionsMs) {
         if (cancel && cancel->load(std::memory_order_acquire)) break;
         auto result =
@@ -456,15 +453,20 @@ ExclusiveProbe ProbeExclusiveBufferRecommendation(
             return result;
         }
         last = std::move(result);
+        hadInconclusive = hadInconclusive || last.inconclusive;
+        // Occupied/disconnected/policy-blocked devices will not improve by
+        // trying six buffer sizes immediately. Preserve the cause for retry.
+        if (FAILED(last.result) && last.inconclusive) return last;
     }
     if (cancel && cancel->load(std::memory_order_acquire)) {
         last.result = HRESULT_FROM_WIN32(ERROR_CANCELLED);
         last.summary = L"독점 버퍼 검사 취소됨";
         return last;
     }
+    last.inconclusive = last.inconclusive || hadInconclusive;
     if (last.summary.empty()) {
         last.summary = L"검사할 Exclusive 버퍼가 없음";
-    } else {
+    } else if (!last.inconclusive) {
         last.summary = L"Exclusive 저지연 미지원 (5–40 ms 모두 미통과)";
     }
     return last;

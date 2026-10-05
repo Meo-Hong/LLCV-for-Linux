@@ -489,6 +489,44 @@ static void TestTranslationBoundary() {
         Check(Translate(korean, true) == translated, "translation storage survives repeated lookups");
         Check(Translate(korean, false) == korean, "language switches do not mutate dictionary");
     }
+    // Lookups compare text, not input addresses, and translations must never
+    // borrow the caller's mutable storage (including longer, non-SSO captions).
+    wchar_t mutableCaption[] = L"Windows 기본 출력 장치 따라가기 (권장)";
+    const wchar_t* stable = Translate(mutableCaption, true);
+    Check(std::wcscmp(stable, L"Follow Windows default output (recommended)") == 0,
+          "long caption translates from caller-owned storage");
+    mutableCaption[0] = L'X';
+    Check(std::wcscmp(stable, L"Follow Windows default output (recommended)") == 0 &&
+          Translate(mutableCaption, true) == mutableCaption,
+          "translation survives input mutation; unknown caption preserves pointer");
+    Check(std::wcscmp(Translate(L"Shared 저지연 · %.2f~%.2f ms · 검사 %.1f ms", true),
+                      L"Shared low latency · %.2f~%.2f ms · probe %.1f ms") == 0,
+          "OSD format specifiers survive non-owning lookup");
+    Check(std::wcscmp(Translate(L"업데이트 확인", true), L"Update checks") == 0,
+          "duplicate cleanup retains the original update caption");
+    for (const wchar_t* text : {
+            L" · 사용 가능 · %d ms", L" (사용 가능 · %d ms)",
+            L" · 검사 중", L" (검사 중)", L" · 사용 불가", L" (사용 불가)",
+            L" · 확인 보류", L" (확인 보류)",
+            L"장치 검사 중…", L"전체 장치 다시 검사",
+            L"Exclusive 출력 장치 검사 중… %zu/%zu 완료",
+            L"Exclusive 사용 가능 · 현재 출력 장치 · %d ms 이상",
+            L"Exclusive 사용 가능 · %d ms 이상 선택 필요",
+            L"Exclusive 사용 불가 · 현재 출력 장치",
+            L"Exclusive 검사 필요 · 현재 출력 장치",
+            L"Exclusive 확인 보류 · 장치 상태 확인 후 다시 검사해 주세요"}) {
+        Check(std::wcscmp(Translate(text, true), text) != 0,
+              "every Exclusive status and action translates to English");
+        Check(Translate(text, false) == text, "Exclusive Korean remains unchanged");
+    }
+    wchar_t formatted[160]{};
+    swprintf_s(formatted, Translate(L"Exclusive 출력 장치 검사 중… %zu/%zu 완료", true),
+               size_t{1}, size_t{2});
+    Check(std::wcscmp(formatted, L"Checking Exclusive outputs… 1/2 complete") == 0,
+          "Exclusive progress placeholders match argument types");
+    swprintf_s(formatted, Translate(L"Exclusive 사용 가능 · 현재 출력 장치 · %d ms 이상", true), 10);
+    Check(std::wcscmp(formatted, L"Exclusive available · selected output · 10 ms or more") == 0,
+          "Exclusive buffer placeholder is preserved");
 }
 
 struct PopulationProbe {

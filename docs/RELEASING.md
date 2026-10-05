@@ -3,15 +3,15 @@
 > [한국어](RELEASING.ko.md) · [Back to README](../README.md)
 
 Use this checklist to keep versioning, builds, packages, and GitHub releases
-consistent. Release work stays on the existing `agent/release-v1.0.0` branch.
-All executable examples below are for **v1.3.0**, using the compact build-folder
-name `build-v1300-release`. For another version, update the version, build
+consistent. Release work stays on the existing `agent/release-v2.0.2` branch.
+All executable examples below are for **v2.0.2**, using the compact build-folder
+name `build-v2020-release`. For another version, update the version, build
 folder, and output paths together; do not substitute a dotted version into
 the build-folder name and leave the packaging defaults unchanged.
 
 ## 1. Versioning
 
-Use `v1.3.0` for the Git tag and app version label. Resource and installer
+Use `v2.0.2` for the Git tag and app version label. Resource and installer
 version fields use the numeric version without `v`. Keep these locations aligned:
 
 - `project(... VERSION ...)` in `CMakeLists.txt`
@@ -21,13 +21,13 @@ version fields use the numeric version without `v`. Keep these locations aligned
   `installer/LowLatencyCaptureViewer.iss`
 - default build/output paths in `tools/package-v1.ps1`
 - current-version headers in `BUILD_INFO.txt`, `DEPENDENCIES.txt`, and `실행안내.txt`
-- `docs/release-notes-v1.3.0.md`
+- `docs/release-notes-v2.0.2.md`
 
 Search for stale active version strings after editing. Historical release
 notes and changelog entries keep their original version numbers.
 
 ```powershell
-rg -n "1\.2\.5\.1|1251" CMakeLists.txt src installer tools DEPENDENCIES.txt 실행안내.txt
+rg -n "2\.0\.1|2010" CMakeLists.txt src installer tools DEPENDENCIES.txt 실행안내.txt
 ```
 
 ## 2. Build and verify
@@ -38,9 +38,9 @@ check the diff.
 
 ```powershell
 chcp.com 65001 > $null
-cmake -S . -B build-v1300-release -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build-v1300-release
-ctest --test-dir build-v1300-release --output-on-failure
+cmake -S . -B build-v2020-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-v2020-release
+ctest --test-dir build-v2020-release --output-on-failure
 git diff --check
 ```
 
@@ -55,27 +55,28 @@ long-duration playback.
 Build exactly these two release assets:
 
 ```text
-LowLatencyCaptureViewer_v1.3.0_Setup.exe
-LowLatencyCaptureViewer_v1.3.0_x64.zip
+LowLatencyCaptureViewer_v2.0.2_Setup.exe
+LowLatencyCaptureViewer_v2.0.2_x64.zip
 ```
 
 ```powershell
 chcp.com 65001 > $null
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-v1.ps1 `
-  -Version 1.3.0 -BuildDir ..\build-v1300-release -OutputDir ..\outputs\v1.3.0
+  -Version 2.0.2 -BuildDir ..\build-v2020-release -OutputDir outputs\v2.0.2
 & "C:\Program Files\Inno Setup 7\ISCC.exe" `
-  "--define=BuildDir=..\build-v1300-release" ".\installer\LowLatencyCaptureViewer.iss"
+  "--define=BuildDir=..\build-v2020-release" ".\installer\LowLatencyCaptureViewer.iss"
 ```
 
 Do not ship `settings.ini`, `%LOCALAPPDATA%` logs, `build-*` directories, PDB
 files, ILK files, or test executables. Verify the executable inside the ZIP and
-the installer version before uploading: v1.3.0 uses a numeric file version of
-`1.3.0` or `1.3.0.0`, not the previous release's executable under a new ZIP name.
+the installer version before uploading: v2.0.2 uses a numeric file version of
+`2.0.2` or `2.0.2.0`, not the previous release's executable under a new ZIP name.
 
-Both packages must contain these ASIO notices at their top level:
+Both packages must contain these third-party notices at their top level:
 
 - `ASIO-SDK-LICENSE.txt`, copied from `third_party/asio/LICENSE.txt`
 - `ASIO-HOST-LICENSE.txt`, copied from `third_party/asio/HOST-LICENSE.txt`
+- `PRETENDARD-LICENSE.txt`, copied from `third_party/pretendard/LICENSE.txt`
 
 The application `LICENSE` is required as well. Check the actual ZIP, not just
 the staging directory; the following read-only check catches missing notices
@@ -84,10 +85,10 @@ and common accidental build/settings files.
 ```powershell
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $releaseArchive = [IO.Compression.ZipFile]::OpenRead(
-  (Resolve-Path '..\outputs\v1.3.0\LowLatencyCaptureViewer_v1.3.0_x64.zip').Path)
+  (Resolve-Path 'outputs\v2.0.2\LowLatencyCaptureViewer_v2.0.2_x64.zip').Path)
 try {
   foreach ($required in @('LowLatencyCaptureViewer.exe', 'LICENSE',
-      'ASIO-SDK-LICENSE.txt', 'ASIO-HOST-LICENSE.txt',
+      'ASIO-SDK-LICENSE.txt', 'ASIO-HOST-LICENSE.txt', 'PRETENDARD-LICENSE.txt',
       'README.md', 'README.ko.md', 'DEPENDENCIES.txt', '실행안내.txt')) {
     if ($null -eq $releaseArchive.GetEntry($required)) {
       throw "Missing package file: $required"
@@ -102,8 +103,8 @@ try {
 }
 ```
 
-Also inspect the generated installer's payload/file list and confirm that both
-ASIO notices and `LICENSE` are included. `cmake --install` is a separate path;
+Also inspect the generated installer's payload/file list and confirm that the
+ASIO/Pretendard notices and `LICENSE` are included. `cmake --install` is a separate path;
 its success alone does not verify the ZIP or Inno Setup contents.
 
 ## 4. Publish
@@ -113,21 +114,21 @@ Review the worktree and stage only confirmed files before committing.
 ```powershell
 git status --short
 git diff --cached --check
-git commit -m "Prepare v1.3.0 release"
-git push origin agent/release-v1.0.0
+git commit -m "Prepare v2.0.2 release"
+git push origin agent/release-v2.0.2
 ```
 
 Publish from the branch HEAD using the matching release-notes file. Add
-`--prerelease` only when a beta is intended; **v1.3.0 is a regular release**.
+`--prerelease` only when a beta is intended; **v2.0.2 is a regular release**.
 
 ```powershell
-gh release create v1.3.0 `
-  "..\outputs\v1.3.0\LowLatencyCaptureViewer_v1.3.0_Setup.exe" `
-  "..\outputs\v1.3.0\LowLatencyCaptureViewer_v1.3.0_x64.zip" `
+gh release create v2.0.2 `
+  "outputs\v2.0.2\LowLatencyCaptureViewer_v2.0.2_Setup.exe" `
+  "outputs\v2.0.2\LowLatencyCaptureViewer_v2.0.2_x64.zip" `
   --repo seria-aa/LowLatencyCaptureViewer `
-  --target agent/release-v1.0.0 `
-  --title "Low Latency Capture Viewer v1.3.0" `
-  --notes-file ".\docs\release-notes-v1.3.0.md"
+  --target agent/release-v2.0.2 `
+  --title "LLCV v2.0.2" `
+  --notes-file ".\docs\release-notes-v2.0.2.md"
 ```
 
 Never overwrite published tags or assets. Fix a published-release issue in the

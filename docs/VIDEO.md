@@ -28,7 +28,7 @@ moved to another monitor.
 
 Auto pixel format prefers uncompressed NV12, followed by YUY2. Every NV12,
 YUY2, P010, and MJPEG format reported by the device at the selected resolution
-is listed regardless of performance. **MJPEG (experimental compressed
+is listed regardless of performance. **MJPEG (compressed
 compatibility)** is never chosen by Auto and must be selected explicitly.
 
 H.264/AVC and MPEG-4 are not supported. Their inter-frame references and decoder
@@ -95,7 +95,7 @@ an explicit selection starts on that monitor, or the primary monitor if it is
 disconnected. The choice does not lock the window or GPU output route: you can
 still move the window and use F11 on its current monitor.
 
-## P010 HDR10 (experimental)
+## P010 HDR10
 
 HDR viewing requires **Windows HDR on the monitor displaying the app**, not just
 an HDR capture source or passthrough display. Tab distinguishes the app's PQ

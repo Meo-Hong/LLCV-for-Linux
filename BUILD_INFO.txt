@@ -1,4 +1,16 @@
-Low Latency Capture Viewer v2.0.1 x64 (continued from the v0.14.2 rework)
+LLCV v2.0.2 x64 (continued from the v0.14.2 rework)
+
+v2.0.2 LLCV branding, Exclusive refinements and audio efficiency
+--------------------------------------------------------------
+- Uses LLCV throughout the app and a concise viewer title; details remain in Tab.
+- Clarifies capture/audio labels, including HDR10, MJPEG, ASIO and console LPCM 5.1.
+- Offers optional Start Menu and desktop shortcuts, with DPI-aware task-list spacing.
+- Removes unused statistics and confines VSR measurement storage to private builds.
+- Uses allocation-free steady-state English text lookup and removes obsolete captions.
+- Refines Exclusive preflight, per-device result reuse and manual retry guidance.
+- Saves completed results on partial scans and preserves valid user-selected buffers.
+- Reduces PCM copy overhead and skips unused detailed Exclusive diagnostics.
+- Retains existing install/settings paths, latest-frame-first playback and audio defaults.
 
 v2.0.1 VSR format expansion and window refinements
 ------------------------------------------------

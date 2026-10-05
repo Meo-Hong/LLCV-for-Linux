@@ -38,6 +38,7 @@ struct SharedModeSupport {
 
 struct ExclusiveProbe {
     bool compatible = false;
+    bool inconclusive = false; // Attempt completed; only an explicit retry should repeat it.
     HRESULT result = E_FAIL;
     UINT32 requestedFrames = 0;
     UINT32 actualBufferFrames = 0;
@@ -51,6 +52,10 @@ struct ExclusiveProbe {
 };
 
 WAVEFORMATEX PcmOutputFormat();
+enum class ExclusiveTimingResult {
+    Passed, InvalidBuffer, InsufficientDuration, InsufficientSupply, IrregularEvents
+};
+ExclusiveTimingResult EvaluateExclusiveTiming(const ExclusiveProbe& probe);
 UINT32 ClosestSupportedSharedPeriod(
     UINT32 requestedFrames, const SharedModeSupport& support);
 bool IsExclusiveLowLatencyBuffer(int bufferMs);

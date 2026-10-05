@@ -76,8 +76,8 @@ int main() {
         Device device(trace);
         IAudioClient* client = new Client(trace, 0);
         auto format = llcv::audio_device::PcmOutputFormat();
-        const HRESULT result = llcv::wasapi::InitializeExclusiveAligned(
-            &device, client, format, 100000, {});
+        const HRESULT result = llcv::audio_device::InitializeExclusiveEvent(
+            &device, client, format, 100000);
         Check(result == expected, "setup propagates the correct success or failure");
         const bool replacement = scenario == 0 || scenario >= 5;
         Check(trace.activated == (replacement ? 1u : 0u), "only alignment errors trigger one activation");

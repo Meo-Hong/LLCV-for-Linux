@@ -79,6 +79,7 @@ struct ExclusiveEndpointCacheEntry {
     std::wstring endpointId;
     bool supported = false;
     int recommendedBufferMs = 0;
+    bool inconclusive = false; // A completed attempt awaiting explicit retry.
 };
 
 struct AppSettings {
