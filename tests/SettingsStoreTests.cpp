@@ -114,6 +114,7 @@ void TestRoundTrip(const std::wstring& path) {
     saved.exclusiveEndpointCache = {
         {L"supported-id", true, 20},
         {L"unsupported-id", false, 0},
+        {L"busy-id", false, 0, true},
     };
     saved.asioDriverName = L"ASIO Test Driver";
     saved.videoPreset = VideoPreset::R3840x2160;
@@ -169,8 +170,11 @@ void TestRoundTrip(const std::wstring& path) {
           "channel volume round trip");
     Check(loaded.volumeHudPosition == saved.volumeHudPosition,
           "HUD position round trip");
-    Check(loaded.exclusiveEndpointCache.size() == 2,
+    Check(loaded.exclusiveEndpointCache.size() == 3,
           "exclusive cache count round trip");
+    Check(loaded.exclusiveEndpointCache.back().inconclusive &&
+          !loaded.exclusiveEndpointCache.back().supported,
+          "temporary failure persists as explicit retry, not unsupported");
     Check(loaded.asioDriverName == saved.asioDriverName,
           "ASIO driver round trip");
     Check(loaded.vsrEnabled == saved.vsrEnabled, "VSR preference saved/restored");
@@ -312,6 +316,19 @@ int main() {
     TestDefaults(path);
     TestResolutionRoundTrips(path);
     TestRoundTrip(path);
+    for (const wchar_t* version : {L"1", L"0"}) {
+        WritePrivateProfileStringW(L"ExclusiveEndpointCache", L"ProbeVersion", version, path.c_str());
+        auto migrated = llcv::settings::LoadFromIni(path).settings;
+        Check(migrated.exclusiveEndpointCache.empty() &&
+              migrated.exclusiveVerifiedEndpointId.empty() && migrated.exclusiveVerifiedBufferMs == 0,
+              "old probe and legacy verification invalidated together");
+        migrated.exclusiveEndpointCache = {{L"checked-once", false, 0, true}};
+        llcv::settings::SaveToIni(path, migrated);
+        const auto reopened = llcv::settings::LoadFromIni(path).settings;
+        Check(reopened.exclusiveEndpointCache.size() == 1 &&
+              reopened.exclusiveEndpointCache.front().inconclusive,
+              "new version preserves completed attempt across launches");
+    }
     {
         auto settings = llcv::settings::LoadFromIni(path).settings;
         settings.roundedCorners = true;

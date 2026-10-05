@@ -23,6 +23,8 @@ struct Configuration {
     int bufferMilliseconds = 20;
     UINT32 sharedPeriodFrames = 0;
     bool reinitializingEndpoint = false;
+    // Session-fixed. Error handling/recovery remains active when statistics are off.
+    bool detailedDiagnostics = true;
     const wchar_t* correctionDescription = L"off";
 };
 

@@ -77,7 +77,7 @@ bool Window::CreateContent() {
         fields_.push_back({child,font,surface,muted});
     };
     add(L"빠른 사용 안내",L"QUICK GUIDE",Small,Background,true);
-    add(L"Low Latency Capture Viewer",L"Low Latency Capture Viewer",Title,Background);
+    add(L"LLCV",L"LLCV",Title,Background);
     add(version_.c_str(),version_.c_str(),Small,Key);
     add(L"캡처 장치의 영상과 오디오를 저지연으로 재생합니다.",L"Low-latency video and audio playback from capture devices.",Normal,Background,true);
     add(L"키보드 단축키",L"Keyboard shortcuts",Strong,Card);

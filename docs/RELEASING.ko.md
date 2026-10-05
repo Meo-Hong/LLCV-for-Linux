@@ -3,15 +3,15 @@
 > [English](RELEASING.md) · [README로 돌아가기](../README.ko.md)
 
 버전 표기, 빌드, 패키지와 GitHub 릴리스를 일관되게 유지하기 위한 체크리스트입니다.
-릴리스 작업은 기존 `agent/release-v1.0.0` 브랜치에서 진행합니다.
-아래 실행 명령은 모두 **v1.3.0**의 실제 예시이며 빌드 폴더는 현재 관례인
-`build-v1300-release`를 사용합니다. 다른 버전은 버전·빌드 폴더·출력 경로를
+릴리스 작업은 기존 `agent/release-v2.0.2` 브랜치에서 진행합니다.
+아래 실행 명령은 모두 **v2.0.2**의 실제 예시이며 빌드 폴더는 현재 관례인
+`build-v2020-release`를 사용합니다. 다른 버전은 버전·빌드 폴더·출력 경로를
 함께 변경합니다. 빌드 폴더에 점이 있는 버전을 넣고 패키지 기본 경로는 그대로
 두지 않습니다.
 
 ## 1. 버전 표기
 
-Git 태그와 앱 버전 표시에는 `v1.3.0`을 사용합니다. 실행 파일 리소스와 설치
+Git 태그와 앱 버전 표시에는 `v2.0.2`를 사용합니다. 실행 파일 리소스와 설치
 프로그램의 버전 필드는 `v` 없는 숫자를 사용합니다. 다음 위치의 버전을 맞춥니다.
 
 - `CMakeLists.txt`의 `project(... VERSION ...)`
@@ -21,13 +21,13 @@ Git 태그와 앱 버전 표시에는 `v1.3.0`을 사용합니다. 실행 파일
   `VersionInfoVersion`
 - `tools/package-v1.ps1`의 기본 빌드·출력 경로
 - `BUILD_INFO.txt`, `DEPENDENCIES.txt`, `실행안내.txt`의 현재 버전 머리말
-- `docs/release-notes-v1.3.0.md`
+- `docs/release-notes-v2.0.2.md`
 
 변경 후 현재 버전 표기에 이전 문자열이 남지 않았는지 확인합니다.
 과거 릴리스 노트와 변경 기록의 버전 번호는 그대로 보존합니다.
 
 ```powershell
-rg -n "1\.2\.5\.1|1251" CMakeLists.txt src installer tools DEPENDENCIES.txt 실행안내.txt
+rg -n "2\.0\.1|2010" CMakeLists.txt src installer tools DEPENDENCIES.txt 실행안내.txt
 ```
 
 ## 2. 빌드와 검사
@@ -37,9 +37,9 @@ Release x64 빌드를 만들고 등록된 모든 테스트와 공백 검사를 �
 
 ```powershell
 chcp.com 65001 > $null
-cmake -S . -B build-v1300-release -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build-v1300-release
-ctest --test-dir build-v1300-release --output-on-failure
+cmake -S . -B build-v2020-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-v2020-release
+ctest --test-dir build-v2020-release --output-on-failure
 git diff --check
 ```
 
@@ -53,26 +53,27 @@ git diff --check
 공개할 릴리스 자산은 아래 설치 파일과 포터블 ZIP 두 개입니다.
 
 ```text
-LowLatencyCaptureViewer_v1.3.0_Setup.exe
-LowLatencyCaptureViewer_v1.3.0_x64.zip
+LowLatencyCaptureViewer_v2.0.2_Setup.exe
+LowLatencyCaptureViewer_v2.0.2_x64.zip
 ```
 
 ```powershell
 chcp.com 65001 > $null
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-v1.ps1 `
-  -Version 1.3.0 -BuildDir ..\build-v1300-release -OutputDir ..\outputs\v1.3.0
+  -Version 2.0.2 -BuildDir ..\build-v2020-release -OutputDir outputs\v2.0.2
 & "C:\Program Files\Inno Setup 7\ISCC.exe" `
-  "--define=BuildDir=..\build-v1300-release" ".\installer\LowLatencyCaptureViewer.iss"
+  "--define=BuildDir=..\build-v2020-release" ".\installer\LowLatencyCaptureViewer.iss"
 ```
 
 `settings.ini`, `%LOCALAPPDATA%` 로그, `build-*` 폴더, PDB, ILK와 테스트 실행
-파일은 패키지에 넣지 않습니다. ZIP 안의 EXE와 설치 파일 버전이 `1.3.0` 또는
-`1.3.0.0`인지 확인합니다. 파일명만 새 버전이고 내부 EXE는 구버전이면 안 됩니다.
+파일은 패키지에 넣지 않습니다. ZIP 안의 EXE와 설치 파일 버전이 `2.0.2` 또는
+`2.0.2.0`인지 확인합니다. 파일명만 새 버전이고 내부 EXE는 구버전이면 안 됩니다.
 
-두 패키지의 최상위에는 아래 ASIO 고지가 모두 있어야 합니다.
+두 패키지의 최상위에는 아래 외부 구성요소 고지가 모두 있어야 합니다.
 
 - `ASIO-SDK-LICENSE.txt`: 원본 `third_party/asio/LICENSE.txt`
 - `ASIO-HOST-LICENSE.txt`: 원본 `third_party/asio/HOST-LICENSE.txt`
+- `PRETENDARD-LICENSE.txt`: 원본 `third_party/pretendard/LICENSE.txt`
 
 앱의 `LICENSE`도 필요합니다. 준비 폴더뿐 아니라 실제 ZIP을 검사합니다.
 다음 읽기 전용 검사는 필수 고지 누락과 흔한 빌드·설정 파일 혼입을 확인합니다.
@@ -80,10 +81,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-v1.ps1 `
 ```powershell
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $releaseArchive = [IO.Compression.ZipFile]::OpenRead(
-  (Resolve-Path '..\outputs\v1.3.0\LowLatencyCaptureViewer_v1.3.0_x64.zip').Path)
+  (Resolve-Path 'outputs\v2.0.2\LowLatencyCaptureViewer_v2.0.2_x64.zip').Path)
 try {
   foreach ($required in @('LowLatencyCaptureViewer.exe', 'LICENSE',
-      'ASIO-SDK-LICENSE.txt', 'ASIO-HOST-LICENSE.txt',
+      'ASIO-SDK-LICENSE.txt', 'ASIO-HOST-LICENSE.txt', 'PRETENDARD-LICENSE.txt',
       'README.md', 'README.ko.md', 'DEPENDENCIES.txt', '실행안내.txt')) {
     if ($null -eq $releaseArchive.GetEntry($required)) {
       throw "Missing package file: $required"
@@ -98,7 +99,7 @@ try {
 }
 ```
 
-생성된 설치 파일의 내용 목록도 확인하여 두 ASIO 고지와 `LICENSE`가 들어 있는지
+생성된 설치 파일의 내용 목록도 확인하여 ASIO·Pretendard 고지와 `LICENSE`가 들어 있는지
 검증합니다. `cmake --install`은 별도 경로이므로 그것만 성공했다고 ZIP이나
 Inno Setup의 구성까지 확인된 것은 아닙니다.
 
@@ -109,21 +110,21 @@ Inno Setup의 구성까지 확인된 것은 아닙니다.
 ```powershell
 git status --short
 git diff --cached --check
-git commit -m "Prepare v1.3.0 release"
-git push origin agent/release-v1.0.0
+git commit -m "Prepare v2.0.2 release"
+git push origin agent/release-v2.0.2
 ```
 
 릴리스 노트를 사용해 브랜치 HEAD를 태그 대상으로 공개합니다. 베타가 명시된 경우에만
-`--prerelease`를 추가합니다. **v1.3.0은 정식 릴리스**이므로 해당 옵션을 쓰지 않습니다.
+`--prerelease`를 추가합니다. **v2.0.2는 정식 릴리스**이므로 해당 옵션을 쓰지 않습니다.
 
 ```powershell
-gh release create v1.3.0 `
-  "..\outputs\v1.3.0\LowLatencyCaptureViewer_v1.3.0_Setup.exe" `
-  "..\outputs\v1.3.0\LowLatencyCaptureViewer_v1.3.0_x64.zip" `
+gh release create v2.0.2 `
+  "outputs\v2.0.2\LowLatencyCaptureViewer_v2.0.2_Setup.exe" `
+  "outputs\v2.0.2\LowLatencyCaptureViewer_v2.0.2_x64.zip" `
   --repo seria-aa/LowLatencyCaptureViewer `
-  --target agent/release-v1.0.0 `
-  --title "Low Latency Capture Viewer v1.3.0" `
-  --notes-file ".\docs\release-notes-v1.3.0.md"
+  --target agent/release-v2.0.2 `
+  --title "LLCV v2.0.2" `
+  --notes-file ".\docs\release-notes-v2.0.2.md"
 ```
 
 공개된 태그·자산은 덮어쓰지 않습니다. 문제가 생기면 다음 패치 버전으로 수정합니다.

@@ -1,5 +1,5 @@
-Low Latency Capture Viewer v2.0.1 - dependencies
-=================================================
+LLCV v2.0.2 - dependencies
+=========================
 
 License: GNU General Public License v3.0 or later. See the root LICENSE file.
 
@@ -8,7 +8,7 @@ separate Visual C++ Redistributable installation. The target PC needs:
 
 - Windows 10 or Windows 11 x64
 - A DirectShow capture-card driver
-- A card exposing NV12/YUY2, or experimental MJPEG/P010, and compatible 48 kHz
+- A card exposing NV12/YUY2/MJPEG or P010 HDR10, and compatible 48 kHz
   mono/stereo PCM or 32-bit float audio, either on the video filter or as a
   separate DirectShow audio-input filter
 - D3D11, DXGI, DirectShow, WASAPI, HID, SetupAPI, WIC, DWM and UxTheme Windows system components
@@ -22,8 +22,8 @@ separate Visual C++ Redistributable installation. The target PC needs:
   source). Helper-source notices are included in ASIO-HOST-LICENSE.txt
   (third_party/asio/HOST-LICENSE.txt in source).
 
-The tested/recommended card is AVerMedia GC573. Other cards are experimental;
-when their video and audio filters are separate, enable drift correction for
+Device support depends on the formats exposed by its DirectShow driver. When
+video and audio filters are separate, enable drift correction for
 long sessions if the diagnostics show repeated imbalance.
 No mpv.exe, FFmpeg DLL, third-party codec pack, or companion executable is required.
 

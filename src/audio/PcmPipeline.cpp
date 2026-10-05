@@ -61,15 +61,10 @@ void PcmRing::Push(const int16_t* samples, size_t frames) {
         samples += (frames - capacityFrames_) * channels_;
     }
     frames = PrepareWrite(frames);
-    for (size_t i = 0; i < frames; ++i) {
-        const size_t destination =
-            ((writeFrame_ + i) % capacityFrames_) * channels_;
-        const size_t source = i * channels_;
-        if (channels_ == 2) {
-            data_[destination] = samples[source];
-            data_[destination + 1] = samples[source + 1];
-        } else std::copy_n(samples + source, channels_, data_.data() + destination);
-    }
+    // At most two contiguous spans, retaining the same lock and overflow policy.
+    const size_t first = (std::min)(frames, capacityFrames_ - writeFrame_);
+    std::copy_n(samples, first * channels_, data_.data() + writeFrame_ * channels_);
+    std::copy_n(samples + first * channels_, (frames - first) * channels_, data_.data());
     writeFrame_ = (writeFrame_ + frames) % capacityFrames_;
     available_ += frames;
     PublishAvailable();
@@ -104,15 +99,9 @@ size_t PcmRing::Pop(int16_t* output, size_t frames) {
     if (!output || frames == 0) return 0;
     std::lock_guard<std::mutex> lock(mutex_);
     const size_t count = (std::min)(frames, available_);
-    for (size_t i = 0; i < count; ++i) {
-        const size_t source =
-            ((readFrame_ + i) % capacityFrames_) * channels_;
-        const size_t destination = i * channels_;
-        if (channels_ == 2) {
-            output[destination] = data_[source];
-            output[destination + 1] = data_[source + 1];
-        } else std::copy_n(data_.data() + source, channels_, output + destination);
-    }
+    const size_t first = (std::min)(count, capacityFrames_ - readFrame_);
+    std::copy_n(data_.data() + readFrame_ * channels_, first * channels_, output);
+    std::copy_n(data_.data(), (count - first) * channels_, output + first * channels_);
     readFrame_ = (readFrame_ + count) % capacityFrames_;
     available_ -= count;
     PublishAvailable();

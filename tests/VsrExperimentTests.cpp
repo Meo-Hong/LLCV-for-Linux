@@ -5,6 +5,13 @@
 #include "../src/audio/AsioOutput.cpp"
 #include <limits>
 
+#ifndef LLCV_VSR_EXPERIMENT
+template<class Renderer>
+constexpr bool HasPrivateTiming = requires(Renderer& renderer) { renderer.vsrTiming; };
+static_assert(!HasPrivateTiming<DirectD3D11Renderer>,
+              "production renderer must not carry private measurement histograms");
+#endif
+
 static void Require(bool value, const char* label) {
     if (!value) { std::fprintf(stderr, "FAIL: %s\n", label); std::exit(1); }
 }
@@ -141,6 +148,97 @@ static LRESULT CALLBACK SettingsControllerTestProc(HWND hwnd, UINT message, WPAR
     if (message == WM_CREATE) return 0;
     return SettingsWndProc(hwnd,message,wParam,lParam);
 }
+static void TestExclusiveScanLifecycle() {
+    const auto savedSettings = g_settings;
+    const bool savedSuppress = g_suppressSettingsSave;
+    g_suppressSettingsSave = true; // No user INI writes or real audio devices.
+    WNDCLASSW wc{};
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpfnWndProc = SettingsControllerTestProc;
+    wc.lpszClassName = L"LLCV_EXCLUSIVE_LIFECYCLE_TEST";
+    Require(RegisterClassW(&wc) != 0, "exclusive lifecycle class");
+    // Normal completion, partial cancellation, and unread results after close.
+    for (int scenario = 0; scenario < 3; ++scenario) {
+        g_settings = {};
+        g_settings.volumePercent = 73;
+        SettingsDialogState state;
+        state.activeTab = SettingsTab::Audio;
+        state.probeReady = true;
+        state.audioEndpoints = {{L"fixture-a", L"Fixture A", true},
+                                {L"fixture-b", L"Fixture B", false}};
+        state.exclusiveEndpointResults.resize(2);
+        for (auto& result : state.exclusiveEndpointResults)
+            result.state = ExclusiveEndpointState::Testing;
+        state.exclusiveScanRunning = true;
+        HWND hwnd = CreateWindowW(wc.lpszClassName, L"Exclusive lifecycle", WS_POPUP,
+            -32000, -32000, 1000, 650, nullptr, nullptr, wc.hInstance, &state);
+        Require(hwnd != nullptr, "exclusive lifecycle window");
+        const llcv::settings_ui::SettingsControlInitialValues initial{
+            g_settings, false, true, kAppVersionLabel, VideoPreset::R1920x1080,
+            {}, {}, kVideoPresets, kPcmQueueOptionsMs, {}};
+        const llcv::settings_ui::SettingsControlPopulation population{
+            &state,
+            [](void* s) { PopulateAudioOutputCombo(static_cast<SettingsDialogState*>(s)); },
+            [](void* s) { PopulateSettingsBufferCombo(static_cast<SettingsDialogState*>(s)); },
+            [](void*) {}};
+        llcv::settings_ui::CreateSettingsDialogControls(&state, hwnd, wc.hInstance, initial, population);
+        SendMessageW(state.audioCombo, CB_SETCURSEL, 1, 0);
+        PopulateAudioOutputCombo(&state);
+        state.selectedBufferMs = 5;
+        ExclusiveEndpointProbeResult result{};
+        result.probe.compatible = true;
+        result.probe.requestedFrames = 480; // Verified minimum 10 ms.
+        QueueExclusiveEndpointProbeResult(&state, result);
+        if (scenario == 2) {
+            // Closing the HWND discards notifications, not completed diagnostics.
+            FinishSettingsDialog(hwnd, &state, false);
+            CompleteExclusiveEndpointScan(&state);
+        } else {
+            SendMessageW(hwnd, WM_EXCLUSIVE_ENDPOINT_PROBE_COMPLETE, 0, 0);
+            Require(state.selectedBufferMs == 10, "too-small buffer raised to verified minimum");
+            Require(g_settings.exclusiveEndpointCache.size() == 1,
+                    "completed endpoint persists before whole scan finishes");
+            state.selectedBufferMs = 30;
+            PopulateSettingsBufferCombo(&state);
+            if (scenario == 0) {
+                result.endpointIndex = 1;
+                QueueExclusiveEndpointProbeResult(&state, result);
+                SendMessageW(hwnd, WM_EXCLUSIVE_ENDPOINT_PROBE_COMPLETE, 0, 0);
+                Require(state.selectedBufferMs == 30,
+                        "other endpoint completion preserves user buffer");
+                // Duplicate delivery cannot inflate progress or change choices.
+                QueueExclusiveEndpointProbeResult(&state, result);
+                SendMessageW(hwnd, WM_EXCLUSIVE_ENDPOINT_PROBE_COMPLETE, 0, 0);
+                Require(state.exclusiveScanCompleted == 2 && state.selectedBufferMs == 30,
+                        "duplicate result is idempotent");
+            } else {
+                state.exclusiveProbeStop = true;
+            }
+            SendMessageW(hwnd, WM_EXCLUSIVE_SCAN_COMPLETE, 0, 0);
+            Require(state.selectedBufferMs == 30, "scan completion preserves user buffer");
+            DestroyWindow(hwnd);
+        }
+        const size_t expected = scenario == 0 ? 2 : 1;
+        Require(state.exclusiveScanCompleted == expected &&
+                g_settings.exclusiveEndpointCache.size() == expected &&
+                !state.exclusiveScanRunning, "only finished endpoints persist on completion/close");
+        Require(scenario == 0 ||
+                state.exclusiveEndpointResults[1].state == ExclusiveEndpointState::Unknown,
+                "cancelled untested endpoint remains unknown");
+        Require(HasVerifiedExclusiveEndpoint(L"fixture-a", 30) &&
+                !HasVerifiedExclusiveEndpoint(L"fixture-a", 5),
+                "retained diagnostic remains usable without rescanning");
+        Require(g_settings.volumePercent == 73, "diagnostic saves preserve settings");
+        CompleteExclusiveEndpointScan(&state);
+        Require(g_settings.exclusiveEndpointCache.size() == expected,
+                "completion and shutdown can safely share finalization");
+    }
+    UnregisterClassW(wc.lpszClassName, wc.hInstance);
+    g_settings = savedSettings;
+    g_suppressSettingsSave = savedSuppress;
+    std::puts("Exclusive lifecycle: buffer preservation, partial save, close and duplicates passed.");
+}
+
 static void TestSettingsController() {
     const auto savedSettings = g_settings;
     const bool savedSuppress = g_suppressSettingsSave;
@@ -402,6 +500,22 @@ static void TestSettingsAudioTransitions() {
         selectMode(1);
         Require(!state.exclusiveProbeThread.joinable() && !state.exclusiveScanRunning &&
                 IsWindowEnabled(state.exclusiveTestButton), "completed scan reused on revisit");
+        // A temporary failure is completed, but neither approved nor unsupported.
+        state.exclusiveScanCompleted = 0;
+        state.exclusiveEndpointResults[0].state = ExclusiveEndpointState::Testing;
+        result.probe.compatible = false;
+        result.probe.inconclusive = true;
+        QueueExclusiveEndpointProbeResult(&state, result);
+        ConsumeExclusiveEndpointProbeResults(&state);
+        Require(state.exclusiveEndpointResults[0].state == ExclusiveEndpointState::RetryRequired,
+                "temporary failure is not cached as unsupported");
+        PersistCompletedExclusiveEndpointResults(&state);
+        Require(FindExclusiveEndpointCache(state.audioEndpoints[0].id)->inconclusive,
+                "temporary attempt persists for manual retry only");
+        selectMode(0);
+        selectMode(1);
+        Require(!state.exclusiveProbeThread.joinable() && !state.exclusiveScanRunning &&
+                !SettingsCanStart(&state), "mode switch neither retries nor approves a deferred device");
         // Start the real asynchronous path with an empty endpoint list: it
         // posts completion without touching a driver, still exercising the
         // initial idle-to-scanning transition and worker ownership.
@@ -875,6 +989,7 @@ int main(int argc, char** argv) {
         Require(InitCommonControlsEx(&controls) != FALSE, "controller common controls");
         TestSettingsController();
         TestSettingsAudioTransitions();
+        TestExclusiveScanLifecycle();
         TestSettingsModeFlow();
         CoUninitialize();
         return 0;
@@ -968,7 +1083,10 @@ int main(int argc, char** argv) {
         }
         // CPU instrumentation is identical for A/B. Small bounded warmup in
         // synthetic bench; interactive app excludes five seconds of frames.
-        if (benchmark) Check(renderer.vsrTiming.Initialize(renderer.device,60), "CPU timer");
+        // The production renderer carries no private timing histograms. Own the
+        // synthetic benchmark's instrumentation here, outside its render path.
+        llcv::vsr::Timing timing;
+        if (benchmark) Check(timing.Initialize(renderer.device,60), "CPU timer");
         // Independent, serialized completion cross-check. This forced readback
         // exists ONLY in this executable, never in the viewer. Its overhead
         // means these timings must not be described as actual display latency.
@@ -994,10 +1112,10 @@ int main(int argc, char** argv) {
             const auto uploadEnd = std::chrono::steady_clock::now();
             D3D11_VIDEO_PROCESSOR_STREAM stream{};
             stream.Enable = TRUE; stream.pInputSurface = renderer.inputViews[renderer.activeUploadSurface];
-            renderer.vsrTiming.Begin(renderer.context);
+            timing.Begin(renderer.context);
             const HRESULT hr = renderer.videoContext->VideoProcessorBlt(renderer.processor,
                 renderer.outputView,0,1,&stream);
-            renderer.vsrTiming.End(renderer.context,SUCCEEDED(hr));
+            timing.End(renderer.context,SUCCEEDED(hr));
             Check(hr, "video processor blit");
             const auto blitEnd = std::chrono::steady_clock::now();
             // Test-only submission: no Present to a hidden window. Not an
@@ -1038,7 +1156,7 @@ int main(int argc, char** argv) {
             if (phase == 0) defaultHash = hash;
             else Require(hash == defaultHash, "explicit OFF/recreation equals original pixels");
         }
-        const auto data = renderer.vsrTiming.Snapshot();
+        const auto data = timing.Snapshot();
         std::printf("phase=%d requested=%s state=%d output_hash=%016llX CPU_Blt_n=%llu mean=%.4f ms\n", phase,
             g_vsrMode == llcv::vsr::Mode::On ? "on" : g_vsrMode == llcv::vsr::Mode::Off ? "off" : "default",
             static_cast<int>(renderer.vsrState),hash,data.cpuBlt.count,data.cpuBlt.Mean());

@@ -10,7 +10,7 @@
 - Inno Setup 7 only when building the installer
 
 The project uses Windows system APIs and libraries: Win32, DirectShow, D3D11,
-DXGI, Media Foundation for experimental MJPEG decoding, and WASAPI. It does not
+DXGI, Media Foundation for MJPEG decoding, and WASAPI. It does not
 require FFmpeg or a third-party codec pack.
 
 ## Release build
@@ -36,7 +36,7 @@ executable does not require a separate Visual C++ Redistributable installation.
 ## Installer and portable ZIP
 
 After the Release build, run these commands from the repository root. These
-examples package v1.3.0 using the `build\Release` output above; the build-directory
+examples package v2.0.2 using the `build\Release` output above; the build-directory
 override is required because the release scripts normally use a versioned
 build directory.
 
@@ -45,16 +45,16 @@ chcp.com 65001 > $null
 & "C:\Program Files\Inno Setup 7\ISCC.exe" `
   "--define=BuildDir=..\build\Release" ".\installer\LowLatencyCaptureViewer.iss"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-v1.ps1 `
-  -Version 1.3.0 -BuildDir ..\build\Release -OutputDir ..\outputs\v1.3.0
+  -Version 2.0.2 -BuildDir ..\build\Release -OutputDir outputs\v2.0.2
 ```
 
-The outputs are `..\outputs\v1.3.0\LowLatencyCaptureViewer_v1.3.0_Setup.exe`
-and `..\outputs\v1.3.0\LowLatencyCaptureViewer_v1.3.0_x64.zip`. When preparing
+The outputs are `outputs\v2.0.2\LowLatencyCaptureViewer_v2.0.2_Setup.exe`
+and `outputs\v2.0.2\LowLatencyCaptureViewer_v2.0.2_x64.zip`. When preparing
 another version, update the versioned release files first; changing a ZIP name
 does not update the executable. See the [release checklist](RELEASING.md).
 
-Both packages must include `LICENSE`, `ASIO-SDK-LICENSE.txt`, and
-`ASIO-HOST-LICENSE.txt`. They must not contain machine-specific `settings.ini`
+Both packages must include `LICENSE`, `ASIO-SDK-LICENSE.txt`,
+`ASIO-HOST-LICENSE.txt`, and `PRETENDARD-LICENSE.txt`. They must not contain machine-specific `settings.ini`
 files, diagnostic logs, test executables, PDB files, or build directories.
 Automated tests do not replace real-device or long-duration playback checks;
 record separately which hardware checks were actually performed.

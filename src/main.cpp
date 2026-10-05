@@ -1,5 +1,5 @@
 /*
- * Low Latency Capture Viewer
+ * LLCV
  * Copyright (C) 2026 seria-aa
  *
  * This program is free software: you can redistribute it and/or modify
@@ -133,9 +133,9 @@ constexpr int kSampleRate = 48000;
 constexpr int kChannels = 2;
 constexpr int kBitsPerSample = 16;
 #ifdef LLCV_VSR_EXPERIMENT
-constexpr wchar_t kAppVersionLabel[] = L"v2.0.1-vsr-test";
+constexpr wchar_t kAppVersionLabel[] = L"v2.0.2-vsr-test";
 #else
-constexpr wchar_t kAppVersionLabel[] = L"v2.0.1";
+constexpr wchar_t kAppVersionLabel[] = L"v2.0.2";
 #endif
 
 constexpr int kRecommendedCaptureBufferMs = 20;
@@ -234,6 +234,7 @@ enum class ExclusiveEndpointState {
     Testing,
     Supported,
     Unsupported,
+    RetryRequired,
 };
 
 struct ExclusiveEndpointVerification {
@@ -260,7 +261,6 @@ static std::atomic<uint64_t> g_videoCapturedFrames{0};
 static std::atomic<uint64_t> g_videoPresentedFrames{0};
 static std::atomic<uint64_t> g_videoReplacedFrames{0};
 static std::atomic<int64_t> g_videoAppLatencyUs{-1};
-static std::atomic<UINT32> g_videoStride{0};
 static std::atomic<int> g_videoConfiguredFps{0};
 static std::atomic<bool> g_videoTearing{false};
 static std::atomic<bool> g_directVideoActive{false};
@@ -271,13 +271,10 @@ static std::atomic<UINT32> g_audioWasapiPaddingFrames{0};
 static std::atomic<bool> g_asioAudioStarted{false};
 static std::atomic<UINT32> g_audioCapturePacketFrames{0};
 static std::atomic<int64_t> g_audioCaptureIntervalUs{0};
-static std::atomic<LONG> g_audioCaptureAllocatorFrames{0};
-static std::atomic<LONG> g_audioCaptureAllocatorBuffers{0};
 static std::atomic<UINT32> g_audioRingFrames{0};
 static std::atomic<UINT32> g_audioResamplerFrames{0};
 static std::atomic<int> g_audioResamplePpm{0};
 static std::atomic<bool> g_audioResamplerActive{false};
-static std::atomic<uint64_t> g_audioResampledOutputFrames{0};
 static std::atomic<uint64_t> g_audioCaptureCallbacks{0};
 static std::atomic<uint64_t> g_audioCaptureFrames{0};
 static std::atomic<uint64_t> g_audioCaptureIntervalTotalUs{0};
@@ -637,7 +634,7 @@ static bool HasVerifiedExclusiveEndpoint(const std::wstring& endpointId,
                                          int requestedBufferMs) {
     if (endpointId.empty()) return false;
     if (const auto* cached = FindExclusiveEndpointCache(endpointId)) {
-        return cached->supported &&
+        return cached->supported && !cached->inconclusive &&
                IsExclusiveLowLatencyBuffer(cached->recommendedBufferMs) &&
                requestedBufferMs >= cached->recommendedBufferMs;
     }
@@ -973,10 +970,6 @@ static void ReportConnectedAudioAllocator(IPin* inputPin, WORD blockAlign) {
     const auto info = llcv::capture_audio::QueryConnectedAllocator(
         inputPin, blockAlign);
     if (SUCCEEDED(info.result)) {
-        g_audioCaptureAllocatorFrames.store(info.framesPerBuffer,
-                                            std::memory_order_release);
-        g_audioCaptureAllocatorBuffers.store(info.bufferCount,
-                                             std::memory_order_release);
         fwprintf(stderr,
                  L"[audio] actual DirectShow allocator: %ld buffers x "
                  L"%ld bytes (%ld frames / %.2f ms each)\n",
@@ -1107,8 +1100,6 @@ static size_t FillAsioPcm(void* user, int16_t* out, size_t frames) {
             g_audioResamplePpm.store(
                 static_cast<int>(std::lround(state->correctionPpm)),
                 std::memory_order_release);
-            g_audioResampledOutputFrames.fetch_add(
-                got, std::memory_order_relaxed);
         } else {
             if (state->audioStarted) got = g_ring.Pop(out, frames);
             state->correctionPpm = 0.0;
@@ -1317,8 +1308,6 @@ static llcv::wasapi::FillResult FillWasapiPcm(
             g_audioResamplePpm.store(
                 static_cast<int>(std::lround(state->correctionPpm)),
                 std::memory_order_release);
-            g_audioResampledOutputFrames.fetch_add(
-                got, std::memory_order_relaxed);
         } else {
             if (state->audioStarted) got = g_ring.Pop(output, frames);
             g_audioResamplePpm.store(0, std::memory_order_release);
@@ -1535,6 +1524,7 @@ static llcv::wasapi::RunResult AudioRenderThreadWasapi(
     configuration.sharedPeriodFrames =
         g_settings.wasapiSharedPeriodFrames;
     configuration.reinitializingEndpoint = reinitializingEndpoint;
+    configuration.detailedDiagnostics = g_settings.saveLog || g_settings.showDiagnosticConsole;
     configuration.correctionDescription = correctionDescription;
 
     llcv::wasapi::Host host{};
@@ -1729,11 +1719,11 @@ static void AudioRenderThread() {
 
 // -----------------------------------------------------------------------------
 // Direct video path: DirectShow raw video (NV12/YUY2/P010) -> latest frame
-// -> D3D11 video processor -> DXGI flip-discard swapchain. No decoder or
-// external player is involved. P010 uses the separate HDR10 prototype output.
+// -> D3D11 video processor -> DXGI flip-discard swapchain. Raw input needs no
+// decoder or external player. P010 preserves HDR10 through the HDR output path.
 // -----------------------------------------------------------------------------
 
-// Experimental compressed compatibility path. DirectShow still owns device
+// Compressed compatibility path. DirectShow still owns device
 // capture and supplies the newest compressed access unit; a synchronous Media
 // Foundation decoder expands it to NV12 for the existing D3D11 renderer.
 // Keeping only the newest sample before decode prevents application-side
@@ -1858,40 +1848,6 @@ static InternalCaptureAudioProbe ProbeInternalCaptureAudio(
     return probe;
 }
 
-static void UpdateConfiguredVideoTitle(HWND videoHost, int configuredFps) {
-    HWND root = GetAncestor(videoHost, GA_ROOT);
-    if (!root) return;
-    const auto& video = CurrentCapturePreset();
-    const wchar_t* audioLabel =
-        g_settings.audioMode == AudioMode::WasapiExclusive
-            ? L"WASAPI Exclusive"
-            : g_settings.audioMode == AudioMode::Asio ? L"ASIO"
-                                                       : L"WASAPI Shared";
-    const wchar_t* presentationLabel =
-        llcv::presentation::ModeName(g_settings.presentationMode);
-    const auto configuredFormat = static_cast<VideoPixelFormat>(
-        g_activePixelFormat.load(std::memory_order_acquire));
-    wchar_t title[512]{};
-    const int requestedFps = RequestedVideoFrameRate();
-    if (configuredFps == requestedFps) {
-        swprintf_s(
-            title,
-            L"Low Latency Capture Viewer - %s - %dx%d @ %dfps %s - %s - %s",
-            g_activeCaptureDeviceName.c_str(), video.width, video.height,
-            configuredFps, PixelFormatName(configuredFormat), audioLabel,
-            presentationLabel);
-    } else {
-        swprintf_s(
-            title,
-            L"Low Latency Capture Viewer - %s - %dx%d @ %dfps %s "
-            L"(auto; requested %d) - %s - %s",
-            g_activeCaptureDeviceName.c_str(), video.width, video.height,
-            configuredFps, PixelFormatName(configuredFormat),
-            requestedFps, audioLabel, presentationLabel);
-    }
-    SetWindowTextW(root, title);
-}
-
 static std::wstring BuildRuntimeOsdText(int outputWidth, int outputHeight);
 
 struct DirectD3D11Renderer {
@@ -1988,7 +1944,6 @@ struct DirectD3D11Renderer {
     llcv::video_color::Configuration sdrColor{};
 #ifdef LLCV_VSR_FEATURE
     llcv::vsr::State vsrState = llcv::vsr::State::Untouched;
-    llcv::vsr::Timing vsrTiming;
     llcv::vsr::Mode vsrAppliedMode = llcv::vsr::Mode::Disabled;
     bool vsrEligible = false;
     UINT vsrInputWidth = 0, vsrInputHeight = 0;
@@ -2012,9 +1967,11 @@ struct DirectD3D11Renderer {
             vsrInputWidth, vsrInputHeight, vsrDisplayWidth, vsrDisplayHeight);
         return line;
     }
+#ifdef LLCV_VSR_EXPERIMENT
+    // Private measurements must not reserve histograms in the release renderer.
+    llcv::vsr::Timing vsrTiming;
     unsigned vsrWarmupFrames = 0;
     void reportVsrTiming() {
-#ifdef LLCV_VSR_EXPERIMENT
         if (vsrState == llcv::vsr::State::Untouched) return;
         const auto data = vsrTiming.Snapshot();
         fwprintf(stderr, L"[vsr-test] summary state=%s; CPU metrics only, not GPU completion/display latency\n",
@@ -2028,14 +1985,16 @@ struct DirectD3D11Renderer {
         print(L"CPU upload", data.upload);
         print(L"CPU Present", data.present);
         print(L"Present return intervals", data.intervals);
-#endif
     }
+#endif
     HRESULT applyVsrMode(bool initializing = false) {
         const auto requested = g_vsrMode.load(std::memory_order_acquire);
         if (!initializing && requested == vsrAppliedMode) return S_OK;
         cachedOverlayGeneration = 0; // invalidate once on the render owner, not every frame
+#ifdef LLCV_VSR_EXPERIMENT
         reportVsrTiming();
         vsrTiming.Reset();
+#endif
         vsrAppliedMode = requested;
         if (requested == llcv::vsr::Mode::Disabled) {
             vsrState = llcv::vsr::State::Untouched;
@@ -2069,7 +2028,7 @@ struct DirectD3D11Renderer {
                 : TransientHudContent::VsrRejected);
         }
         fwprintf(stderr, L"[vsr-test] F6: %s; no capture restart/output rebuild; "
-            L"quality/activation depend on NVIDIA settings; measurement warmup restarted.\n",
+            L"quality/activation depend on NVIDIA settings.\n",
             llcv::vsr::StateName(vsrState));
         return S_OK;
     }
@@ -2124,13 +2083,15 @@ struct DirectD3D11Renderer {
         volumePanelHeight = 82.0f;
         volumePanelTop = 0.0f;
 #ifdef LLCV_VSR_FEATURE
+#ifdef LLCV_VSR_EXPERIMENT
         reportVsrTiming();
         vsrTiming.Reset();
+        vsrWarmupFrames = 0;
+#endif
         vsrState = llcv::vsr::State::Untouched;
         vsrAppliedMode = llcv::vsr::Mode::Disabled;
         vsrEligible = false;
         vsrInputWidth = vsrInputHeight = vsrDisplayWidth = vsrDisplayHeight = 0;
-        vsrWarmupFrames = 0;
 #endif
 #ifdef LLCV_HDR_SCRGB_PROTOTYPE
         scrgbPipeline.Reset();
@@ -2819,7 +2780,9 @@ struct DirectD3D11Renderer {
             hdrOutput, static_cast<UINT>(width), static_cast<UINT>(height),
             static_cast<UINT>(videoRect.right - videoRect.left),
             static_cast<UINT>(videoRect.bottom - videoRect.top));
+#ifdef LLCV_VSR_EXPERIMENT
         vsrWarmupFrames = static_cast<unsigned>(fps) * 5u;
+#endif
         hr = applyVsrMode(true);
         if (FAILED(hr)) return hr;
 #endif
@@ -3791,8 +3754,6 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
             LogHr(L"DirectD3D11Renderer::initialize", hr);
             break;
         }
-        UpdateConfiguredVideoTitle(host, configuredFps);
-
         frameEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         if (!frameEvent) { hr = HRESULT_FROM_WIN32(GetLastError()); break; }
 
@@ -3965,7 +3926,6 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
 #ifdef LLCV_HDR_FRAME_AUDIT
         renderer.auditMetadata = directShowColorInfo;
 #endif
-        UpdateConfiguredVideoTitle(host, configuredFps);
         fwprintf(stderr, L"[video] connected layout verified: %s %dx%d @ %d stride=%u bytes=%lu\n",
                  PixelFormatName(configuredFormat), preset.width, preset.height,
                  configuredFps, stride, imageBytes);
@@ -4086,7 +4046,6 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
         hr = control->Run();
         if (FAILED(hr)) break;
         initialized = true;
-        g_videoStride.store(stride, std::memory_order_release);
         const bool tearingActive = renderer.allowTearing &&
             g_settings.presentationMode == PresentationMode::AllowTearing;
         g_videoTearing.store(tearingActive, std::memory_order_release);
@@ -4109,7 +4068,7 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
                      ? L"D3D11.1 discard" : L"D3D11 fallback");
         if (compressedVideo) {
             fwprintf(stderr,
-                     L"[video] experimental compressed path: %s capture -> "
+                     L"[video] compressed compatibility path: %s capture -> "
                      L"Media Foundation NV12 decode -> D3D11; latest frame only.\n",
                      PixelFormatName(configuredFormat));
         }
@@ -4531,6 +4490,8 @@ static void PopulateAudioOutputCombo(SettingsDialogState* state) {
                     defaultLabel += UI_TEXT(L" · 검사 중");
                 } else if (result.state == ExclusiveEndpointState::Unsupported) {
                     defaultLabel += UI_TEXT(L" · 사용 불가");
+                } else if (result.state == ExclusiveEndpointState::RetryRequired) {
+                    defaultLabel += UI_TEXT(L" · 확인 보류");
                 }
             }
         }
@@ -4556,6 +4517,8 @@ static void PopulateAudioOutputCombo(SettingsDialogState* state) {
                 label += UI_TEXT(L" (검사 중)");
             } else if (result.state == ExclusiveEndpointState::Unsupported) {
                 label += UI_TEXT(L" (사용 불가)");
+            } else if (result.state == ExclusiveEndpointState::RetryRequired) {
+                label += UI_TEXT(L" (확인 보류)");
             }
         }
         const LRESULT index = SendMessageW(
@@ -4786,6 +4749,19 @@ static int ExclusiveVerifiedBufferForSelection(const SettingsDialogState* state)
         ? result->recommendedBufferMs : 0;
 }
 
+static void EnsureExclusiveBufferForSelection(SettingsDialogState* state) {
+    if (!SettingsUsesExclusiveMode(state)) return;
+    const int minimumMs = ExclusiveVerifiedBufferForSelection(state);
+    // A recommendation is a verified minimum, not a command to discard a
+    // larger buffer chosen by the user when another endpoint finishes.
+    if (IsExclusiveLowLatencyBuffer(minimumMs) &&
+        (!IsExclusiveLowLatencyBuffer(state->selectedBufferMs) ||
+         state->selectedBufferMs < minimumMs)) {
+        state->selectedBufferMs = minimumMs;
+        PopulateSettingsBufferCombo(state);
+    }
+}
+
 static void PersistCompletedExclusiveEndpointResults(
     const SettingsDialogState* state) {
     if (!state) return;
@@ -4794,10 +4770,12 @@ static void PersistCompletedExclusiveEndpointResults(
                        i < state->exclusiveEndpointResults.size(); ++i) {
         const auto& result = state->exclusiveEndpointResults[i];
         if (result.state != ExclusiveEndpointState::Supported &&
-            result.state != ExclusiveEndpointState::Unsupported) {
+            result.state != ExclusiveEndpointState::Unsupported &&
+            result.state != ExclusiveEndpointState::RetryRequired) {
             continue;
         }
         const bool supported = result.state == ExclusiveEndpointState::Supported;
+        const bool inconclusive = result.state == ExclusiveEndpointState::RetryRequired;
         const int recommendedBufferMs = supported
             ? result.recommendedBufferMs : 0;
         auto it = std::find_if(
@@ -4812,12 +4790,14 @@ static void PersistCompletedExclusiveEndpointResults(
                 continue;
             }
             g_settings.exclusiveEndpointCache.push_back({
-                state->audioEndpoints[i].id, supported, recommendedBufferMs});
+                state->audioEndpoints[i].id, supported, recommendedBufferMs, inconclusive});
             changed = true;
         } else if (it->supported != supported ||
-                   it->recommendedBufferMs != recommendedBufferMs) {
+                   it->recommendedBufferMs != recommendedBufferMs ||
+                   it->inconclusive != inconclusive) {
             it->supported = supported;
             it->recommendedBufferMs = recommendedBufferMs;
+            it->inconclusive = inconclusive;
             changed = true;
         }
     }
@@ -4880,6 +4860,10 @@ static void UpdateExclusiveVerificationUi(SettingsDialogState* state) {
                 selectedResult->recommendedBufferMs);
             SetSettingsText(state->audioStatus, status);
         } else if (selectedResult &&
+                   selectedResult->state == ExclusiveEndpointState::RetryRequired) {
+            SetSettingsText(state->audioStatus, UI_TEXT(
+                L"Exclusive 확인 보류 · 장치 상태 확인 후 다시 검사해 주세요"));
+        } else if (selectedResult &&
                    selectedResult->state == ExclusiveEndpointState::Unsupported) {
             // Other endpoints may still be running, but this selected one has
             // a conclusive result already and should say so immediately.
@@ -4912,15 +4896,18 @@ static void ConsumeExclusiveEndpointProbeResults(SettingsDialogState* state) {
             continue;
         }
         auto& result = state->exclusiveEndpointResults[message.endpointIndex];
+        const bool wasPending = result.state == ExclusiveEndpointState::Testing ||
+                                result.state == ExclusiveEndpointState::Unknown;
         result.state = message.probe.compatible
             ? ExclusiveEndpointState::Supported
-            : ExclusiveEndpointState::Unsupported;
+            : message.probe.inconclusive ? ExclusiveEndpointState::RetryRequired
+                                         : ExclusiveEndpointState::Unsupported;
         result.recommendedBufferMs = message.probe.compatible
             ? static_cast<int>((message.probe.requestedFrames * 1000 +
                                 kSampleRate / 2) / kSampleRate)
             : 0;
         result.summary = message.probe.summary;
-        ++state->exclusiveScanCompleted;
+        if (wasPending) ++state->exclusiveScanCompleted;
         fwprintf(stderr,
                  L"[audio][exclusive-scan] %s: %s | requested=%u frames "
                  L"actual=%u frames\n",
@@ -4928,6 +4915,9 @@ static void ConsumeExclusiveEndpointProbeResults(SettingsDialogState* state) {
                  result.summary.c_str(), message.probe.requestedFrames,
                  message.probe.actualBufferFrames);
     }
+    // Save completed diagnostics even while other endpoints are still running.
+    // The user's unaccepted settings controls are never copied into g_settings.
+    if (!pending.empty()) PersistCompletedExclusiveEndpointResults(state);
 }
 
 static void CompleteExclusiveEndpointScan(SettingsDialogState* state) {
@@ -4939,7 +4929,24 @@ static void CompleteExclusiveEndpointScan(SettingsDialogState* state) {
     // has finished but whose notifications are still queued must not allow a
     // new scan to replace its thread or mix old verdicts into the new scan.
     ConsumeExclusiveEndpointProbeResults(state);
+    if (state->exclusiveProbeStop.load(std::memory_order_acquire)) {
+        for (auto& result : state->exclusiveEndpointResults) {
+            if (result.state == ExclusiveEndpointState::Testing) {
+                result = {};
+            }
+        }
+    }
     state->exclusiveScanRunning.store(false, std::memory_order_release);
+}
+
+static void RefreshExclusiveScanUi(SettingsDialogState* state, HWND hwnd) {
+    // Late results belong in the cache, but must not rebuild Shared/ASIO UI.
+    if (!SettingsUsesExclusiveMode(state)) return;
+    llcv::settings_ui::SettingsVisualUpdate visualUpdate(hwnd);
+    PopulateAudioOutputCombo(state);
+    EnsureExclusiveBufferForSelection(state);
+    UpdateExclusiveProbeControl(state);
+    UpdateExclusiveVerificationUi(state);
 }
 
 static void StartExclusiveEndpointScan(SettingsDialogState* state, HWND hwnd,
@@ -4967,7 +4974,8 @@ static void StartExclusiveEndpointScan(SettingsDialogState* state, HWND hwnd,
     size_t completed = 0;
     for (auto& result : state->exclusiveEndpointResults) {
         if (result.state == ExclusiveEndpointState::Supported ||
-            result.state == ExclusiveEndpointState::Unsupported) {
+            result.state == ExclusiveEndpointState::Unsupported ||
+            result.state == ExclusiveEndpointState::RetryRequired) {
             ++completed;
         } else {
             result.state = ExclusiveEndpointState::Testing;
@@ -4976,18 +4984,7 @@ static void StartExclusiveEndpointScan(SettingsDialogState* state, HWND hwnd,
     state->exclusiveScanCompleted = completed;
     state->exclusiveProbeStop.store(false, std::memory_order_release);
     state->exclusiveScanRunning.store(true, std::memory_order_release);
-    {
-        llcv::settings_ui::SettingsVisualUpdate visualUpdate(hwnd);
-        PopulateAudioOutputCombo(state);
-        const int initialRecommendedBufferMs =
-            ExclusiveVerifiedBufferForSelection(state);
-        if (IsExclusiveLowLatencyBuffer(initialRecommendedBufferMs)) {
-            state->selectedBufferMs = initialRecommendedBufferMs;
-            PopulateSettingsBufferCombo(state);
-        }
-        UpdateExclusiveProbeControl(state);
-        UpdateExclusiveVerificationUi(state);
-    }
+    RefreshExclusiveScanUi(state, hwnd);
 
     const std::vector<AudioEndpointInfo> endpoints = state->audioEndpoints;
     std::vector<size_t> scanOrder;
@@ -5017,9 +5014,10 @@ static void StartExclusiveEndpointScan(SettingsDialogState* state, HWND hwnd,
                 message.endpointIndex = i;
                 message.probe = ProbeExclusiveBufferRecommendation(
                     endpoints[i].id, &state->exclusiveProbeStop);
+                if (state->exclusiveProbeStop.load(std::memory_order_acquire)) break;
                 // Results belong to the dialog state, not its message queue.
                 // Closing the HWND can discard notifications safely: the
-                // state outlives the joined worker and releases unread results.
+                // state outlives the joined worker and persists unread results.
                 QueueExclusiveEndpointProbeResult(state, std::move(message));
                 if (!PostMessageW(hwnd, WM_EXCLUSIVE_ENDPOINT_PROBE_COMPLETE,
                                   0, 0)) {
@@ -5327,8 +5325,8 @@ static void PopulatePixelFormatCombo(SettingsDialogState* state) {
             : format == VideoPixelFormat::Yuy2
                 ? L"YUY2 8-bit 4:2:2"
                 : format == VideoPixelFormat::P010
-                    ? UI_TEXT(L"P010 10-bit HDR10 (실험적)")
-                    : UI_TEXT(L"MJPEG (실험적 압축 호환)");
+                    ? UI_TEXT(L"P010 10-bit HDR10")
+                    : UI_TEXT(L"MJPEG (압축 호환)");
         const LRESULT index = SendMessageW(
             state->pixelFormatCombo, CB_ADDSTRING, 0,
             reinterpret_cast<LPARAM>(label));
@@ -5368,7 +5366,7 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
                   L"or use an SDR capture format for this comparison."
                 : L"HDR10은 호환성 출력과 함께 사용할 수 없습니다. 저지연 또는 VSync를 "
                   L"선택하거나, SDR 캡처 포맷으로 비교해 주세요.",
-                L"Low Latency Capture Viewer", MB_OK | MB_ICONINFORMATION);
+                L"LLCV", MB_OK | MB_ICONINFORMATION);
             return;
         }
         const LRESULT scalingIndex = SendMessageW(
@@ -5718,45 +5716,14 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
     case WM_EXCLUSIVE_ENDPOINT_PROBE_COMPLETE: {
         if (!state) return 0;
         ConsumeExclusiveEndpointProbeResults(state);
-        // Cache late results without rebuilding the currently active Shared/
-        // ASIO controls or replacing their selected buffer.
-        if (!SettingsUsesExclusiveMode(state)) return 0;
-        llcv::settings_ui::SettingsVisualUpdate visualUpdate(hwnd);
-        PopulateAudioOutputCombo(state);
-        const int recommendedBufferMs =
-            ExclusiveVerifiedBufferForSelection(state);
-        if (IsExclusiveLowLatencyBuffer(recommendedBufferMs)) {
-            state->selectedBufferMs = recommendedBufferMs;
-            PopulateSettingsBufferCombo(state);
-        }
-        UpdateExclusiveProbeControl(state);
-        UpdateExclusiveVerificationUi(state);
+        RefreshExclusiveScanUi(state, hwnd);
         return 0;
     }
 
     case WM_EXCLUSIVE_SCAN_COMPLETE:
         if (state) {
             CompleteExclusiveEndpointScan(state);
-            if (state->exclusiveProbeStop.load(std::memory_order_acquire)) {
-                // A canceled scan has no verdict for endpoints that did not
-                // reach their probe yet. Never label them as unavailable or
-                // completed merely because the user changed modes/closed UI.
-                for (auto& result : state->exclusiveEndpointResults) {
-                    if (result.state == ExclusiveEndpointState::Testing) {
-                        result.state = ExclusiveEndpointState::Unknown;
-                        result.summary.clear();
-                    }
-                }
-            } else if (state->exclusiveScanCompleted >=
-                       state->audioEndpoints.size()) {
-                PersistCompletedExclusiveEndpointResults(state);
-            }
-            if (SettingsUsesExclusiveMode(state)) {
-                llcv::settings_ui::SettingsVisualUpdate visualUpdate(hwnd);
-                PopulateAudioOutputCombo(state);
-                UpdateExclusiveProbeControl(state);
-                UpdateExclusiveVerificationUi(state);
-            }
+            RefreshExclusiveScanUi(state, hwnd);
         }
         return 0;
 
@@ -5933,13 +5900,7 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
                 state->probeReady.store(true, std::memory_order_release);
                 PostMessageW(hwnd, WM_AUDIOCLIENT3_PROBE_COMPLETE, 0, 0);
             });
-            const int recommendedBufferMs =
-                ExclusiveVerifiedBufferForSelection(state);
-            if (SettingsUsesExclusiveMode(state) &&
-                IsExclusiveLowLatencyBuffer(recommendedBufferMs)) {
-                state->selectedBufferMs = recommendedBufferMs;
-                PopulateSettingsBufferCombo(state);
-            }
+            EnsureExclusiveBufferForSelection(state);
             UpdateExclusiveVerificationUi(state);
             return 0;
         }
@@ -6152,7 +6113,8 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
         const auto* cached = FindExclusiveEndpointCache(
             state.audioEndpoints[i].id);
         if (cached) {
-            state.exclusiveEndpointResults[i].state = cached->supported
+            state.exclusiveEndpointResults[i].state = cached->inconclusive
+                ? ExclusiveEndpointState::RetryRequired : cached->supported
                 ? ExclusiveEndpointState::Supported
                 : ExclusiveEndpointState::Unsupported;
             state.exclusiveEndpointResults[i].recommendedBufferMs =
@@ -6215,7 +6177,7 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
         ((work.bottom - work.top) - settingsOuter.cy) / 2;
     HWND hwnd = CreateWindowExW(
         settingsExStyle,
-        kSettingsClass, UI_TEXT(L"Low Latency Capture Viewer 설정"),
+        kSettingsClass, UI_TEXT(L"LLCV 설정"),
         settingsStyle,
         settingsX, settingsY, settingsOuter.cx, settingsOuter.cy,
         nullptr, nullptr, hInst, &state);
@@ -6259,9 +6221,9 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
     if (state.probeThread.joinable()) state.probeThread.join();
     state.updateCheckTask.CancelAndWait();
     state.exclusiveProbeStop.store(true, std::memory_order_release);
-    if (state.exclusiveProbeThread.joinable()) {
-        state.exclusiveProbeThread.join();
-    }
+    // The HWND may have discarded the worker's notifications. Join, drain and
+    // save its completed results through the same path as normal completion.
+    CompleteExclusiveEndpointScan(&state);
     if (state.captureAudioProbeThread.joinable()) {
         state.captureAudioProbeThread.join();
     }
@@ -8483,29 +8445,6 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
         return 1;
     }
 
-    const auto& video = CurrentCapturePreset();
-    const wchar_t* audioLabel =
-        g_settings.audioMode == AudioMode::WasapiExclusive
-            ? L"WASAPI Exclusive"
-            : g_settings.audioMode == AudioMode::Asio ? L"ASIO"
-                                                       : L"WASAPI Shared";
-    wchar_t title[256]{};
-    const wchar_t* videoLabel =
-        llcv::presentation::IsCompatibility(g_settings.presentationMode)
-            ? L"Single Graph / Direct D3D11 / Blt + VSync"
-            : g_settings.presentationMode == PresentationMode::VSync
-            ? L"Single Graph / Direct D3D11 / VSync"
-            : L"Single Graph / Direct D3D11 / Tearing";
-    if (g_settings.audioOnly) {
-        swprintf_s(title, L"Low Latency Capture Viewer - Audio only - %s",
-                   audioLabel);
-    } else {
-        swprintf_s(title,
-                   L"Low Latency Capture Viewer - %dx%d @ %dfps - %s - %s",
-                   video.width, video.height, RequestedVideoFrameRate(),
-                   audioLabel, videoLabel);
-    }
-
     const DWORD windowStyle = ViewerWindowStyle(g_settings);
     constexpr DWORD windowExStyle = 0;
     HMONITOR initialMonitor = SavedViewerMonitor();
@@ -8554,7 +8493,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
         RestoredWindowOrigin(outerSize, restoredOrigin);
 
     HWND hwnd = CreateWindowExW(
-        windowExStyle, wc.lpszClassName, title,
+        windowExStyle, wc.lpszClassName, L"LLCV",
         windowStyle,
         restoreOrigin ? restoredOrigin.x : CW_USEDEFAULT,
         restoreOrigin ? restoredOrigin.y : CW_USEDEFAULT,
@@ -8645,19 +8584,19 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
                     MessageBoxW(hwnd, IsEnglishUi()
                         ? L"The capture video format changed or could not be verified. Playback was stopped to avoid interpreting frames with the wrong layout or colors.\n\nCheck the console HDR and capture format settings, then start capture again. Attach the diagnostic log if this repeats."
                         : L"캡처 영상 형식이 변경되었거나 확인할 수 없어 잘못된 화면·색상 출력을 막기 위해 재생을 중단했습니다.\n\n콘솔의 HDR과 캡처 형식 설정을 확인한 뒤 다시 시작해 주세요. 반복되면 진단 로그를 첨부해 주세요.",
-                        L"Low Latency Capture Viewer", MB_OK | MB_ICONERROR);
+                        L"LLCV", MB_OK | MB_ICONERROR);
                     g_restartToSettings.store(true, std::memory_order_release);
                 } else if (Surround51Active() && g_captureAudioRejected.load(std::memory_order_acquire)) {
                     MessageBoxW(hwnd, IsEnglishUi()
                         ? L"The capture device did not provide a compatible 48 kHz 5.1/7.1 PCM input.\n\nSet the console to 5.1 LPCM and use a multichannel capture input. If unsupported, turn off Console LPCM 5.1 and select stereo on the console. Dolby/DTS bitstreams are not supported."
                         : L"캡처 장치에서 호환되는 48 kHz 5.1/7.1 PCM 입력을 받지 못했습니다.\n\n콘솔을 5.1 LPCM으로 설정하고 다채널 캡처 입력을 선택하세요. 지원하지 않는 장치라면 콘솔 LPCM 5.1 옵션을 끄고 콘솔도 스테레오로 바꿔 주세요. Dolby/DTS 비트스트림은 지원하지 않습니다.",
-                        L"Low Latency Capture Viewer", MB_OK | MB_ICONERROR);
+                        L"LLCV", MB_OK | MB_ICONERROR);
                     g_restartToSettings.store(true, std::memory_order_release);
                 } else if (g_captureAudioRejected.load(std::memory_order_acquire)) {
                     MessageBoxW(hwnd, IsEnglishUi()
                         ? L"The capture audio format changed during playback. Playback was stopped to prevent incorrect audio.\n\nCheck the console and capture device audio settings, then start capture again. Attach the diagnostic log if this repeats."
                         : L"재생 중 캡처 오디오 형식이 변경되어 잘못된 음성 출력을 막기 위해 재생을 중단했습니다.\n\n콘솔과 캡처 장치의 오디오 설정을 확인한 뒤 다시 시작해 주세요. 반복되면 진단 로그를 첨부해 주세요.",
-                        L"Low Latency Capture Viewer", MB_OK | MB_ICONERROR);
+                        L"LLCV", MB_OK | MB_ICONERROR);
                     g_restartToSettings.store(true, std::memory_order_release);
                 } else if (g_settings.audioOnly) {
                     const HRESULT failure =
@@ -8669,7 +8608,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
                                    : L"오디오 only 캡처 초기화에 실패했습니다.\n\n오류: 0x%08X  %s\n\n호환되는 캡처 오디오 장치를 선택하거나 다른 캡처 프로그램을 종료해 주세요.",
                                static_cast<unsigned int>(failure),
                                HrText(failure).c_str());
-                    MessageBoxW(hwnd, message, L"Low Latency Capture Viewer",
+                    MessageBoxW(hwnd, message, L"LLCV",
                                 MB_OK | MB_ICONERROR);
                     g_restartToSettings.store(true,
                                               std::memory_order_release);
@@ -8682,7 +8621,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
                     g_settings.pixelFormat);
                 const wchar_t* failureFormat = compressedRequested
                     ? (IsEnglishUi()
-                        ? L"Experimental compressed capture initialization failed.\n\n"
+                        ? L"Compressed capture initialization failed.\n\n"
                           L"Error: 0x%08X  %s\n\n"
                           L"The selected device exposes a compressed %s stream, but "
                           L"Windows could not provide a compatible Media Foundation "
@@ -8691,7 +8630,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
                           L"compressed format or frame rate, and attach the diagnostic "
                           L"log when reporting the result. Raw NV12/YUY2 remains the "
                           L"recommended lowest-latency path."
-                        : L"실험적 압축 캡처 초기화에 실패했습니다.\n\n"
+                        : L"압축 캡처 초기화에 실패했습니다.\n\n"
                           L"오류: 0x%08X  %s\n\n"
                           L"선택한 장치가 %s 압축 스트림을 제공하지만, Windows에서 "
                           L"호환되는 Media Foundation 디코더를 찾지 못했거나 장치의 "
@@ -8745,7 +8684,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
                         : L"캡처 장치가 잘못되었거나 예상과 다른 데이터 형식을 반환했습니다.\n\n오류: 0x%08X\n\n캡처 모드를 다시 선택해 시도하세요. 선택 형식과 실제 연결 형식을 비교할 수 있도록 진단 로그를 첨부해 주세요.",
                         static_cast<unsigned>(failure));
                 }
-                MessageBoxW(hwnd, message, L"Low Latency Capture Viewer",
+                MessageBoxW(hwnd, message, L"LLCV",
                             MB_OK | MB_ICONERROR);
                 g_restartToSettings.store(true, std::memory_order_release);
                 }

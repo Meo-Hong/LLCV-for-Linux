@@ -1,6 +1,6 @@
 #include "UiText.h"
 
-#include <string>
+#include <string_view>
 #include <unordered_map>
 
 namespace llcv::ui_text {
@@ -35,25 +35,27 @@ const wchar_t* VsrSetupGuide(bool useEnglish) {
 
 const wchar_t* Translate(const wchar_t* korean, bool useEnglish) {
     if (!korean || !useEnglish) return korean;
-    // The map is intentionally keyed by the existing Korean source strings.
-    // This keeps settings files backward-compatible and lets the UI switch
-    // language without a second executable or a runtime translation service.
-    static const std::unordered_map<std::wstring, std::wstring> english = {
-        {L"스크린샷 저장 시 클립보드에도 복사", L"Also copy screenshots to clipboard"},
-        {L"스크린샷 폴더 열기", L"Open screenshot folder"},
-        {L"입력 해상도 PNG · OSD/화면 필터 제외\r\nHDR은 SDR로 톤 매핑합니다.\r\n사진 폴더의 LowLatencyCaptureViewer에 저장됩니다.\r\n처리 중에는 추가 촬영을 받지 않습니다.",
-         L"Source-resolution PNG; no OSD/display filters.\r\nHDR is tone-mapped to SDR.\r\nSaved in Pictures / LowLatencyCaptureViewer.\r\nNew shots are ignored while processing."},
+    // Keys and translations borrow process-lifetime literals. Lookup accepts a
+    // string view, avoiding a temporary owning string on every English OSD/UI
+    // refresh. Only the dictionary's first initialization allocates storage.
+    static const std::unordered_map<std::wstring_view, const wchar_t*> english = {
+        {L" · 사용 가능 · %d ms", L" · available · %d ms"},
+        {L" (사용 가능 · %d ms)", L" (available · %d ms)"},
+        {L" · 검사 중", L" · checking"},
+        {L" (검사 중)", L" (checking)"},
+        {L" · 사용 불가", L" · unavailable"},
+        {L" (사용 불가)", L" (unavailable)"},
+        {L"장치 검사 중…", L"Checking devices…"},
+        {L"전체 장치 다시 검사", L"Recheck all devices"},
+        {L"Exclusive 출력 장치 검사 중… %zu/%zu 완료", L"Checking Exclusive outputs… %zu/%zu complete"},
+        {L"Exclusive 사용 가능 · 현재 출력 장치 · %d ms 이상", L"Exclusive available · selected output · %d ms or more"},
+        {L"Exclusive 사용 가능 · %d ms 이상 선택 필요", L"Exclusive available · select %d ms or more"},
+        {L"Exclusive 사용 불가 · 현재 출력 장치", L"Exclusive unavailable · selected output"},
+        {L"Exclusive 검사 필요 · 현재 출력 장치", L"Exclusive check required · selected output"},
+        {L" · 확인 보류", L" · retry required"},
+        {L" (확인 보류)", L" (retry required)"},
+        {L"Exclusive 확인 보류 · 장치 상태 확인 후 다시 검사해 주세요", L"Exclusive unverified · check the device, then retry manually"},
         {L"스크린샷 (F12)", L"Screenshots (F12)"},
-        {L"입력 해상도 PNG\r\nHDR → SDR · F1 도움말", L"Source-resolution PNG\r\nHDR to SDR; F1 for help"},
-        {L"콘솔 LPCM 5.1 (실험적 · Shared 전용)", L"Console LPCM 5.1 (experimental; Shared only)"},
-        {L"콘솔: 5.1 LPCM · 캡처: 6/8채널 PCM 필요\r\n"
-         L"Windows 출력 장치도 5.1로 설정하세요.\r\n"
-         L"스테레오 출력에서는 Windows가 다운믹스합니다.\r\n"
-         L"Dolby/DTS 및 가상 서라운드는 지원하지 않습니다.",
-         L"Requires console 5.1 LPCM and 6/8-channel capture.\r\n"
-         L"Configure Windows playback speakers as 5.1.\r\n"
-         L"Windows downmixes for stereo output devices.\r\n"
-         L"No Dolby/DTS decoding or virtual surround."},
         {L"Windows 기본 장치", L"Windows default device"},
         {L"선택 장치 없음", L"No selected device"},
         {L"WASAPI: 출력 사용 불가 · F2로 설정 확인", L"WASAPI: output unavailable (F2 for settings)"},
@@ -67,37 +69,29 @@ const wchar_t* Translate(const wchar_t* korean, bool useEnglish) {
         {L"클리핑 기록 (%llu회)", L"Clipping recorded (%llu events)"},
         {L"%.2f ms (권장)", L"%.2f ms (recommended)"},
         {L"%.2f ms (최저)", L"%.2f ms (minimum)"},
-        {L"%d ms (권장)", L"%d ms (recommended)"},
         {L"Shared 저지연 지원 확인 중…", L"Checking Shared low-latency support…"},
         {L"Shared 저지연 · %.2f~%.2f ms · 검사 %.1f ms", L"Shared low latency · %.2f~%.2f ms · probe %.1f ms"},
         {L"Shared 기본 모드 · 저지연 API 미지원", L"Shared basic mode · low-latency API unavailable"},
         {L"지원 모드 없음: 다른 장치 또는 해상도를 선택하세요.", L"No supported mode: choose another device or resolution."},
-        {L"자동 인식: ", L"Detected: "},
         {L"지원 프레임 없음", L"No supported frame rate"},
-        {L"자동 선택 (권장 프레임)", L"Auto select (recommended frame rate)"},
         {L"지원 포맷 없음", L"No supported format"},
         {L"자동 선택 (NV12 우선 · 권장)", L"Auto select (NV12 first · recommended)"},
-        {L"P010 10-bit HDR10 (실험적)", L"P010 10-bit HDR10 (experimental)"},
-        {L"P010 HDR10 강제 (색 정보가 틀릴 때 · 실험적)", L"Force P010 HDR10 (incorrect color metadata · experimental)"},
+        {L"P010 10-bit HDR10", L"P010 10-bit HDR10"},
+        {L"P010 HDR10 강제 (색 정보가 틀릴 때)", L"Force P010 HDR10 (incorrect color metadata)"},
         {L"HDR 색차 배치", L"HDR chroma placement"},
         {L"Top-left (호환성 해석)", L"Top-left (compatibility)"},
         {L"Left (호환성 해석)", L"Left (compatibility)"},
-        {L"MJPEG (실험적 압축 호환)", L"MJPEG (experimental compressed compatibility)"},
+        {L"MJPEG (압축 호환)", L"MJPEG (compressed compatibility)"},
         {L"MJPEG 색상 해석", L"MJPEG color interpretation"},
         {L"자동 (권장)", L"Auto (recommended)"},
         {L"오디오 출력 모드", L"Audio output mode"},
-        {L"WASAPI Shared (호환성 우선 · 권장)", L"WASAPI Shared (compatibility · recommended)"},
-        {L"WASAPI Exclusive (지연 최소화 · 장치 독점)", L"WASAPI Exclusive (minimum latency · exclusive device)"},
-        {L"ASIO (지연 최소화 · 드라이버 필요 · 실험적)", L"ASIO (minimum latency · driver required · experimental)"},
         {L"오디오 출력 장치", L"Audio output device"},
-        {L"WASAPI 출력 장치", L"WASAPI output device"},
         {L"ASIO 출력 드라이버", L"ASIO output driver"},
         {L"Windows 기본 출력 장치 따라가기 (권장)", L"Follow Windows default output (recommended)"},
         {L" (현재 기본)", L" (current default)"},
         {L"오디오 출력 버퍼", L"Audio output buffer"},
         {L"ASIO 드라이버 선호 버퍼 (드라이버 설정 사용)", L"ASIO driver preferred buffer (driver setting)"},
         {L"ASIO 출력 · 드라이버 기본 버퍼 사용 · 앱 클록 보정 가능", L"ASIO output · driver buffer · app clock correction available"},
-        {L"볼륨 HUD 위치", L"Volume HUD position"},
         {L"100% 이상 볼륨 증폭 허용 (최대 200%)", L"Allow volume boost above 100% (up to 200%)"},
         {L"출력", L"Output"},
         {L"재생 · 편의", L"Playback & convenience"},
@@ -106,21 +100,10 @@ const wchar_t* Translate(const wchar_t* korean, bool useEnglish) {
         {L"영상", L"Video"},
         {L"창", L"Window"},
         {L"오디오", L"Audio"},
-        {L"영상 · 창", L"Video & window"},
-        {L"단축키 · 진단", L"Shortcuts & diagnostics"},
-        {L"단축키", L"Shortcuts"},
-        {L"진단 · 문제 해결", L"Diagnostics & troubleshooting"},
         {L"로그 폴더 열기", L"Open logs folder"},
         {L"로그 폴더를 열지 못했습니다.", L"Could not open the logs folder."},
         {L"진단 로그", L"Diagnostic logs"},
-        {L"시작을 누르면 현재 설정으로 뷰어를 엽니다.\r\n\r\nF2  설정 다시 열기\r\nF3  오디오 OSD\r\nF5  Pixel-perfect 크기로 맞추기\r\nF11  보더리스 전체화면 켜기/끄기\r\nTab  실시간 진단 표시\r\nEsc  전체화면 해제 또는 종료", L"Select Start to open the viewer with the current settings.\r\n\r\nF2  Reopen settings\r\nF3  Audio OSD\r\nF5  Restore Pixel-perfect size\r\nF11  Toggle borderless fullscreen\r\nTab  Live diagnostics\r\nEsc  Leave fullscreen or exit"},
-        {L"F2  설정 다시 열기\r\nF3  오디오 OSD (영상 모드)\r\nF5  Pixel-perfect 크기로 맞추기\r\nF11  보더리스 전체화면 켜기/끄기\r\nTab  실시간 진단 표시\r\nEsc  전체화면 해제 또는 종료", L"F2  Reopen settings\r\nF3  Audio OSD (video mode)\r\nF5  Restore Pixel-perfect size\r\nF11  Toggle borderless fullscreen\r\nTab  Live diagnostics\r\nEsc  Leave fullscreen or exit"},
-        {L"문제가 생길 때만 로그 저장을 켜고 같은 문제를 재현하세요.\r\n로그는 사용자 폴더의 logs에 저장됩니다.", L"Enable log saving only when a problem occurs, then reproduce it.\r\nLogs are saved in the user-data logs folder."},
-        {L"업데이트", L"Updates"},
-        {L"빠른 안내", L"Quick guide"},
-        {L"이 창에서 설정을 저장한 뒤 시작할 수 있습니다.\r\n\r\nF2  설정 다시 열기\r\nF3  오디오 OSD\r\nF5  Pixel-perfect 크기로 맞추기\r\nF11  보더리스 전체화면 켜기/끄기\r\nTab  실시간 진단 표시\r\nEsc  전체화면 해제 또는 종료\r\n\r\n문제가 있으면 진단 로그를 켠 뒤 재현하고, 사용자 폴더의 logs 파일을 첨부해 주세요.", L"Save settings here, then start the viewer.\r\n\r\nF2  Reopen settings\r\nF3  Audio OSD\r\nF5  Restore Pixel-perfect size\r\nF11  Toggle borderless fullscreen\r\nTab  Live diagnostics\r\nEsc  Leave fullscreen or exit\r\n\r\nFor a problem report, enable diagnostic logging, reproduce the issue, and attach the log from the user-data logs folder."},
         {L"업데이트 확인", L"Update checks"},
-        {L"자동 확인은 시작 후 백그라운드에서 최신 릴리스를 확인합니다. 새 버전이 있으면 공식 설치 파일 다운로드를 안내합니다.", L"Automatic checks run in the background after startup. When a new version is available, the app offers the official installer download."},
         {L"현재 버전", L"Current version"},
         {L"최신 버전 확인", L"Check for updates now"},
         {L"최신 버전 확인 중…", L"Checking for updates…"},
@@ -128,12 +111,8 @@ const wchar_t* Translate(const wchar_t* korean, bool useEnglish) {
         {L"최신 버전: %s", L"Latest version: %s"},
         {L"새 버전 %s을(를) 찾았습니다. 공식 설치 파일을 다운로드하시겠습니까?", L"Version %s is available. Download the official installer?"},
         {L"업데이트를 확인하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요.", L"Could not check for updates. Check your internet connection and try again."},
-        {L"▸ 고급 설정", L"▸ Advanced settings"},
-        {L"⌄ 고급 설정 숨기기", L"⌄ Hide advanced settings"},
         {L"내부 오디오 확인 중…", L"Checking built-in audio…"},
         {L"영상 장치 내부 오디오 감지됨 · 자동 사용", L"Built-in audio detected · using automatically"},
-        {L"별도 캡처 오디오 장치 선택", L"Select a separate capture audio device"},
-        {L"내부 오디오 확인 불가 · 자동 선택", L"Built-in audio unavailable · automatic selection"},
         {L"좌측 상단 (기본)", L"Top-left (default)"},
         {L"우측 상단", L"Top-right"},
         {L"좌측 하단", L"Bottom-left"},
@@ -155,36 +134,24 @@ const wchar_t* Translate(const wchar_t* korean, bool useEnglish) {
         {L"부드럽게", L"Smooth"},
         {L"선명하게", L"Sharp"},
         {L"캡처 장치", L"Capture device"},
-        {L"자동 선택 (GC573 우선 · 권장)", L"Auto select (GC573 first · recommended)"},
+        {L"자동 선택 (권장)", L"Auto select (recommended)"},
         {L"캡처 오디오 장치", L"Capture audio device"},
-        {L"오디오 only 모드", L"Audio-only mode"},
         {L"오디오 only: 영상 형식 확인 안 함", L"Audio-only: video mode is not checked"},
         {L"자동 선택 (영상 장치 오디오 우선 · 권장)", L"Auto select (video-device audio first · recommended)"},
-        {L"같은 캡처 장치 오디오를 우선 사용하고, 없으면 이름이 일치하는 별도 입력을 찾습니다.", L"Uses audio on the video device first, then finds a separately exposed matching input."},
-        {L" (실험적)", L" (experimental)"},
         {L"캡처 해상도", L"Capture resolution"},
         {L"픽셀 포맷", L"Pixel format"},
         {L"프레임", L"Frame rate"},
         {L"지원 모드 확인 중...", L"Checking supported modes..."},
-        {L"Pixel-perfect (1:1 · 창 크기 고정)", L"Pixel-perfect (1:1 · fixed window size)"},
-        {L"모니터 이동 시 상대적 창 크기 유지 (독립 옵션)", L"Keep relative window size when moving monitors (independent)"},
         {L"※ Pixel-perfect와 함께 켜면 모니터 이동 시 1:1이 깨질 수 있습니다.", L"※ With Pixel-perfect, moving monitors may break 1:1 scaling."},
-        {L"제목 표시줄 숨기기 (borderless 창)", L"Hide title bar (borderless window)"},
-        {L"창을 모니터 가장자리에 스냅 (권장)", L"Snap window to monitor edges (recommended)"},
         {L"전체화면 커서", L"Fullscreen cursor"},
         {L"자동 숨김 (권장)", L"Auto-hide (recommended)"},
         {L"항상 표시", L"Always show"},
         {L"F11  보더리스 전체화면 켜기/끄기", L"F11  Toggle borderless fullscreen"},
-        {L"진단 로그 파일 저장 (사용자 폴더)", L"Save diagnostic log (user folder)"},
         {L"진단 콘솔 창 표시", L"Show diagnostic console window"},
         {L"다음 실행부터 바로 시작", L"Start directly next time"},
-        {L"저장된 설정으로 바로 실행 · Shift 실행 또는 F2로 설정 열기", L"Starts with saved settings · hold Shift at launch or press F2 for settings"},
-        {L"업데이트 자동 확인 (시작 후 백그라운드)", L"Check for updates automatically (in background after startup)"},
         {L"새 버전이 있습니다. 공식 설치 파일을 다운로드하시겠습니까?", L"A new version is available. Open the official installer download?"},
-        {L"업데이트 확인", L"Update check"},
-        {L"업데이트를 확인할 수 없습니다.", L"Could not check for updates."},
         {L"언어 / Language", L"Language"},
-        {L"Low Latency Capture Viewer 설정", L"Low Latency Capture Viewer Settings"},
+        {L"LLCV 설정", L"LLCV Settings"},
         {L"시작", L"Start"},
         {L"취소", L"Cancel"},
         {L"없음", L"None"},
@@ -214,7 +181,6 @@ const wchar_t* Translate(const wchar_t* korean, bool useEnglish) {
         {L"캡처 패킷 지연 감지", L"Capture packet delay detected"},
         {L"간헐적", L"Intermittent"},
         {L"연속", L"Burst"},
-        {L"오류 패턴", L"Error pattern"},
         {L"자동 관찰 중 · 원본 PCM", L"Auto observing · original PCM"},
         {L"자동 · 보정 작동", L"Auto · correction active"},
         {L"자동 · 관찰 중", L"Auto · observing"},
@@ -225,14 +191,12 @@ const wchar_t* Translate(const wchar_t* korean, bool useEnglish) {
         {L"음소거", L"Muted"},
         {L"PCM 감쇠 적용", L"PCM attenuation applied"},
         {L"PCM 증폭 적용", L"PCM boost applied"},
-        {L"자동 리샘플링", L"Automatic resampling"},
-        {L"끔 (원본 PCM)", L"Off (unaltered PCM)"},
         {L"Pixel-perfect 시작 · Monitor-relative 이동", L"Pixel-perfect start · monitor-relative move"},
         {L"Pixel-perfect (고정 크기)", L"Pixel-perfect (fixed size)"},
         {L"Scaled (비율 고정)", L"Scaled (fixed aspect ratio)"},
     };
     const auto it = english.find(korean);
-    return it == english.end() ? korean : it->second.c_str();
+    return it == english.end() ? korean : it->second;
 }
 
 } // namespace llcv::ui_text

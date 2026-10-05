@@ -14,7 +14,7 @@ clocks. Over a long session this can move the PCM queue away from its target.
 Clock-drift correction is normally unnecessary for a device with a shared
 clock, but may be useful for separate USB video and audio paths.
 
-## Console LPCM 5.1 (experimental, since v1.2.10)
+## Console LPCM 5.1 (since v1.2.10)
 
 Select **WASAPI Shared**, then enable **Console LPCM 5.1** in the Audio tab.
 It defaults off and has no effect in Exclusive or ASIO mode.
@@ -84,18 +84,23 @@ general compatibility are required.
 
 Exclusive is offered only after the application has performed a short,
 per-endpoint playback-event preflight. The output device list labels each
-endpoint as `Available · n ms`, `Unavailable`, or `Checking`; results are cached
-by endpoint ID. This avoids presenting Exclusive for drivers that accept
+endpoint as available, unavailable, checking, or retry required; results are
+cached by endpoint ID. Preflight uses the renderer's aligned initialization
+and whole-packet writes, assessing the actual device period. Busy/disconnected
+devices and unstable timing remain unverified rather than permanently unsupported.
+Completed attempts are reused across mode switches and launches; use the manual
+rescan button to retry. Version 2.0.2 invalidates older probe records once.
+This avoids presenting Exclusive for drivers that accept
 initialization but do not deliver usable event timing. A passing preflight is
 not a universal guarantee, so switch back to Shared or ASIO and attach a log if
 the endpoint still misbehaves.
 
-## ASIO (experimental)
+## ASIO
 
 ASIO appears in the settings only when an installed ASIO driver is detected.
 Driver DLLs are not bundled; the selected driver's own buffer size is used. The
 capture path supplies 48 kHz PCM, so a driver that cannot run at 48 kHz is
-rejected and that run falls back to WASAPI Shared. This prototype follows the
+rejected and that run falls back to WASAPI Shared. ASIO output follows the
 ASIO driver's output clock, but it supports the same app-side Off/Auto/On
 clock-drift correction choices as WASAPI. When enabled, the resampler adjusts
 the capture PCM rate without adding a separate queue. Use WASAPI Shared when

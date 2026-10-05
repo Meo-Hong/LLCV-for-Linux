@@ -78,7 +78,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     if (initial.asioAvailable) {
         SendMessageW(state->audioCombo, CB_ADDSTRING, 0,
                      reinterpret_cast<LPARAM>(initial.english
-                         ? L"ASIO (experimental)" : L"ASIO (실험적)"));
+                         ? L"ASIO (driver required)" : L"ASIO (드라이버 필요)"));
     }
     const LRESULT audioSelection =
         initial.settings.audioMode == AudioMode::Asio && initial.asioAvailable
@@ -259,7 +259,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                  initial.settings.audioOnly ? BST_CHECKED : BST_UNCHECKED, 0);
 
     state->surround51Check = CreateWindowExW(
-        0, L"BUTTON", initial.english ? L"Console LPCM 5.1 (experimental)" : L"콘솔 LPCM 5.1 (실험적)",
+        0, L"BUTTON", initial.english ? L"Console LPCM 5.1" : L"콘솔 LPCM 5.1",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         580, 244, 320, 28, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SURROUND51)),
@@ -515,17 +515,10 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         instance, nullptr);
     SendMessageW(state->captureDeviceCombo, CB_ADDSTRING, 0,
                  reinterpret_cast<LPARAM>(
-                     text(L"자동 선택 (GC573 우선 · 권장)")));
+                     text(L"자동 선택 (권장)")));
     LRESULT selectedCaptureDevice = 0;
     for (size_t i = 0; i < initial.captureDevices.size(); ++i) {
         std::wstring label = initial.captureDevices[i].name;
-        std::wstring lowered = label;
-        std::transform(lowered.begin(), lowered.end(), lowered.begin(),
-                       ::towlower);
-        if (lowered.find(L"gc573") == std::wstring::npos &&
-            lowered.find(L"live gamer 4k") == std::wstring::npos) {
-            label += text(L" (실험적)");
-        }
         SendMessageW(state->captureDeviceCombo, CB_ADDSTRING, 0,
                      reinterpret_cast<LPARAM>(label.c_str()));
         if (initial.captureDevices[i].id == initial.settings.captureDeviceId) {
@@ -646,7 +639,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
 
     state->forceHdr10Check = CreateWindowExW(
         0, L"BUTTON", text(
-            L"P010 HDR10 강제 (색 정보가 틀릴 때 · 실험적)"),
+            L"P010 HDR10 강제 (색 정보가 틀릴 때)"),
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         505, 376, 390, 28, hwnd,
         reinterpret_cast<HMENU>(

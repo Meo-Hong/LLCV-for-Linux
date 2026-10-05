@@ -13,7 +13,7 @@
 namespace llcv::audio {
 
 // Session-fixed PCM mailbox with bounded storage. Capture never waits for
-// render: when full, the oldest frames are discarded.
+// queue space: when full, the oldest frames are discarded. Access is mutex-protected.
 class PcmRing {
 public:
     using OverrunObserver = bool (*)(void* context, size_t droppedFrames);
