@@ -4,6 +4,9 @@
 #include "platform/Clock.h"
 #include "platform/Strings.h"
 
+#include <SDL3/SDL_error.h>
+#include <SDL3/SDL_thread.h>
+
 #include <fcntl.h>
 #include <linux/videodev2.h>
 #include <poll.h>
@@ -278,6 +281,9 @@ bool V4l2Capture::WaitForStop(int timeoutMs) {
 }
 
 void V4l2Capture::Run() {
+    if (!SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_TIME_CRITICAL)) {
+        diagnostics::Log("[capture] thread priority unchanged: %s", SDL_GetError());
+    }
     while (!stopping_.load()) {
         if (fd_ < 0) {
             if (WaitForStop(1000)) break;

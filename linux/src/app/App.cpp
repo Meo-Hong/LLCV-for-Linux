@@ -91,6 +91,9 @@ int App::Run(const LaunchOptions& options) {
     Log("LLCV %s starting, settings %s", kVersion, settingsPath_.c_str());
 
     if (!InitializeSdl(options.backend.value_or(settings_.displayBackend))) return 1;
+    if (!SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_HIGH)) {
+        Log("[thread] render thread priority unchanged: %s", SDL_GetError());
+    }
     ApplyLanguage();
     if (!InitializeWindow()) return 1;
     InitializeImGui();

@@ -3,6 +3,8 @@
 #include "platform/Paths.h"
 #include "platform/PngImage.h"
 
+#include <SDL3/SDL_thread.h>
+
 #include <time.h>
 
 #include <chrono>
@@ -32,6 +34,7 @@ std::filesystem::path UniquePath(const std::filesystem::path& directory) {
 
 Result Save(std::vector<uint8_t> rgba, int width, int height, std::filesystem::path directory,
             bool keepPng) {
+    SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_NORMAL);
     Result result;
     std::vector<uint8_t> png;
     if (!platform::EncodePngRgb(rgba, width, height, png, result.error)) return result;
