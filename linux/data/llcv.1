@@ -1,0 +1,82 @@
+.TH LLCV 1 "2026-10-07" "LLCV 2.0.2" "User Commands"
+.SH NAME
+llcv \- low-latency viewer for USB HDMI capture devices
+.SH SYNOPSIS
+.B llcv
+.RI [ options ]
+.SH DESCRIPTION
+.B llcv
+shows video and audio from UVC (V4L2) HDMI capture devices with minimal
+delay. Video is captured with V4L2 memory-mapped buffers, only the newest
+frame is presented with OpenGL, and capture audio is played through the
+system audio server (PipeWire) with a small drift-corrected buffer.
+.PP
+The settings screen selects the capture device, resolution, pixel format,
+frame rate, audio devices and window behavior. Settings are stored in
+.IR $XDG_CONFIG_HOME/llcv/settings.ini .
+.SH OPTIONS
+.TP
+.B \-\-x11
+Use the X11 backend (XWayland on Wayland sessions) for this run.
+.TP
+.B \-\-wayland
+Use the Wayland backend for this run.
+.TP
+.B \-\-settings
+Show the settings screen even when it is configured to be skipped.
+.TP
+.B \-\-sdr
+Disable HDR output and the 10-bit framebuffer for this run.
+.TP
+.B \-\-version
+Print the version and exit.
+.TP
+.BR \-h ", " \-\-help
+Print a short help text and exit.
+.SH KEYS
+.TP
+.B Alt
+Show or hide the menu bar.
+.TP
+.B F1
+App information and shortcuts.
+.TP
+.B F2
+Stop playback and open the settings screen.
+.TP
+.B F3
+Audio meters and volume controls.
+.TP
+.B F5
+Restore the 1:1 source size.
+.TP
+.BR F11 ", " Alt+Enter
+Toggle fullscreen.
+.TP
+.B F12
+Save a PNG screenshot at the capture resolution.
+.TP
+.B Tab
+Live diagnostics.
+.TP
+.B Esc
+Leave fullscreen, or exit.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/llcv/settings.ini
+User settings.
+.TP
+.I $XDG_STATE_HOME/llcv/logs/llcv.log
+Diagnostic log, when enabled.
+.TP
+.I $XDG_PICTURES_DIR/LLCV/
+Screenshots.
+.SH HDR
+P010 (10-bit HDR10) capture needs Linux 7.1 or newer, or a uvcvideo module
+with P010 support. On Wayland compositors that offer the
+wp_color_management_v1 protocol (GNOME 48 and later, KDE Plasma 6), HDR10
+input is passed through to HDR displays. Otherwise HDR10 is tone mapped to
+SDR. X11 always uses tone mapping.
+.SH SEE ALSO
+.BR pipewire (1),
+.BR v4l2-ctl (1)

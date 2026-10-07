@@ -1,0 +1,5 @@
+Types: deb
+URIs: @URL@
+Suites: @SUITE@
+Components: @COMPONENT@
+Signed-By: /etc/apt/keyrings/llcv-archive-keyring.asc

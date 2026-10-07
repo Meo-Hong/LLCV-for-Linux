@@ -1,0 +1,39 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+include /usr/share/dpkg/pkg-info.mk
+
+ifneq (,$(filter pkg.llcv.bundled-sdl3,$(DEB_BUILD_PROFILES)))
+LLCV_SDL3 := BUNDLED
+else
+LLCV_SDL3 := SYSTEM
+endif
+
+LLCV_DISTRO := $(shell . /etc/os-release && echo "$${ID}$${VERSION_ID}")
+LLCV_SUITE := $(shell . /etc/os-release && echo "$${VERSION_CODENAME}")
+LLCV_APT_DIR := packaging/apt
+LLCV_APT_URL := $(shell . ./$(LLCV_APT_DIR)/repository.conf && echo "$${LLCV_APT_URL}")
+LLCV_APT_COMPONENT := $(shell . ./$(LLCV_APT_DIR)/repository.conf && echo "$${LLCV_APT_COMPONENT}")
+LLCV_APT_KEY := $(wildcard $(LLCV_APT_DIR)/llcv-archive-keyring.asc)
+
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DLLCV_SOURCE_TREE_DATA=OFF -DLLCV_SDL3=$(LLCV_SDL3)
+
+override_dh_install:
+	dh_install
+ifneq (,$(and $(LLCV_APT_URL),$(LLCV_APT_KEY),$(LLCV_SUITE)))
+	install -Dm644 $(LLCV_APT_KEY) debian/llcv/etc/apt/keyrings/llcv-archive-keyring.asc
+	mkdir -p debian/llcv/etc/apt/sources.list.d
+	sed -e 's|@URL@|$(LLCV_APT_URL)|' -e 's|@SUITE@|$(LLCV_SUITE)|' -e 's|@COMPONENT@|$(LLCV_APT_COMPONENT)|' \
+		$(LLCV_APT_DIR)/llcv.sources.in > debian/llcv/etc/apt/sources.list.d/llcv.sources
+	chmod 644 debian/llcv/etc/apt/sources.list.d/llcv.sources
+else
+	@echo "LLCV APT source not configured; the package will not add an update repository."
+endif
+
+override_dh_gencontrol:
+	dh_gencontrol -- -v$(DEB_VERSION)~$(LLCV_DISTRO)

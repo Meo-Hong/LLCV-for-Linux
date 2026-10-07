@@ -1,0 +1,6 @@
+color-management-v1.xml from wayland-protocols 1.47 (staging/color-management).
+Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+License: MIT; the license text is in the <copyright> element of the XML file.
+Change: the deprecated-since attributes are removed, so that wayland-scanner 1.22
+(Ubuntu 24.04) accepts the file. The generated code is otherwise unchanged.
+Used only when the system wayland-protocols is older than 1.41.

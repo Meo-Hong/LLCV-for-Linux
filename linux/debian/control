@@ -1,0 +1,67 @@
+Source: llcv
+Section: video
+Priority: optional
+Maintainer: 머홍 <deahong1214@gmail.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ cmake (>= 3.25),
+ pkgconf | pkg-config,
+ libsdl3-dev (>= 3.2) <!pkg.llcv.bundled-sdl3>,
+ libturbojpeg0-dev,
+ libpng-dev,
+ libwayland-dev,
+ libwayland-bin,
+ wayland-protocols,
+ libxkbcommon-dev <pkg.llcv.bundled-sdl3>,
+ libdecor-0-dev <pkg.llcv.bundled-sdl3>,
+ libegl-dev <pkg.llcv.bundled-sdl3>,
+ libgl-dev <pkg.llcv.bundled-sdl3>,
+ libgles-dev <pkg.llcv.bundled-sdl3>,
+ libx11-dev <pkg.llcv.bundled-sdl3>,
+ libxext-dev <pkg.llcv.bundled-sdl3>,
+ libxrandr-dev <pkg.llcv.bundled-sdl3>,
+ libxcursor-dev <pkg.llcv.bundled-sdl3>,
+ libxi-dev <pkg.llcv.bundled-sdl3>,
+ libxfixes-dev <pkg.llcv.bundled-sdl3>,
+ libxss-dev <pkg.llcv.bundled-sdl3>,
+ libxtst-dev <pkg.llcv.bundled-sdl3>,
+ libpipewire-0.3-dev <pkg.llcv.bundled-sdl3>,
+ libpulse-dev <pkg.llcv.bundled-sdl3>,
+ libasound2-dev <pkg.llcv.bundled-sdl3>,
+ libdbus-1-dev <pkg.llcv.bundled-sdl3>,
+Standards-Version: 4.7.2
+Homepage: https://github.com/seria-aa/LowLatencyCaptureViewer
+Rules-Requires-Root: no
+
+Package: llcv
+Architecture: linux-any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ libegl1,
+ libgl1,
+Recommends:
+ pipewire-audio | pulseaudio,
+ libdecor-0-0,
+ libwayland-cursor0,
+ libwayland-egl1,
+ libxkbcommon0,
+Suggests:
+ v4l-utils,
+Description: low-latency viewer for USB HDMI capture devices
+ LLCV shows video and audio from UVC (V4L2) HDMI capture devices such as
+ the AVerMedia Live Gamer ULTRA S GC553 with minimal delay. Only the newest
+ captured frame is presented, using OpenGL for color conversion and
+ scaling, and capture audio is played through PipeWire with a small
+ drift-corrected buffer.
+ .
+ Features include NV12, YUY2, MJPEG, BGR24 and P010 (HDR10) capture modes,
+ HDR10 passthrough on Wayland compositors with color management, HDR to SDR
+ tone mapping everywhere else, immediate or VSync presentation, an
+ audio-only mode, PNG screenshots at the capture resolution and a live
+ diagnostics overlay. It runs on Wayland by default and can also use X11
+ (XWayland), with Mesa (AMD, Intel) and NVIDIA OpenGL drivers.
+ .
+ P010 capture needs Linux 7.1 or newer, or a uvcvideo module with P010
+ support. On releases without SDL3, such as Ubuntu 24.04, SDL3 is built
+ into the program (build profile pkg.llcv.bundled-sdl3).

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.seria_aa.LLCV</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>LLCV</name>
+  <summary>Low-latency viewer for HDMI capture devices</summary>
+  <summary xml:lang="ko">HDMI 캡처 장치용 저지연 뷰어</summary>
+  <description>
+    <p>
+      LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices,
+      such as the AVerMedia Live Gamer ULTRA S GC553, with minimal delay.
+      Stale frames are dropped in favor of the newest frame, and capture audio
+      is played through PipeWire with a small, drift-corrected buffer.
+    </p>
+    <ul>
+      <li>NV12, YUY2, MJPEG, BGR24 and P010 (HDR10) capture modes</li>
+      <li>HDR10 passthrough on Wayland, HDR to SDR tone mapping elsewhere</li>
+      <li>Immediate or VSync presentation with OpenGL</li>
+      <li>Audio-only mode, volume boost and background mute</li>
+      <li>Source-resolution PNG screenshots and live diagnostics</li>
+      <li>Wayland by default, with an optional X11 (XWayland) mode</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.seria_aa.LLCV.desktop</launchable>
+  <url type="homepage">https://github.com/seria-aa/LowLatencyCaptureViewer</url>
+  <url type="bugtracker">https://github.com/seria-aa/LowLatencyCaptureViewer/issues</url>
+  <developer id="io.github.seria_aa">
+    <name>seria-aa</name>
+  </developer>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Video</category>
+  </categories>
+  <provides>
+    <binary>llcv</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="2.0.2" date="2026-10-07">
+      <description>
+        <p>First Linux release: V4L2 capture, OpenGL presentation, SDL3/PipeWire audio.</p>
+      </description>
+    </release>
+  </releases>
+</component>

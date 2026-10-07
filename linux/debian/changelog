@@ -1,0 +1,23 @@
+llcv (2.0.2) resolute; urgency=medium
+
+  * First Linux release, rewritten from the Windows LLCV 2.0.2 design.
+  * V4L2 memory-mapped capture with latest-frame-first delivery and
+    automatic reconnection.
+  * OpenGL 3.3 presentation for NV12, YUY2, MJPEG (libjpeg-turbo) and BGR24.
+  * SDL3 audio on PipeWire with the PCM queue target and clock-drift
+    correction from the Windows build.
+  * Dear ImGui settings screen, diagnostics and audio overlays with
+    Korean and English text.
+  * P010 (HDR10) capture, HDR10 passthrough through wp_color_management_v1
+    on Wayland with a 10-bit framebuffer, and HDR to SDR tone mapping
+    (the Windows screenshot curve) on SDR displays and X11.
+  * Bundled Dear ImGui 1.92.2b so Debian 13, Ubuntu and Arch build the
+    same code.
+  * Ubuntu 24.04 support: pinned SDL3 3.4.18 linked statically through the
+    pkg.llcv.bundled-sdl3 build profile, and a bundled color-management
+    protocol file for older wayland-protocols.
+  * The app states when HDR input or output is not supported, and why.
+  * Alt shows a menu bar with the viewer commands.
+  * NVIDIA VSR, WASAPI Exclusive and ASIO are not available on Linux.
+
+ -- 머홍 <deahong1214@gmail.com>  Wed, 07 Oct 2026 12:00:00 +0900

@@ -1,0 +1,31 @@
+pkgname=llcv
+pkgver=2.0.2
+pkgrel=1
+pkgdesc="Low-latency viewer for USB (UVC) HDMI capture devices, with HDR10"
+arch=('x86_64' 'aarch64')
+url="https://github.com/seria-aa/LowLatencyCaptureViewer"
+license=('GPL-3.0-or-later' 'MIT' 'OFL-1.1')
+depends=('gcc-libs' 'glibc' 'libglvnd' 'libjpeg-turbo' 'libpng' 'sdl3' 'wayland')
+makedepends=('cmake' 'pkgconf' 'wayland-protocols')
+optdepends=('pipewire: low-latency audio routing (recommended)'
+            'v4l-utils: inspect capture devices with v4l2-ctl')
+source=()
+sha256sums=()
+
+_srcroot="$(realpath "$startdir/../..")"
+
+build() {
+    cmake -S "$_srcroot" -B build \
+        -DCMAKE_BUILD_TYPE=None \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DLLCV_SOURCE_TREE_DATA=OFF \
+        -DLLCV_SDL3=SYSTEM \
+        -DLLCV_WAYLAND_COLOR_MANAGEMENT=ON
+    cmake --build build
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install build
+    install -Dm644 "$_srcroot/third_party/imgui/LICENSE.txt" "$pkgdir/usr/share/licenses/$pkgname/imgui-MIT.txt"
+    install -Dm644 "$_srcroot/third_party/pretendard/LICENSE.txt" "$pkgdir/usr/share/licenses/$pkgname/Pretendard-OFL.txt"
+}

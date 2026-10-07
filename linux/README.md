@@ -1,0 +1,204 @@
+# LLCV for Linux
+
+> [한국어](README.ko.md)
+
+LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices with low
+latency. This directory is a Linux rewrite of the Windows LLCV 2.0.2 viewer.
+The reference device is the AVerMedia Live Gamer ULTRA S GC553. The reference
+desktop is Ubuntu 26.04 (GNOME, Wayland).
+
+| Area | Windows build | Linux build |
+| --- | --- | --- |
+| Video capture | DirectShow | V4L2 memory-mapped buffers, latest frame first |
+| Presentation | D3D11 / DXGI | OpenGL 3.3 (EGL on Wayland, GLX on X11) |
+| Color conversion | D3D11 Video Processor | GLSL shaders, BT.601/709/2020, limited/full range |
+| HDR10 | P010 + DXGI HDR10 | P010 + Wayland `wp_color_management_v1`, or tone mapping |
+| MJPEG | Media Foundation | libjpeg-turbo (decoded to YUV planes) |
+| Audio | WASAPI / ASIO | SDL3 audio on PipeWire |
+| UI | Win32 + Direct2D | Dear ImGui 1.92 (bundled), Pretendard font |
+| Settings | `%LOCALAPPDATA%` | `~/.config/llcv/settings.ini` |
+| Logs | `%LOCALAPPDATA%` | `~/.local/state/llcv/logs/` |
+| Screenshots | Pictures | `$XDG_PICTURES_DIR/LLCV/` |
+
+Not available on Linux: NVIDIA VSR, WASAPI Exclusive, ASIO, console LPCM 5.1,
+and the vendor tone-mapping requests.
+
+## Supported systems
+
+| | Ubuntu 24.04 | Debian 13 / Ubuntu 26.04 | Arch Linux |
+| --- | --- | --- | --- |
+| Package | `.deb` | `.deb` (`debian/`) | `PKGBUILD` (`packaging/arch/`) |
+| SDL3 | bundled 3.4.18, static | system 3.2 or newer | system 3.2 or newer |
+| Dear ImGui | bundled 1.92.2b | bundled 1.92.2b | bundled 1.92.2b |
+| HDR input (P010) | needs Linux 7.1+ | needs Linux 7.1+ | current kernels |
+| HDR output | compositor too old (GNOME 46) | GNOME 48+ / KDE Plasma 6 | GNOME 48+ / KDE Plasma 6 |
+
+When HDR is not available, the app says so and gives the reason. The reason
+appears in Settings → Video → HDR, in the F1 help, in the Tab diagnostics,
+and in a message when an HDR session starts. HDR signals are then shown as
+SDR.
+
+| GPU driver | SDR | HDR10 passthrough (Wayland) | Tone mapping |
+| --- | --- | --- | --- |
+| AMD / Intel (Mesa) | yes | yes, with a 10-bit EGL buffer | yes |
+| NVIDIA (proprietary) | yes | when the driver offers a 10-bit EGL buffer on Wayland | yes |
+
+The HDR path does not depend on the driver's own color-management support.
+LLCV tags its window with `wp_color_management_v1` itself, so the compositor
+does the HDR work. The driver only has to provide a 10-bit buffer. Without
+one, Auto mode tone maps to SDR.
+
+NVIDIA on Wayland needs the EGL Wayland platform library. Debian and Ubuntu
+ship it in `libnvidia-egl-wayland1`. Arch ships it in `egl-wayland`, which
+`nvidia-utils` already depends on.
+
+## Build
+
+### Debian 13 / Ubuntu 26.04
+
+```sh
+sudo apt install build-essential debhelper cmake pkg-config \
+    libsdl3-dev libturbojpeg0-dev libpng-dev \
+    libwayland-dev libwayland-bin wayland-protocols
+./tools/build-deb.sh
+sudo apt install ./dist/ubuntu-26.04/llcv_*.deb
+```
+
+### Ubuntu 24.04
+
+Ubuntu 24.04 has no SDL3 package, so the pinned SDL3 3.4.18 source is
+downloaded (SHA256 checked) and linked statically. `tools/build-deb.sh` does
+this by itself when SDL3 is missing; it then uses the `pkg.llcv.bundled-sdl3`
+build profile.
+
+```sh
+sudo apt install build-essential debhelper dpkg-dev curl
+sudo apt-get build-dep -P pkg.llcv.bundled-sdl3 ./
+./tools/build-deb.sh
+sudo apt install ./dist/ubuntu-24.04/llcv_*.deb
+```
+
+### Building for another release with Docker
+
+A `.deb` only installs on the release it was built on (or newer), because it
+depends on that release's glibc. To build an Ubuntu 24.04 package from any
+host:
+
+```sh
+./tools/build-deb-docker.sh ubuntu:24.04
+```
+
+The package is written to `dist/ubuntu-24.04/`. Other images work too, such
+as `debian:13`.
+
+### Arch Linux
+
+```sh
+sudo pacman -S --needed base-devel cmake sdl3 libjpeg-turbo libpng wayland wayland-protocols
+cd packaging/arch
+makepkg -si
+```
+
+The PKGBUILD builds this source tree directly, so run it from inside the
+checkout.
+
+### Any distribution, without packaging
+
+```sh
+cmake -S . -B build
+cmake --build build -j
+./build/llcv
+```
+
+CMake options:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `LLCV_SDL3` | `AUTO` | `SYSTEM`, `BUNDLED` (static, run `tools/fetch-sdl3.sh` first), or `AUTO` |
+| `LLCV_USE_SYSTEM_IMGUI` | `OFF` | Use a system Dear ImGui 1.92 or newer instead of the bundled copy |
+| `LLCV_WAYLAND_COLOR_MANAGEMENT` | `AUTO` | Build HDR output (`ON` makes missing dependencies an error) |
+| `LLCV_SOURCE_TREE_DATA` | `ON` | Find fonts and icons in the source tree (off for packages) |
+
+## HDR
+
+1. **Capture.** HDR10 arrives as P010 (10-bit). The GC553 offers P010 up to
+   2560 × 1440 at 30 fps, and 1080p at 60 fps. Linux 7.0 and older kernels do
+   not recognize P010 in `uvcvideo` (`Unknown video format 30313050-…` in the
+   kernel log). Use Linux 7.1 or newer, or a uvcvideo DKMS module with P010
+   support. The settings screen warns when the device offers P010 but the
+   kernel hides it.
+2. **HDR displays (Wayland).** With GNOME 48 or newer, or KDE Plasma 6, and HDR
+   turned on in the display settings, Auto mode passes HDR10 through
+   unchanged.
+3. **SDR displays and X11.** HDR10 is tone mapped to SDR with the same curve
+   as the Windows build's HDR screenshots. The reference white is adjustable;
+   the default is 203 nit.
+
+Screenshots of HDR input are always saved as SDR PNGs.
+
+If a 10-bit buffer misbehaves with a driver, start with `llcv --sdr`, or use the
+"Start without HDR" launcher action. Then choose **HDR presentation → Always SDR
+tone mapping**.
+
+## Wayland and X11
+
+LLCV uses Wayland by default. To use X11 (XWayland), do one of these:
+
+- Select **App → Display backend → X11**. The change applies on the next launch.
+- Start with `llcv --x11`.
+- Use the "Start in X11 mode" action of the desktop launcher.
+
+On Wayland the compositor places windows. Because of this, the startup monitor
+setting applies only to fullscreen, and the last window position is not
+restored. X11 mode restores both, but has no HDR output.
+
+## Menu bar
+
+Press and release **Alt** during playback to show the menu bar. It holds the
+View, Audio, Tools, Settings and Help commands, so you can use them without
+remembering the function keys. Press Alt or Esc again, or click outside the
+menu, to close it.
+
+## Shortcuts
+
+| Key | Action |
+| --- | --- |
+| Alt | Show or hide the menu bar |
+| F1 | App information and shortcuts |
+| F2 | Stop playback and open settings |
+| F3 | Audio meters and volume |
+| F5 | Restore the 1:1 source size |
+| F11 / Alt+Enter | Fullscreen |
+| F12 | PNG screenshot at the capture resolution |
+| Tab | Live diagnostics |
+| Esc | Leave fullscreen, or exit |
+| Mouse wheel | Volume ±5% |
+| Double-click | Toggle fullscreen |
+
+## Troubleshooting
+
+- **No picture.** Close OBS and any other application that uses the capture
+  device.
+- **4K 60 fps.** The GC553 offers 4K 60 fps only as MJPEG. Uncompressed NV12
+  is limited to 4K 30 fps, and P010 to 1440p 30 fps.
+- **Washed-out colors with an HDR source.** The source is sending HDR while an
+  8-bit format is captured. Select P010, use **Force HDR10**, or turn off HDR
+  on the source.
+- **No sound.** Check **Audio → Capture audio device**. Auto mode selects the
+  audio device of the same USB device as the video.
+- **Crackling audio.** Raise the PCM buffer target in 5 ms steps.
+- **Permission denied on /dev/video\*.** Log in at the local seat, or add your
+  user to the `video` group.
+
+## Updates
+
+Packages are ready for an APT update repository, but nothing is published
+yet: the signing key and address will be agreed with the original author
+first. See [packaging/README.md](packaging/README.md) for the release
+checklist. Package versions carry the release they were built for, such as
+`2.0.2~ubuntu24.04`.
+
+## License
+
+GPL-3.0-or-later. Dear ImGui is MIT licensed. Pretendard is licensed under the
+SIL Open Font License 1.1.

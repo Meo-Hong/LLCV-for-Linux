@@ -1,0 +1,15 @@
+/build/
+/dist/
+/obj-*/
+/debian/.debhelper/
+/debian/llcv/
+/debian/debhelper-build-stamp
+/debian/files
+/debian/*.substvars
+/debian/*.debhelper.log
+/debian/tmp/
+/third_party/sdl3/
+/packaging/arch/src/
+/packaging/arch/pkg/
+/packaging/arch/build/
+/packaging/arch/*.pkg.tar.*

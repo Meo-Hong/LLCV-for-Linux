@@ -1,0 +1,96 @@
+name: Linux packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "linux-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  deb:
+    name: deb (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["ubuntu:24.04", "ubuntu:26.04", "debian:13"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build package in ${{ matrix.image }}
+        run: linux/tools/build-deb-docker.sh "${{ matrix.image }}"
+      - name: Name artifact
+        id: name
+        run: echo "value=deb-$(echo '${{ matrix.image }}' | tr ':.' '--')" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.value }}
+          path: linux/dist
+          if-no-files-found: error
+
+  arch:
+    name: Arch Linux package
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install build tools
+        run: pacman -Syu --noconfirm --needed base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd
+      - uses: actions/checkout@v4
+      - name: Build package
+        run: |
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+          cd linux/packaging/arch
+          su builder -c "makepkg -f --noconfirm"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch-package
+          path: linux/packaging/arch/*.pkg.tar.*
+          if-no-files-found: error
+
+  apt-repository:
+    name: APT repository
+    needs: deb
+    if: startsWith(github.ref, 'refs/tags/linux-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: deb-*
+          path: linux/dist
+          merge-multiple: true
+      - name: Check signing secrets
+        env:
+          LLCV_APT_PRIVATE_KEY: ${{ secrets.LLCV_APT_PRIVATE_KEY }}
+          LLCV_APT_KEY_ID: ${{ secrets.LLCV_APT_KEY_ID }}
+        run: |
+          if [ -z "$LLCV_APT_PRIVATE_KEY" ] || [ -z "$LLCV_APT_KEY_ID" ]; then
+            echo "LLCV_APT_PRIVATE_KEY and LLCV_APT_KEY_ID secrets are required to publish." >&2
+            exit 1
+          fi
+      - name: Import signing key
+        env:
+          LLCV_APT_PRIVATE_KEY: ${{ secrets.LLCV_APT_PRIVATE_KEY }}
+        run: printf '%s\n' "$LLCV_APT_PRIVATE_KEY" | gpg --batch --import
+      - name: Build signed repository
+        env:
+          LLCV_APT_SIGNING_KEY: ${{ secrets.LLCV_APT_KEY_ID }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq apt-utils
+          linux/tools/build-apt-repo.sh "$GITHUB_WORKSPACE/apt-repo"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apt-repo
+      - id: deploy
+        uses: actions/deploy-pages@v4

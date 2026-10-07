@@ -1,0 +1,31 @@
+[Desktop Entry]
+Type=Application
+Name=LLCV
+GenericName=Low Latency Capture Viewer
+GenericName[ko]=저지연 캡처 뷰어
+Comment=Show HDMI capture device video and audio with low latency
+Comment[ko]=HDMI 캡처 장치의 영상과 소리를 낮은 지연으로 표시합니다
+Exec=llcv
+Icon=io.github.seria_aa.LLCV
+Terminal=false
+Categories=AudioVideo;Video;Player;
+Keywords=capture;hdmi;uvc;v4l2;game;console;viewer;캡처;
+StartupWMClass=io.github.seria_aa.LLCV
+StartupNotify=true
+SingleMainWindow=true
+Actions=settings;x11;sdr;
+
+[Desktop Action settings]
+Name=Open settings first
+Name[ko]=설정 화면으로 시작
+Exec=llcv --settings
+
+[Desktop Action x11]
+Name=Start in X11 mode (XWayland)
+Name[ko]=X11 모드로 시작 (XWayland)
+Exec=llcv --x11
+
+[Desktop Action sdr]
+Name=Start without HDR (8-bit)
+Name[ko]=HDR 없이 시작 (8비트)
+Exec=llcv --sdr

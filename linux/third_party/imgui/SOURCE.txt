@@ -1,0 +1,6 @@
+Dear ImGui 1.92.2b, unchanged upstream sources (core and the OpenGL 3 backend only).
+Source: https://github.com/ocornut/imgui/archive/refs/tags/v1.92.2b.tar.gz
+Archive SHA256: da3d453cce74e0fb3d67f8d798a2a8d04fcaf0b33ce0e0131d0695dfc4f64191
+License: MIT; see LICENSE.txt.
+Bundled because Debian 13 ships 1.90 and Arch Linux has no imgui package.
+Build with -DLLCV_USE_SYSTEM_IMGUI=ON to use a system copy of 1.92 or newer instead.
