@@ -25,13 +25,35 @@ and the vendor tone-mapping requests.
 
 ## Supported systems
 
-| | Ubuntu 24.04 | Debian 13 / Ubuntu 26.04 | Arch Linux |
-| --- | --- | --- | --- |
-| Package | `.deb` | `.deb` (`debian/`) | `PKGBUILD` (`packaging/arch/`) |
-| SDL3 | bundled 3.4.18, static | system 3.2 or newer | system 3.2 or newer |
-| Dear ImGui | bundled 1.92.2b | bundled 1.92.2b | bundled 1.92.2b |
-| HDR input (P010) | needs Linux 7.1+ | needs Linux 7.1+ | current kernels |
-| HDR output | compositor too old (GNOME 46) | GNOME 48+ / KDE Plasma 6 | GNOME 48+ / KDE Plasma 6 |
+| | Ubuntu 22.04 | Ubuntu 24.04 | Debian 13 / Ubuntu 26.04 | Arch Linux |
+| --- | --- | --- | --- | --- |
+| Package | `.deb` | `.deb` | `.deb` (`debian/`) | `PKGBUILD` (`packaging/arch/`) |
+| SDL3 | bundled 3.4.18, static | bundled 3.4.18, static | system 3.2 or newer | system 3.2 or newer |
+| Dear ImGui | bundled 1.92.2b | bundled 1.92.2b | bundled 1.92.2b | bundled 1.92.2b |
+| HDR input (P010) | needs Linux 7.1+ | needs Linux 7.1+ | needs Linux 7.1+ | current kernels |
+| HDR output | compositor too old (GNOME 42) | compositor too old (GNOME 46) | GNOME 48+ / KDE Plasma 6 | GNOME 48+ / KDE Plasma 6 |
+
+| | Debian 12 (bookworm) | Debian 13 (trixie) |
+| --- | --- | --- |
+| Also for | LMDE 6, Raspberry Pi OS (bookworm) | Kali, Raspberry Pi OS (trixie) |
+| Package | `.deb` amd64, arm64 | `.deb` amd64, arm64, armhf |
+| SDL3 | bundled 3.4.18, static | system 3.2 or newer |
+| HDR input (P010) | needs Linux 7.1+ | needs Linux 7.1+ |
+| HDR output | compositor too old (GNOME 43) | GNOME 48 / KDE Plasma 6 (not the Raspberry Pi desktop) |
+
+Linux Mint 21, Pop!_OS 22.04, Zorin OS 17 and elementary OS 7 are Ubuntu
+22.04 based; use the Ubuntu 22.04 package. Linux Mint 22, Pop!_OS 24.04 and
+Zorin OS 18 are Ubuntu 24.04 based; use the Ubuntu 24.04 package. A package
+built on a newer release does not install on an older one. Raspberry Pi OS 64-bit uses the `arm64` package, and
+Raspberry Pi OS 32-bit uses `armhf` (Raspberry Pi 2 or newer; Pi Zero and Pi 1
+are not supported).
+
+| | Fedora 43 or newer, Nobara | RHEL / Rocky / AlmaLinux 9 and 10 |
+| --- | --- | --- |
+| Package | `.rpm` (`packaging/rpm/llcv.spec`) | `.rpm` (same spec) |
+| SDL3 | system 3.4 | bundled 3.4.18, static (EPEL has no SDL3) |
+| HDR input (P010) | needs Linux 7.1+ | needs a P010-capable uvcvideo (not in EL 9/10 kernels) |
+| HDR output | GNOME 48+ / KDE Plasma 6 | compositor too old (GNOME 40 / 47) |
 
 When HDR is not available, the app says so and gives the reason. The reason
 appears in Settings → Video → HDR, in the F1 help, in the Tab diagnostics,
@@ -42,6 +64,11 @@ SDR.
 | --- | --- | --- | --- |
 | AMD / Intel (Mesa) | yes | yes, with a 10-bit EGL buffer | yes |
 | NVIDIA (proprietary) | yes | when the driver offers a 10-bit EGL buffer on Wayland | yes |
+| Raspberry Pi 4/5 (VideoCore, Mesa v3d) | yes, through OpenGL ES 3.0 | no (the Pi desktop has no color management) | yes |
+
+When desktop OpenGL 3.3 is not available, LLCV switches to OpenGL ES 3.0
+automatically. On a Raspberry Pi, MJPEG is decoded by the CPU, so prefer NV12
+or YUY2 at 1080p; 4K MJPEG is too heavy for a Pi 4.
 
 The HDR path does not depend on the driver's own color-management support.
 LLCV tags its window with `wp_color_management_v1` itself, so the compositor
@@ -50,74 +77,26 @@ one, Auto mode tone maps to SDR.
 
 NVIDIA on Wayland needs the EGL Wayland platform library. Debian and Ubuntu
 ship it in `libnvidia-egl-wayland1`. Arch ships it in `egl-wayland`, which
-`nvidia-utils` already depends on.
+`nvidia-utils` already depends on. Fedora and EL ship it in `egl-wayland`
+(RPM Fusion or the NVIDIA repository installs it with the driver).
 
-## Build
-
-### Debian 13 / Ubuntu 26.04
-
-```sh
-sudo apt install build-essential debhelper cmake pkg-config \
-    libsdl3-dev libturbojpeg0-dev libpng-dev \
-    libwayland-dev libwayland-bin wayland-protocols
-./tools/build-deb.sh
-sudo apt install ./dist/ubuntu-26.04/llcv_*.deb
-```
-
-### Ubuntu 24.04
-
-Ubuntu 24.04 has no SDL3 package, so the pinned SDL3 3.4.18 source is
-downloaded (SHA256 checked) and linked statically. `tools/build-deb.sh` does
-this by itself when SDL3 is missing; it then uses the `pkg.llcv.bundled-sdl3`
-build profile.
+## Build and install
 
 ```sh
-sudo apt install build-essential debhelper dpkg-dev curl
-sudo apt-get build-dep -P pkg.llcv.bundled-sdl3 ./
-./tools/build-deb.sh
-sudo apt install ./dist/ubuntu-24.04/llcv_*.deb
+git clone https://github.com/Meo-Hong/LLCV-for-Linux.git
+cd LLCV-for-Linux/linux
+./tools/install-build-deps.sh
+./tools/build-package.sh
 ```
 
-### Building for another release with Docker
+The scripts detect the distribution, install the build dependencies, and
+build a `.deb`, `.rpm` or Arch package. The last command prints the install
+command for your system. [BUILDING.md](BUILDING.md) covers the rest:
 
-A `.deb` only installs on the release it was built on (or newer), because it
-depends on that release's glibc. To build an Ubuntu 24.04 package from any
-host:
-
-```sh
-./tools/build-deb-docker.sh ubuntu:24.04
-```
-
-The package is written to `dist/ubuntu-24.04/`. Other images work too, such
-as `debian:13`.
-
-### Arch Linux
-
-```sh
-sudo pacman -S --needed base-devel cmake sdl3 libjpeg-turbo libpng wayland wayland-protocols
-cd packaging/arch
-makepkg -si
-```
-
-The PKGBUILD builds this source tree directly, so run it from inside the
-checkout.
-
-### Any distribution, without packaging
-
-```sh
-cmake -S . -B build
-cmake --build build -j
-./build/llcv
-```
-
-CMake options:
-
-| Option | Default | Meaning |
-| --- | --- | --- |
-| `LLCV_SDL3` | `AUTO` | `SYSTEM`, `BUNDLED` (static, run `tools/fetch-sdl3.sh` first), or `AUTO` |
-| `LLCV_USE_SYSTEM_IMGUI` | `OFF` | Use a system Dear ImGui 1.92 or newer instead of the bundled copy |
-| `LLCV_WAYLAND_COLOR_MANAGEMENT` | `AUTO` | Build HDR output (`ON` makes missing dependencies an error) |
-| `LLCV_SOURCE_TREE_DATA` | `ON` | Find fonts and icons in the source tree (off for packages) |
+- which package each distribution uses
+- manual builds for the Debian, Fedora/RHEL and Arch families
+- Docker builds for other releases and for the Raspberry Pi (ARM)
+- builds without packaging, CMake options, and build troubleshooting
 
 ## HDR
 
@@ -195,8 +174,9 @@ menu, to close it.
 Packages are ready for an APT update repository, but nothing is published
 yet: the signing key and address will be agreed with the original author
 first. See [packaging/README.md](packaging/README.md) for the release
-checklist. Package versions carry the release they were built for, such as
-`2.0.2~ubuntu24.04`.
+checklist. Release packages are built on the oldest supported release of each
+family, so one file serves the newer releases too, and file names carry no
+distribution name.
 
 ## License
 

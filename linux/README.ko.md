@@ -25,13 +25,34 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 
 ## 지원 환경
 
-| | Ubuntu 24.04 | Debian 13 / Ubuntu 26.04 | Arch Linux |
-| --- | --- | --- | --- |
-| 패키지 | `.deb` | `.deb` (`debian/`) | `PKGBUILD` (`packaging/arch/`) |
-| SDL3 | 번들 3.4.18 (정적 링크) | 시스템 3.2 이상 | 시스템 3.2 이상 |
-| Dear ImGui | 번들 1.92.2b | 번들 1.92.2b | 번들 1.92.2b |
-| HDR 입력 (P010) | 리눅스 7.1 이상 필요 | 리눅스 7.1 이상 필요 | 최신 커널이면 지원 |
-| HDR 출력 | 컴포지터가 오래돼 불가 (GNOME 46) | GNOME 48+ / KDE Plasma 6 | GNOME 48+ / KDE Plasma 6 |
+| | Ubuntu 22.04 | Ubuntu 24.04 | Debian 13 / Ubuntu 26.04 | Arch Linux |
+| --- | --- | --- | --- | --- |
+| 패키지 | `.deb` | `.deb` | `.deb` (`debian/`) | `PKGBUILD` (`packaging/arch/`) |
+| SDL3 | 번들 3.4.18 (정적 링크) | 번들 3.4.18 (정적 링크) | 시스템 3.2 이상 | 시스템 3.2 이상 |
+| Dear ImGui | 번들 1.92.2b | 번들 1.92.2b | 번들 1.92.2b | 번들 1.92.2b |
+| HDR 입력 (P010) | 리눅스 7.1 이상 필요 | 리눅스 7.1 이상 필요 | 리눅스 7.1 이상 필요 | 최신 커널이면 지원 |
+| HDR 출력 | 컴포지터가 오래돼 불가 (GNOME 42) | 컴포지터가 오래돼 불가 (GNOME 46) | GNOME 48+ / KDE Plasma 6 | GNOME 48+ / KDE Plasma 6 |
+
+| | Debian 12 (bookworm) | Debian 13 (trixie) |
+| --- | --- | --- |
+| 함께 쓰는 OS | LMDE 6, Raspberry Pi OS (bookworm) | Kali, Raspberry Pi OS (trixie) |
+| 패키지 | `.deb` amd64, arm64 | `.deb` amd64, arm64, armhf |
+| SDL3 | 번들 3.4.18, 정적 링크 | 시스템 3.2 이상 |
+| HDR 입력 (P010) | 리눅스 7.1 이상 필요 | 리눅스 7.1 이상 필요 |
+| HDR 출력 | 컴포지터가 오래돼 불가 (GNOME 43) | GNOME 48 / KDE Plasma 6 (라즈베리파이 데스크톱 제외) |
+
+Linux Mint 21, Pop!_OS 22.04, Zorin OS 17, elementary OS 7은 Ubuntu 22.04
+기반이라 Ubuntu 22.04 패키지를, Linux Mint 22, Pop!_OS 24.04, Zorin OS 18은
+Ubuntu 24.04 패키지를 씁니다. 새 릴리스에서 만든 패키지는 옛 릴리스에 설치되지
+않습니다. Raspberry Pi OS 64비트는 `arm64`, 32비트는 `armhf`
+패키지를 씁니다(Raspberry Pi 2 이상, Pi Zero와 Pi 1은 미지원).
+
+| | Fedora 43 이상, Nobara | RHEL / Rocky / AlmaLinux 9, 10 |
+| --- | --- | --- |
+| 패키지 | `.rpm` (`packaging/rpm/llcv.spec`) | `.rpm` (같은 spec) |
+| SDL3 | 시스템 3.4 | 번들 3.4.18, 정적 링크 (EPEL에 SDL3 없음) |
+| HDR 입력 (P010) | 리눅스 7.1 이상 필요 | P010을 지원하는 uvcvideo 필요 (EL 9/10 커널에는 없음) |
+| HDR 출력 | GNOME 48+ / KDE Plasma 6 | 컴포지터가 오래돼 불가 (GNOME 40 / 47) |
 
 HDR을 쓸 수 없는 환경이면 앱이 그 사실과 이유를 직접 알려줍니다. 이유는
 설정 → 영상 → HDR, F1 도움말, Tab 진단, 그리고 HDR 재생을 시작할 때 뜨는
@@ -41,6 +62,11 @@ HDR을 쓸 수 없는 환경이면 앱이 그 사실과 이유를 직접 알려�
 | --- | --- | --- | --- |
 | AMD / Intel (Mesa) | 지원 | 지원 (10비트 EGL 버퍼) | 지원 |
 | NVIDIA (독점) | 지원 | 드라이버가 Wayland에서 10비트 EGL 버퍼를 줄 때 | 지원 |
+| Raspberry Pi 4/5 (VideoCore, Mesa v3d) | 지원 (OpenGL ES 3.0) | 불가 (라즈베리파이 데스크톱에 색 관리 없음) | 지원 |
+
+데스크톱 OpenGL 3.3을 쓸 수 없으면 자동으로 OpenGL ES 3.0으로 실행합니다.
+라즈베리파이에서는 MJPEG를 CPU로 디코딩하므로 1080p NV12나 YUY2를 권장합니다.
+Pi 4에서 4K MJPEG는 너무 무겁습니다.
 
 HDR 경로는 드라이버 자체의 색 관리 지원에 의존하지 않습니다. LLCV가 직접
 `wp_color_management_v1`로 창에 HDR 정보를 붙이고, HDR 처리는 컴포지터가
@@ -51,69 +77,23 @@ NVIDIA를 Wayland에서 쓰려면 EGL Wayland 플랫폼 라이브러리가 필�
 Debian/Ubuntu는 `libnvidia-egl-wayland1` 패키지에 있습니다. Arch는 `egl-wayland`
 패키지에 있고, `nvidia-utils`가 이미 의존합니다.
 
-## 빌드
-
-### Debian 13 / Ubuntu 26.04
+## 빌드와 설치
 
 ```sh
-sudo apt install build-essential debhelper cmake pkg-config \
-    libsdl3-dev libturbojpeg0-dev libpng-dev \
-    libwayland-dev libwayland-bin wayland-protocols
-./tools/build-deb.sh
-sudo apt install ./dist/ubuntu-26.04/llcv_*.deb
+git clone https://github.com/Meo-Hong/LLCV-for-Linux.git
+cd LLCV-for-Linux/linux
+./tools/install-build-deps.sh
+./tools/build-package.sh
 ```
 
-### Ubuntu 24.04
+스크립트가 배포판을 알아내서 빌드 의존성을 설치하고, `.deb`, `.rpm` 또는 Arch
+패키지를 만듭니다. 마지막 명령이 내 시스템에 맞는 설치 명령을 알려줍니다.
+자세한 내용은 [BUILDING.ko.md](BUILDING.ko.md)에 있습니다.
 
-Ubuntu 24.04에는 SDL3 패키지가 없어서, 고정된 SDL3 3.4.18 소스를 받아
-(SHA256 확인) 앱에 정적으로 넣습니다. SDL3가 없으면 `tools/build-deb.sh`가
-알아서 받고 `pkg.llcv.bundled-sdl3` 빌드 프로필로 빌드합니다.
-
-```sh
-sudo apt install build-essential debhelper dpkg-dev curl
-sudo apt-get build-dep -P pkg.llcv.bundled-sdl3 ./
-./tools/build-deb.sh
-sudo apt install ./dist/ubuntu-24.04/llcv_*.deb
-```
-
-### Docker로 다른 릴리스용 빌드
-
-`.deb`는 그 릴리스의 glibc에 묶이므로, 빌드한 릴리스(또는 그보다 새 릴리스)에만
-설치됩니다. 어느 PC에서든 Ubuntu 24.04용 패키지를 만들려면:
-
-```sh
-./tools/build-deb-docker.sh ubuntu:24.04
-```
-
-결과물은 `dist/ubuntu-24.04/`에 생깁니다. `debian:13` 같은 다른 이미지도
-쓸 수 있습니다.
-
-### Arch Linux
-
-```sh
-sudo pacman -S --needed base-devel cmake sdl3 libjpeg-turbo libpng wayland wayland-protocols
-cd packaging/arch
-makepkg -si
-```
-
-PKGBUILD는 이 소스 트리를 그대로 빌드하므로 체크아웃 안에서 실행하세요.
-
-### 패키지 없이 빌드 (모든 배포판)
-
-```sh
-cmake -S . -B build
-cmake --build build -j
-./build/llcv
-```
-
-CMake 옵션:
-
-| 옵션 | 기본값 | 의미 |
-| --- | --- | --- |
-| `LLCV_SDL3` | `AUTO` | `SYSTEM`, `BUNDLED` (정적, 먼저 `tools/fetch-sdl3.sh` 실행), `AUTO` |
-| `LLCV_USE_SYSTEM_IMGUI` | `OFF` | 번들 대신 시스템 Dear ImGui 1.92 이상 사용 |
-| `LLCV_WAYLAND_COLOR_MANAGEMENT` | `AUTO` | HDR 출력 빌드 (`ON`이면 의존성이 없을 때 오류) |
-| `LLCV_SOURCE_TREE_DATA` | `ON` | 소스 트리에서 글꼴·아이콘 찾기 (패키지에서는 끔) |
+- 배포판별로 쓰는 패키지
+- Debian, Fedora/RHEL, Arch 계열 수동 빌드
+- Docker로 다른 릴리스와 라즈베리파이(ARM)용 빌드
+- 패키지 없이 빌드, CMake 옵션, 빌드 문제 해결
 
 ## HDR
 
@@ -185,8 +165,9 @@ Alt나 Esc를 다시 누르거나 메뉴 밖을 클릭하면 닫힙니다.
 
 패키지는 APT 업데이트 저장소에 올릴 준비가 되어 있지만, 서명 키와 주소를 원
 제작자와 협의한 뒤 정하기로 해서 아직 배포하지 않았습니다. 배포 절차는
-[packaging/README.ko.md](packaging/README.ko.md)에 있습니다. 패키지 버전에는
-`2.0.2~ubuntu24.04`처럼 빌드한 릴리스 이름이 붙습니다.
+[packaging/README.ko.md](packaging/README.ko.md)에 있습니다. 배포용 패키지는
+계열마다 가장 오래된 지원 릴리스에서 빌드해 새 릴리스까지 파일 하나로 쓰고,
+파일 이름에는 배포판 이름을 넣지 않습니다.
 
 ## 라이선스
 

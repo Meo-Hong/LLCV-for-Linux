@@ -11,19 +11,47 @@ permissions:
 
 jobs:
   deb:
-    name: deb (${{ matrix.image }})
+    name: deb (${{ matrix.image }} ${{ matrix.arch || 'amd64' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        image: ["ubuntu:24.04", "ubuntu:26.04", "debian:13"]
+        include:
+          - { image: "ubuntu:22.04", arch: "" }
+          - { image: "ubuntu:24.04", arch: "" }
+          - { image: "ubuntu:26.04", arch: "" }
+          - { image: "debian:12", arch: "" }
+          - { image: "debian:12", arch: "arm64" }
+          - { image: "debian:13", arch: "" }
+          - { image: "debian:13", arch: "arm64" }
+          - { image: "debian:13", arch: "armhf" }
     steps:
       - uses: actions/checkout@v4
       - name: Build package in ${{ matrix.image }}
-        run: linux/tools/build-deb-docker.sh "${{ matrix.image }}"
+        run: linux/tools/build-deb-docker.sh "${{ matrix.image }}" ${{ matrix.arch }}
       - name: Name artifact
         id: name
-        run: echo "value=deb-$(echo '${{ matrix.image }}' | tr ':.' '--')" >> "$GITHUB_OUTPUT"
+        run: echo "value=deb-$(echo '${{ matrix.image }}' | tr ':.' '--')-${{ matrix.arch || 'amd64' }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.value }}
+          path: linux/dist
+          if-no-files-found: error
+
+  rpm:
+    name: rpm (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["fedora:latest", "almalinux:10", "almalinux:9"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build package in ${{ matrix.image }}
+        run: linux/tools/build-rpm-docker.sh "${{ matrix.image }}"
+      - name: Name artifact
+        id: name
+        run: echo "value=rpm-$(echo '${{ matrix.image }}' | tr ':.' '--')" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.name.outputs.value }}
