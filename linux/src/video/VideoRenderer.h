@@ -21,7 +21,7 @@ enum class OutputMode { Sdr, Pq };
 
 class VideoRenderer {
 public:
-    bool Initialize(std::string& error);
+    bool Initialize(std::string& error, bool gles);
     void Shutdown();
     void Configure(OutputMode output, float sdrWhiteNits);
     void Upload(const capture::VideoFrame& frame);
@@ -34,6 +34,7 @@ public:
     bool ReadImage(std::vector<uint8_t>& rgba, int& width, int& height);
 
     bool HasImage() const { return hasImage_; }
+    bool SupportsSixteenBitTextures() const { return sixteenBitTextures_; }
     bool SourceIsPq() const { return hasImage_ && sourceColor_.transfer == Transfer::Pq && sourceProgram_ != kRgb; }
     OutputMode Output() const { return output_; }
     int ImageWidth() const { return sourceWidth_; }
@@ -54,6 +55,7 @@ private:
         GLint sdrWhite = -1;
         GLint videoRect = -1;
         GLint hasVideo = -1;
+        GLint swapRedBlue = -1;
         std::array<GLint, 3> samplers{-1, -1, -1};
     };
 
@@ -72,7 +74,8 @@ private:
         GLint internalFormat = 0;
     };
 
-    bool BuildProgram(ProgramIndex index, const char* fragment, std::string& error);
+    bool BuildProgram(ProgramIndex index, const std::string& fragment, std::string& error);
+    std::string ShaderHeader() const;
     void UploadPlane(int index, const capture::FramePlane& plane, GLint internalFormat, GLenum format,
                      GLenum type, int bytesPerTexel);
     void EnsureTarget(Target& target, int width, int height, GLint internalFormat);
@@ -87,6 +90,9 @@ private:
     Target video_;
     Target snapshot_;
     Target ui_;
+    bool gles_ = false;
+    bool sixteenBitTextures_ = true;
+    bool sourceBgr_ = false;
     ProgramIndex sourceProgram_ = kNv12;
     ColorSpec sourceColor_;
     int sourceBits_ = 8;

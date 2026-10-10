@@ -2,12 +2,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <initializer_list>
 
 namespace llcv::video {
 namespace {
 
-constexpr const char* kVertexShader = R"(#version 330 core
+constexpr const char* kVertexShader = R"(
 uniform vec4 uDestination;
 uniform float uFlipY;
 out vec2 vUv;
@@ -131,12 +132,15 @@ void main() {
 
 constexpr const char* kRgbBody = R"(
 uniform sampler2D uPlane0;
+uniform int uSwapRedBlue;
 void main() {
-    fragColor = vec4(finish(texelFetch(uPlane0, ivec2(gl_FragCoord.xy), 0).rgb), 1.0);
+    vec3 rgb = texelFetch(uPlane0, ivec2(gl_FragCoord.xy), 0).rgb;
+    if (uSwapRedBlue == 1) rgb = rgb.bgr;
+    fragColor = vec4(finish(rgb), 1.0);
 }
 )";
 
-constexpr const char* kDisplayShader = R"(#version 330 core
+constexpr const char* kDisplayShader = R"(
 in vec2 vUv;
 out vec4 fragColor;
 uniform sampler2D uPlane0;
@@ -174,15 +178,16 @@ void main() {
 )";
 
 std::string ConversionShader(const char* body) {
-    return std::string("#version 330 core\n") + kConversionDeclarations + kColorLibrary + kConversionFunctions + body;
+    return std::string(kConversionDeclarations) + kColorLibrary + kConversionFunctions + body;
 }
 
 std::string ComposeShader() {
-    return std::string("#version 330 core\n") + kComposeDeclarations + kColorLibrary + kComposeBody;
+    return std::string(kComposeDeclarations) + kColorLibrary + kComposeBody;
 }
 
-GLuint CompileShader(GLenum type, const char* source, std::string& error) {
+GLuint CompileShader(GLenum type, const std::string& text, std::string& error) {
     const GLuint shader = gl.CreateShader(type);
+    const char* source = text.c_str();
     gl.ShaderSource(shader, 1, &source, nullptr);
     gl.CompileShader(shader);
     GLint status = GL_FALSE;
@@ -213,21 +218,36 @@ void ResetPipelineState() {
 }
 
 GLenum TargetType(GLint internalFormat) {
-    return internalFormat == GL_RGBA16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_BYTE;
+    return internalFormat == GL_RGB10_A2 ? GL_UNSIGNED_INT_2_10_10_10_REV : GL_UNSIGNED_BYTE;
+}
+
+GLint TargetFormat(OutputMode output) {
+    return output == OutputMode::Pq ? GL_RGB10_A2 : GL_RGBA8;
 }
 
 }
 
-bool VideoRenderer::Initialize(std::string& error) {
+std::string VideoRenderer::ShaderHeader() const {
+    if (gles_) {
+        return "#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n";
+    }
+    return "#version 330 core\n";
+}
+
+bool VideoRenderer::Initialize(std::string& error, bool gles) {
+    gles_ = gles;
+    if (gles_) {
+        const auto* extensions = reinterpret_cast<const char*>(gl.GetString(GL_EXTENSIONS));
+        sixteenBitTextures_ = extensions && std::strstr(extensions, "GL_EXT_texture_norm16") != nullptr;
+    } else {
+        sixteenBitTextures_ = true;
+    }
     const std::string semiPlanar = ConversionShader(kSemiPlanarBody);
-    const std::string yuyv = ConversionShader(kYuyvBody);
-    const std::string yuv3 = ConversionShader(kYuv3Body);
-    const std::string rgb = ConversionShader(kRgbBody);
-    const std::string compose = ComposeShader();
-    if (!BuildProgram(kNv12, semiPlanar.c_str(), error) || !BuildProgram(kP010, semiPlanar.c_str(), error) ||
-        !BuildProgram(kYuyv, yuyv.c_str(), error) || !BuildProgram(kYuv3, yuv3.c_str(), error) ||
-        !BuildProgram(kRgb, rgb.c_str(), error) || !BuildProgram(kDisplay, kDisplayShader, error) ||
-        !BuildProgram(kCompose, compose.c_str(), error)) {
+    if (!BuildProgram(kNv12, semiPlanar, error) || !BuildProgram(kP010, semiPlanar, error) ||
+        !BuildProgram(kYuyv, ConversionShader(kYuyvBody), error) ||
+        !BuildProgram(kYuv3, ConversionShader(kYuv3Body), error) ||
+        !BuildProgram(kRgb, ConversionShader(kRgbBody), error) ||
+        !BuildProgram(kDisplay, kDisplayShader, error) || !BuildProgram(kCompose, ComposeShader(), error)) {
         return false;
     }
     gl.GenVertexArrays(1, &vertexArray_);
@@ -259,10 +279,11 @@ void VideoRenderer::Shutdown() {
     hasImage_ = false;
 }
 
-bool VideoRenderer::BuildProgram(ProgramIndex index, const char* fragment, std::string& error) {
-    const GLuint vertex = CompileShader(GL_VERTEX_SHADER, kVertexShader, error);
+bool VideoRenderer::BuildProgram(ProgramIndex index, const std::string& fragment, std::string& error) {
+    const std::string header = ShaderHeader();
+    const GLuint vertex = CompileShader(GL_VERTEX_SHADER, header + kVertexShader, error);
     if (!vertex) return false;
-    const GLuint pixel = CompileShader(GL_FRAGMENT_SHADER, fragment, error);
+    const GLuint pixel = CompileShader(GL_FRAGMENT_SHADER, header + fragment, error);
     if (!pixel) {
         gl.DeleteShader(vertex);
         return false;
@@ -295,6 +316,7 @@ bool VideoRenderer::BuildProgram(ProgramIndex index, const char* fragment, std::
     program.sdrWhite = gl.GetUniformLocation(id, "uSdrWhite");
     program.videoRect = gl.GetUniformLocation(id, "uVideoRect");
     program.hasVideo = gl.GetUniformLocation(id, "uHasVideo");
+    program.swapRedBlue = gl.GetUniformLocation(id, "uSwapRedBlue");
     program.samplers = {gl.GetUniformLocation(id, "uPlane0"), gl.GetUniformLocation(id, "uPlane1"),
                         gl.GetUniformLocation(id, "uPlane2")};
     gl.UseProgram(id);
@@ -379,7 +401,7 @@ void VideoRenderer::Configure(OutputMode output, float sdrWhiteNits) {
     output_ = output;
     sdrWhite_ = sdrWhiteNits;
     if (!changed || !hasImage_) return;
-    EnsureTarget(video_, sourceWidth_, sourceHeight_, output_ == OutputMode::Pq ? GL_RGBA16 : GL_RGBA8);
+    EnsureTarget(video_, sourceWidth_, sourceHeight_, TargetFormat(output_));
     Convert(video_, output_);
 }
 
@@ -395,6 +417,7 @@ void VideoRenderer::Convert(Target& target, OutputMode output) {
     if (program.transfer >= 0) gl.Uniform1i(program.transfer, pq ? 1 : 0);
     if (program.output >= 0) gl.Uniform1i(program.output, output == OutputMode::Pq ? 1 : 0);
     if (program.sdrWhite >= 0) gl.Uniform1f(program.sdrWhite, sdrWhite_);
+    if (program.swapRedBlue >= 0) gl.Uniform1i(program.swapRedBlue, sourceBgr_ ? 1 : 0);
     for (int unit = 0; unit < 3; ++unit) {
         gl.ActiveTexture(GL_TEXTURE0 + unit);
         gl.BindTexture(GL_TEXTURE_2D, planes_[unit].id);
@@ -412,8 +435,10 @@ void VideoRenderer::Convert(Target& target, OutputMode output) {
 
 void VideoRenderer::Upload(const capture::VideoFrame& frame) {
     if (frame.width <= 0 || frame.height <= 0) return;
+    if (frame.layout == capture::FrameLayout::P010 && !sixteenBitTextures_) return;
     sourceBits_ = 8;
     sourceMsbAligned_ = false;
+    sourceBgr_ = false;
     switch (frame.layout) {
     case capture::FrameLayout::Nv12:
         UploadPlane(0, frame.planes[0], GL_R8, GL_RED, GL_UNSIGNED_BYTE, 1);
@@ -438,8 +463,9 @@ void VideoRenderer::Upload(const capture::VideoFrame& frame) {
         sourceProgram_ = kYuv3;
         break;
     case capture::FrameLayout::Bgr24:
-        UploadPlane(0, frame.planes[0], GL_RGB8, GL_BGR, GL_UNSIGNED_BYTE, 3);
+        UploadPlane(0, frame.planes[0], GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE, 3);
         sourceProgram_ = kRgb;
+        sourceBgr_ = true;
         break;
     case capture::FrameLayout::Rgb24:
         UploadPlane(0, frame.planes[0], GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE, 3);
@@ -449,7 +475,7 @@ void VideoRenderer::Upload(const capture::VideoFrame& frame) {
     sourceColor_ = frame.color;
     sourceWidth_ = frame.width;
     sourceHeight_ = frame.height;
-    EnsureTarget(video_, sourceWidth_, sourceHeight_, output_ == OutputMode::Pq ? GL_RGBA16 : GL_RGBA8);
+    EnsureTarget(video_, sourceWidth_, sourceHeight_, TargetFormat(output_));
     Convert(video_, output_);
     hasImage_ = true;
 }

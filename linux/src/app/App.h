@@ -45,7 +45,7 @@ private:
 
     bool InitializeSdl(settings::DisplayBackend backend);
     bool InitializeWindow();
-    bool CreateGlWindow(int colorBits, std::string& error);
+    bool CreateGlWindow(int colorBits, bool gles, std::string& error);
     void DestroyGlWindow();
     void InitializeImGui();
     void Shutdown();
@@ -119,6 +119,7 @@ private:
     uint64_t lastRenderMs_ = 0;
     std::string kernelRelease_;
     int framebufferBits_ = 8;
+    bool glEs_ = false;
     bool forceSdr_ = false;
 
     ui::ImGuiPlatform platform_;

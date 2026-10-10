@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <initializer_list>
 
 namespace llcv::app {
 namespace {
@@ -147,11 +148,11 @@ bool App::InitializeSdl(settings::DisplayBackend backend) {
     return frameEvent_ != 0;
 }
 
-bool App::CreateGlWindow(int colorBits, std::string& error) {
+bool App::CreateGlWindow(int colorBits, bool gles, std::string& error) {
     SDL_GL_ResetAttributes();
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, gles ? 0 : 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, gles ? SDL_GL_CONTEXT_PROFILE_ES : SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
@@ -169,7 +170,7 @@ bool App::CreateGlWindow(int colorBits, std::string& error) {
     }
     glContext_ = SDL_GL_CreateContext(window_);
     if (!glContext_) {
-        error = std::string("OpenGL 3.3 context: ") + SDL_GetError();
+        error = std::string(gles ? "OpenGL ES 3.0 context: " : "OpenGL 3.3 context: ") + SDL_GetError();
         return false;
     }
     SDL_GL_MakeCurrent(window_, glContext_);
@@ -199,20 +200,29 @@ bool App::InitializeWindow() {
                            settings_.hdrOutput != settings::HdrOutputMode::ToneMap;
     std::string error;
     bool created = false;
-    if (deepColor) {
-        created = CreateGlWindow(10, error);
-        if (!created) {
-            Log("[gl] 10-bit framebuffer unavailable (%s); using 8-bit", error.c_str());
-            DestroyGlWindow();
-            error.clear();
+    for (const bool gles : {false, true}) {
+        if (deepColor) {
+            created = CreateGlWindow(10, gles, error);
+            if (!created) {
+                Log("[gl] 10-bit framebuffer unavailable (%s); using 8-bit", error.c_str());
+                DestroyGlWindow();
+                error.clear();
+            }
         }
+        if (!created) created = CreateGlWindow(8, gles, error);
+        if (created) {
+            glEs_ = gles;
+            error.clear();
+            break;
+        }
+        Log("[gl] %s", error.c_str());
+        DestroyGlWindow();
     }
-    if (!created) created = CreateGlWindow(8, error);
     if (created) {
         std::string missing;
         if (!video::LoadGlApi(missing)) error = "OpenGL function missing: " + missing;
     }
-    if (error.empty() && !renderer_.Initialize(error)) error = "renderer: " + error;
+    if (error.empty() && !renderer_.Initialize(error, glEs_)) error = "renderer: " + error;
     if (!error.empty()) {
         Log("[gl] %s", error.c_str());
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, kAppName, error.c_str(), window_);
@@ -244,7 +254,7 @@ void App::InitializeImGui() {
     io.IniFilename = nullptr;
     io.LogFilename = nullptr;
     platform_.Initialize(window_);
-    ImGui_ImplOpenGL3_Init("#version 330 core");
+    ImGui_ImplOpenGL3_Init(glEs_ ? "#version 300 es" : "#version 330 core");
     fonts_ = ui::LoadFonts();
     imguiInitialized_ = true;
     ApplyStyle();
@@ -712,7 +722,7 @@ void App::DrawCommonOverlays() {
 std::vector<ui::DiagnosticsLine> App::BuildDiagnostics() const {
     std::vector<ui::DiagnosticsLine> lines;
     const bool english = ui::IsEnglish();
-    lines.push_back({T("경로", "Path"), Format("V4L2 · OpenGL · %s%s", videoDriver_.c_str(),
+    lines.push_back({T("경로", "Path"), Format("V4L2 · %s · %s%s", glEs_ ? "OpenGL ES" : "OpenGL", videoDriver_.c_str(),
                                               fullscreen_ ? T(" · 전체화면", " · fullscreen") : "")});
     if (screen_ == Screen::Video && activeMode_) {
         const auto negotiated = capture_.Negotiated();
@@ -929,6 +939,13 @@ bool App::StartSession(std::string& error) {
             return false;
         }
         activeMode_ = capture::ResolveMode(*device, RequestFromSettings(settings_));
+        if (activeMode_ && activeMode_->format == capture::PixelFormat::P010 &&
+            !renderer_.SupportsSixteenBitTextures()) {
+            error = Format(T("HDR 입력 미지원: %s", "HDR input not supported: %s"),
+                           EvaluateHdrSupport(device).inputText.c_str());
+            activeMode_.reset();
+            return false;
+        }
         if (!activeMode_) {
             if (settings_.pixelFormat == settings::PixelFormatChoice::P010 &&
                 !device->Supports(capture::PixelFormat::P010)) {
@@ -1197,6 +1214,9 @@ ui::HdrSupport App::EvaluateHdrSupport(const capture::CaptureDevice* device) con
     ui::HdrSupport support;
     if (!device) {
         support.inputText = T("캡처 장치가 없습니다.", "No capture device.");
+    } else if (device->Supports(capture::PixelFormat::P010) && !renderer_.SupportsSixteenBitTextures()) {
+        support.inputText = T("그래픽 드라이버(OpenGL ES)가 16비트 텍스처(EXT_texture_norm16)를 지원하지 않아 P010을 표시할 수 없습니다.",
+                              "The graphics driver (OpenGL ES) lacks 16-bit textures (EXT_texture_norm16), so P010 cannot be shown.");
     } else if (device->Supports(capture::PixelFormat::P010)) {
         support.input = true;
         support.inputText = T("P010 (10비트 HDR10) 사용 가능 · 픽셀 형식에서 P010을 선택하세요.",
