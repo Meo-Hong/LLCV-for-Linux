@@ -50,7 +50,7 @@ Suggests:
  v4l-utils,
 Description: low-latency viewer for USB HDMI capture devices
  LLCV shows video and audio from UVC (V4L2) HDMI capture devices such as
- the AVerMedia Live Gamer ULTRA S GC553 with minimal delay. Only the newest
+ the AVerMedia Live Gamer ULTRA S GC553Pro with minimal delay. Only the newest
  captured frame is presented, using OpenGL for color conversion and
  scaling, and capture audio is played through PipeWire with a small
  drift-corrected buffer.

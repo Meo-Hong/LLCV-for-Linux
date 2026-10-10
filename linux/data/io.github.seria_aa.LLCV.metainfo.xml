@@ -9,7 +9,7 @@
   <description>
     <p>
       LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices,
-      such as the AVerMedia Live Gamer ULTRA S GC553, with minimal delay.
+      such as the AVerMedia Live Gamer ULTRA S GC553Pro, with minimal delay.
       Stale frames are dropped in favor of the newest frame, and capture audio
       is played through PipeWire with a small, drift-corrected buffer.
     </p>

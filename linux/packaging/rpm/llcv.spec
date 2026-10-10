@@ -69,9 +69,9 @@ Provides:       bundled(SDL3) = %{sdl3_version}
 
 %description
 LLCV shows video and audio from UVC (V4L2) HDMI capture devices such as the
-AVerMedia Live Gamer ULTRA S GC553 with minimal delay. Only the newest captured
-frame is presented, using OpenGL for color conversion and scaling, and capture
-audio is played through PipeWire with a small drift-corrected buffer.
+AVerMedia Live Gamer ULTRA S GC553Pro with minimal delay. Only the newest
+captured frame is presented, using OpenGL for color conversion and scaling, and
+capture audio is played through PipeWire with a small drift-corrected buffer.
 
 Features include NV12, YUY2, MJPEG, BGR24 and P010 (HDR10) capture modes, HDR10
 passthrough on Wayland compositors with color management, HDR to SDR tone

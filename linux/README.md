@@ -4,8 +4,8 @@
 
 LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices with low
 latency. This directory is a Linux rewrite of the Windows LLCV 2.0.2 viewer.
-The reference device is the AVerMedia Live Gamer ULTRA S GC553. The reference
-desktop is Ubuntu 26.04 (GNOME, Wayland).
+The reference device is the AVerMedia Live Gamer ULTRA S GC553Pro. The
+reference desktop is Ubuntu 26.04 (GNOME, Wayland).
 
 | Area | Windows build | Linux build |
 | --- | --- | --- |
@@ -100,7 +100,7 @@ command for your system. [BUILDING.md](BUILDING.md) covers the rest:
 
 ## HDR
 
-1. **Capture.** HDR10 arrives as P010 (10-bit). The GC553 offers P010 up to
+1. **Capture.** HDR10 arrives as P010 (10-bit). The GC553Pro offers P010 up to
    2560 × 1440 at 30 fps, and 1080p at 60 fps. Linux 7.0 and older kernels do
    not recognize P010 in `uvcvideo` (`Unknown video format 30313050-…` in the
    kernel log). Use Linux 7.1 or newer, or a uvcvideo DKMS module with P010
@@ -158,8 +158,8 @@ menu, to close it.
 
 - **No picture.** Close OBS and any other application that uses the capture
   device.
-- **4K 60 fps.** The GC553 offers 4K 60 fps only as MJPEG. Uncompressed NV12
-  is limited to 4K 30 fps, and P010 to 1440p 30 fps.
+- **4K 60 fps.** The GC553Pro offers 4K 60 fps only as MJPEG. Uncompressed
+  NV12 is limited to 4K 30 fps, and P010 to 1440p 30 fps.
 - **Washed-out colors with an HDR source.** The source is sending HDR while an
   8-bit format is captured. Select P010, use **Force HDR10**, or turn off HDR
   on the source.

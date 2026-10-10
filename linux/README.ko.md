@@ -4,7 +4,7 @@
 
 LLCV는 USB(UVC/V4L2) HDMI 캡처 장치의 영상과 소리를 낮은 지연으로 표시하는
 뷰어입니다. 이 폴더는 Windows용 LLCV 2.0.2를 리눅스용으로 다시 작성한 것입니다.
-기준 장치는 AVerMedia Live Gamer ULTRA S GC553이고, 기준 데스크톱은
+기준 장치는 AVerMedia Live Gamer ULTRA S GC553Pro이고, 기준 데스크톱은
 Ubuntu 26.04(GNOME, Wayland)입니다.
 
 | 항목 | Windows판 | 리눅스판 |
@@ -97,8 +97,8 @@ cd LLCV-for-Linux/linux
 
 ## HDR
 
-1. **캡처.** HDR10은 P010(10비트)으로 들어옵니다. GC553은 P010을 2560 × 1440
-   30fps, 1080p 60fps까지 제공합니다. 리눅스 7.0 이하 커널의 `uvcvideo`는
+1. **캡처.** HDR10은 P010(10비트)으로 들어옵니다. GC553Pro는 P010을
+   2560 × 1440 30fps, 1080p 60fps까지 제공합니다. 리눅스 7.0 이하 커널의 `uvcvideo`는
    P010을 인식하지 못합니다(커널 로그에 `Unknown video format 30313050-…`).
    리눅스 7.1 이상 커널이나 P010을 지원하는 uvcvideo DKMS 모듈을 쓰세요.
    장치가 P010을 제공하는데 커널이 숨기면 설정 화면에 경고가 표시됩니다.
@@ -150,8 +150,8 @@ Alt나 Esc를 다시 누르거나 메뉴 밖을 클릭하면 닫힙니다.
 ## 문제 해결
 
 - **영상이 안 나옴.** OBS 등 같은 캡처 장치를 쓰는 앱을 종료하세요.
-- **4K 60 fps.** GC553은 4K 60 fps를 MJPEG로만 제공합니다. 비압축 NV12는
-  4K 30 fps, P010은 1440p 30 fps까지입니다.
+- **4K 60 fps.** GC553Pro는 4K 60 fps를 MJPEG로만 제공합니다. 비압축
+  NV12는 4K 30 fps, P010은 1440p 30 fps까지입니다.
 - **HDR 소스에서 색이 물빠진 것처럼 보임.** 소스는 HDR을 보내는데 8비트
   형식으로 캡처하고 있는 경우입니다. P010을 선택하거나, **HDR10 강제**를
   쓰거나, 소스의 HDR을 끄세요.
