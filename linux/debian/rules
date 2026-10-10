@@ -10,7 +10,6 @@ else
 LLCV_SDL3 := SYSTEM
 endif
 
-LLCV_DISTRO := $(shell . /etc/os-release && echo "$${ID}$${VERSION_ID}")
 LLCV_SUITE := $(shell . /etc/os-release && echo "$${VERSION_CODENAME}")
 LLCV_APT_DIR := packaging/apt
 LLCV_APT_URL := $(shell . ./$(LLCV_APT_DIR)/repository.conf && echo "$${LLCV_APT_URL}")
@@ -35,5 +34,6 @@ else
 	@echo "LLCV APT source not configured; the package will not add an update repository."
 endif
 
-override_dh_gencontrol:
-	dh_gencontrol -- -v$(DEB_VERSION)~$(LLCV_DISTRO)
+override_dh_shlibdeps:
+	dh_shlibdeps
+	sed -i -E 's/libturbojpeg(,|$$)/libturbojpeg | libturbojpeg0\1/' debian/llcv.substvars

@@ -42,7 +42,7 @@ for suite in $suites; do
     architectures=""
     for index in dists/"$suite"/"$LLCV_APT_COMPONENT"/binary-*; do
         arch="${index##*/binary-}"
-        apt-ftparchive packages "pool/$LLCV_APT_COMPONENT/l/llcv/$suite" > "$index/Packages"
+        apt-ftparchive --arch "$arch" packages "pool/$LLCV_APT_COMPONENT/l/llcv/$suite" > "$index/Packages"
         gzip -9kf "$index/Packages"
         architectures="$architectures $arch"
     done

@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: 머홍 <deahong1214@gmail.com>
 Build-Depends:
  debhelper-compat (= 13),
- cmake (>= 3.25),
+ cmake (>= 3.22),
  pkgconf | pkg-config,
  libsdl3-dev (>= 3.2) <!pkg.llcv.bundled-sdl3>,
  libturbojpeg0-dev,
@@ -63,5 +63,5 @@ Description: low-latency viewer for USB HDMI capture devices
  (XWayland), with Mesa (AMD, Intel) and NVIDIA OpenGL drivers.
  .
  P010 capture needs Linux 7.1 or newer, or a uvcvideo module with P010
- support. On releases without SDL3, such as Ubuntu 24.04, SDL3 is built
- into the program (build profile pkg.llcv.bundled-sdl3).
+ support. On releases without SDL3, such as Ubuntu 22.04 and 24.04, SDL3
+ is built into the program (build profile pkg.llcv.bundled-sdl3).
