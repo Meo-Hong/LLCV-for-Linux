@@ -20,6 +20,10 @@
 #include <map>
 #include <system_error>
 
+#ifndef V4L2_PIX_FMT_P010
+#define V4L2_PIX_FMT_P010 v4l2_fourcc('P', '0', '1', '0')
+#endif
+
 namespace llcv::capture {
 namespace {
 
