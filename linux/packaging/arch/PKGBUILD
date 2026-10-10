@@ -8,6 +8,7 @@ license=('GPL-3.0-or-later' 'MIT' 'OFL-1.1')
 depends=('gcc-libs' 'glibc' 'libglvnd' 'libjpeg-turbo' 'libpng' 'sdl3' 'wayland')
 makedepends=('cmake' 'pkgconf' 'wayland-protocols')
 optdepends=('pipewire: low-latency audio routing (recommended)'
+            'libdecor: window title bar on GNOME Wayland'
             'v4l-utils: inspect capture devices with v4l2-ctl')
 source=()
 sha256sums=()
