@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.seria_aa.LLCV</id>
+  <id>io.github.meo_hong.LLCV</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>LLCV</name>
@@ -22,11 +22,11 @@
       <li>Wayland by default, with an optional X11 (XWayland) mode</li>
     </ul>
   </description>
-  <launchable type="desktop-id">io.github.seria_aa.LLCV.desktop</launchable>
-  <url type="homepage">https://github.com/seria-aa/LowLatencyCaptureViewer</url>
-  <url type="bugtracker">https://github.com/seria-aa/LowLatencyCaptureViewer/issues</url>
-  <developer id="io.github.seria_aa">
-    <name>seria-aa</name>
+  <launchable type="desktop-id">io.github.meo_hong.LLCV.desktop</launchable>
+  <url type="homepage">https://github.com/Meo-Hong/LLCV-for-Linux</url>
+  <url type="bugtracker">https://github.com/Meo-Hong/LLCV-for-Linux/issues</url>
+  <developer id="io.github.meo_hong">
+    <name>Meo-hong</name>
   </developer>
   <categories>
     <category>AudioVideo</category>

@@ -11,7 +11,7 @@ endif()
 
 include(GNUInstallDirs)
 
-set(LLCV_APP_ID "io.github.seria_aa.LLCV")
+set(LLCV_APP_ID "io.github.meo_hong.LLCV")
 option(LLCV_SOURCE_TREE_DATA "Also look for fonts and icons in the source tree (development builds)" ON)
 option(LLCV_USE_SYSTEM_IMGUI "Use the system Dear ImGui 1.92 or newer instead of the bundled copy" OFF)
 set(LLCV_WAYLAND_COLOR_MANAGEMENT AUTO CACHE STRING "Wayland HDR output through wp_color_management_v1 (AUTO, ON, OFF)")

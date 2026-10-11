@@ -1,6 +1,6 @@
 %global sdl3_version 3.4.18
 %global imgui_version 1.92.2b
-%global app_id io.github.seria_aa.LLCV
+%global app_id io.github.meo_hong.LLCV
 
 %if 0%{?fedora}
 %bcond_with bundled_sdl3
@@ -14,7 +14,7 @@ Release:        1
 Summary:        Low-latency viewer for USB HDMI capture devices
 
 License:        GPL-3.0-or-later AND MIT AND OFL-1.1%{?with_bundled_sdl3: AND Zlib}
-URL:            https://github.com/seria-aa/LowLatencyCaptureViewer
+URL:            https://github.com/Meo-Hong/LLCV-for-Linux
 Source0:        llcv-%{version}.tar.gz
 %if %{with bundled_sdl3}
 Source1:        https://github.com/libsdl-org/SDL/releases/download/release-%{sdl3_version}/SDL3-%{sdl3_version}.tar.gz
@@ -108,7 +108,7 @@ cp -p third_party/pretendard/LICENSE.txt Pretendard-LICENSE.txt
 %{_mandir}/man1/llcv.1*
 
 %changelog
-* Sat Oct 10 2026 머홍 <deahong1214@gmail.com> - 2.0.2-1
+* Sat Oct 10 2026 Meohong <busimh001@gmail.com> - 2.0.2-1
 - First RPM package of the Linux port: V4L2 capture, OpenGL presentation,
   SDL3 audio on PipeWire, HDR10 passthrough and tone mapping.
 - SDL3 3.4.18 is linked statically on RHEL, Rocky and AlmaLinux, which do not

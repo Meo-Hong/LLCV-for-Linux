@@ -312,8 +312,8 @@ llcv --version
 | 항목 | 위치 |
 | --- | --- |
 | 실행 파일 | `/usr/bin/llcv` |
-| 앱 메뉴 항목 | `/usr/share/applications/io.github.seria_aa.LLCV.desktop` |
-| 아이콘 | `/usr/share/icons/hicolor/*/apps/io.github.seria_aa.LLCV.png` |
+| 앱 메뉴 항목 | `/usr/share/applications/io.github.meo_hong.LLCV.desktop` |
+| 아이콘 | `/usr/share/icons/hicolor/*/apps/io.github.meo_hong.LLCV.png` |
 | 글꼴 | `/usr/share/llcv/fonts/` |
 | 설명서 | `man llcv` |
 

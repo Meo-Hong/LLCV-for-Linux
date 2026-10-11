@@ -1,14 +1,17 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: LLCV
-Upstream-Contact: seria-aa <https://github.com/seria-aa>
-Source: https://github.com/seria-aa/LowLatencyCaptureViewer
+Upstream-Name: LLCV for Linux
+Upstream-Contact: Meo-hong <busimh001@gmail.com>
+Source: https://github.com/Meo-Hong/LLCV-for-Linux
 
 Files: *
-Copyright: 2026 seria-aa
+Copyright: 2026 Meo-hong <busimh001@gmail.com>
+           2026 seria-aa
 License: GPL-3+
+Comment: Linux port by Meo-hong of LLCV (Low Latency Capture Viewer), the
+ Windows viewer by seria-aa: https://github.com/seria-aa/LowLatencyCaptureViewer
 
 Files: debian/*
-Copyright: 2026 머홍 <deahong1214@gmail.com>
+Copyright: 2026 Meo-hong <busimh001@gmail.com>
 License: GPL-3+
 
 Files: third_party/imgui/*

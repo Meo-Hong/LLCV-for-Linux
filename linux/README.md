@@ -3,7 +3,8 @@
 > [한국어](README.ko.md)
 
 LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices with low
-latency. This directory is a Linux rewrite of the Windows LLCV 2.0.2 viewer.
+latency. This directory is a Linux rewrite, by Meo-hong, of the Windows LLCV
+2.0.2 viewer by [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer).
 The reference device is the AVerMedia Live Gamer ULTRA S GC553Pro. The
 reference desktop is Ubuntu 26.04 (GNOME, Wayland).
 
@@ -171,9 +172,9 @@ menu, to close it.
 
 ## Updates
 
-Packages are ready for an APT update repository, but nothing is published
-yet: the signing key and address will be agreed with the original author
-first. See [packaging/README.md](packaging/README.md) for the release
+Updates will come from the APT repository at
+`https://meo-hong.github.io/LLCV-for-Linux/` (suite `stable`). It is not
+published yet; the signing key still has to be created. See [packaging/README.md](packaging/README.md) for the release
 checklist. Release packages are built on the oldest supported release of each
 family, so one file serves the newer releases too, and file names carry no
 distribution name.

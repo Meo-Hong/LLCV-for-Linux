@@ -318,8 +318,8 @@ Installed locations:
 | Item | Location |
 | --- | --- |
 | Program | `/usr/bin/llcv` |
-| Menu entry | `/usr/share/applications/io.github.seria_aa.LLCV.desktop` |
-| Icons | `/usr/share/icons/hicolor/*/apps/io.github.seria_aa.LLCV.png` |
+| Menu entry | `/usr/share/applications/io.github.meo_hong.LLCV.desktop` |
+| Icons | `/usr/share/icons/hicolor/*/apps/io.github.meo_hong.LLCV.png` |
 | Fonts | `/usr/share/llcv/fonts/` |
 | Manual | `man llcv` |
 

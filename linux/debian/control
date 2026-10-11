@@ -1,7 +1,7 @@
 Source: llcv
 Section: video
 Priority: optional
-Maintainer: 머홍 <deahong1214@gmail.com>
+Maintainer: Meohong <busimh001@gmail.com>
 Build-Depends:
  debhelper-compat (= 13),
  cmake (>= 3.22),
@@ -30,7 +30,7 @@ Build-Depends:
  libasound2-dev <pkg.llcv.bundled-sdl3>,
  libdbus-1-dev <pkg.llcv.bundled-sdl3>,
 Standards-Version: 4.7.2
-Homepage: https://github.com/seria-aa/LowLatencyCaptureViewer
+Homepage: https://github.com/Meo-Hong/LLCV-for-Linux
 Rules-Requires-Root: no
 
 Package: llcv

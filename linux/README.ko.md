@@ -3,7 +3,8 @@
 > [English](README.md)
 
 LLCV는 USB(UVC/V4L2) HDMI 캡처 장치의 영상과 소리를 낮은 지연으로 표시하는
-뷰어입니다. 이 폴더는 Windows용 LLCV 2.0.2를 리눅스용으로 다시 작성한 것입니다.
+뷰어입니다. 이 폴더는 [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer)의
+Windows용 LLCV 2.0.2를 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
 기준 장치는 AVerMedia Live Gamer ULTRA S GC553Pro이고, 기준 데스크톱은
 Ubuntu 26.04(GNOME, Wayland)입니다.
 
@@ -163,8 +164,8 @@ Alt나 Esc를 다시 누르거나 메뉴 밖을 클릭하면 닫힙니다.
 
 ## 업데이트
 
-패키지는 APT 업데이트 저장소에 올릴 준비가 되어 있지만, 서명 키와 주소를 원
-제작자와 협의한 뒤 정하기로 해서 아직 배포하지 않았습니다. 배포 절차는
+업데이트는 `https://meo-hong.github.io/LLCV-for-Linux/`(스위트 `stable`)의 APT
+저장소로 받게 됩니다. 서명 키를 아직 만들지 않아 공개 전입니다. 배포 절차는
 [packaging/README.ko.md](packaging/README.ko.md)에 있습니다. 배포용 패키지는
 계열마다 가장 오래된 지원 릴리스에서 빌드해 새 릴리스까지 파일 하나로 쓰고,
 파일 이름에는 배포판 이름을 넣지 않습니다.

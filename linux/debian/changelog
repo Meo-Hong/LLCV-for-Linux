@@ -20,4 +20,4 @@ llcv (2.0.2) resolute; urgency=medium
   * Alt shows a menu bar with the viewer commands.
   * NVIDIA VSR, WASAPI Exclusive and ASIO are not available on Linux.
 
- -- 머홍 <deahong1214@gmail.com>  Wed, 07 Oct 2026 12:00:00 +0900
+ -- Meohong <busimh001@gmail.com>  Wed, 07 Oct 2026 12:00:00 +0900
