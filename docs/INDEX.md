@@ -7,6 +7,8 @@
 Current user guides and historical development records are listed separately below.
 Features, defaults, and test results in historical records apply to the version and environment tested.
 
+<br>
+
 ## User and developer guides
 
 - [User guide](USAGE.md) — Installation, settings, shortcuts, VSR, screenshots
@@ -18,6 +20,8 @@ Features, defaults, and test results in historical records apply to the version 
 - [Release procedure](RELEASING.md) — Versioning, tests, notices, pre-release checks
 
 Each guide links to its Korean and English versions.
+
+<br>
 
 ## Release notes
 
@@ -57,6 +61,8 @@ Each guide links to its Korean and English versions.
 - [한국어](release-notes-v1.0.6.1.md)
 
 </details>
+
+<br>
 
 ## Development and validation records
 
@@ -99,6 +105,8 @@ These records preserve implementation history and measurement conditions, not cu
 - [Video output debug audit — 2026-09-10](../tests/VIDEO_OUTPUT_AUDIT.md)
 
 </details>
+
+<br>
 
 ## Repository references
 

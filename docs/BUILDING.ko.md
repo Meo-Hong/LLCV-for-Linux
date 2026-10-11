@@ -6,6 +6,8 @@
 
 [필요 환경](#필요-환경) · [Release 빌드](#release-빌드) · [설치 프로그램과 포터블 ZIP](#설치-프로그램과-포터블-zip)
 
+<br>
+
 ## 필요 환경
 
 - Windows 10/11 x64
@@ -16,6 +18,8 @@
 Win32, DirectShow, D3D11, DXGI, MJPEG 디코딩용 Media Foundation과
 WASAPI 등 Windows 시스템 API를 사용합니다. FFmpeg나 서드파티 코덱 팩은
 필요하지 않습니다.
+
+<br>
 
 ## Release 빌드
 
@@ -36,6 +40,8 @@ build\Release\LowLatencyCaptureViewer.exe
 
 Release 구성은 정적 MSVC 런타임을 사용하므로 패키지 실행에 별도 Visual C++
 재배포 패키지가 필요하지 않습니다.
+
+<br>
 
 ## 설치 프로그램과 포터블 ZIP
 

@@ -6,6 +6,8 @@
 
 [Capture path](#capture-path) · [Mode detection](#mode-detection) · [NV12, YUY2, and MJPEG](#nv12-yuy2-and-mjpeg) · [Frame rate](#frame-rate) · [Presentation](#presentation) · [P010 HDR10](#p010-hdr10) · [Pixel-perfect and resizing](#pixel-perfect-and-resizing) · [Scaling and multi-monitor behavior](#scaling-and-multi-monitor-behavior)
 
+<br>
+
 ## Capture path
 
 The viewer captures through DirectShow, keeps only the newest video sample, and
@@ -23,6 +25,8 @@ The app-processing value in the Tab overlay covers this application path. It is
 not the total HDMI-to-display latency; the capture device, source, desktop
 composition, monitor, and input device add latency outside the application.
 
+<br>
+
 ## Mode detection
 
 Changing the capture device or resolution refreshes the pixel-format and
@@ -37,6 +41,8 @@ compatibility)** is never chosen by Auto and must be selected explicitly.
 
 H.264/AVC and MPEG-4 are not supported. Their inter-frame references and decoder
 reordering make a consistently low-latency path difficult to guarantee.
+
+<br>
 
 ## NV12, YUY2, and MJPEG
 
@@ -61,6 +67,8 @@ application, an explicit MJPEG selection exposes **MJPEG color interpretation**
 with manual BT.709/BT.601 and Full/Limited combinations. This override applies
 only to MJPEG and neither appears for nor affects NV12/YUY2.
 
+<br>
+
 ## Frame rate
 
 Choose the rate the source actually outputs. A 120 fps source contains no new
@@ -77,6 +85,8 @@ a stable 60 or 120 fps source provides lower video latency and smoother motion.
 When several valid source rates exist, a rate with an even cadence on the target
 display can improve VSync pacing—for example, 120 fps on a 120 or 240 Hz display.
 The source's real maximum rate still takes priority over monitor refresh rate.
+
+<br>
 
 ## Presentation
 
@@ -98,6 +108,8 @@ Capture and audio buffering remain unchanged.
 an explicit selection starts on that monitor, or the primary monitor if it is
 disconnected. The choice does not lock the window or GPU output route: you can
 still move the window and use F11 on its current monitor.
+
+<br>
 
 ## P010 HDR10
 
@@ -161,6 +173,8 @@ Windows device container; ambiguous matches are skipped. No guessed commands
 are sent to other models or vendors. This is not a real-hardware compatibility
 guarantee for every card. Avoid concurrent capture-device use by multiple apps.
 
+<br>
+
 ## Pixel-perfect and resizing
 
 The original-size 1:1 behavior below describes **VSR disabled in settings**. Enabling
@@ -193,6 +207,8 @@ When capture and monitor resolutions match, the viewer starts in borderless
 fullscreen regardless of the Pixel-perfect setting. A genuinely smaller saved
 relative window takes priority so that a window intentionally moved and resized
 on another monitor does not unexpectedly reopen fullscreen.
+
+<br>
 
 ## Scaling and multi-monitor behavior
 
