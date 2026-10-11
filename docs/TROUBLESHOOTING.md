@@ -1,6 +1,10 @@
+<img align="right" src="images/app-icon.png" width="40" height="40" alt="LLCV">
+
 # Troubleshooting
 
-> [한국어](TROUBLESHOOTING.ko.md) · [Back to README](../README.md)
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](TROUBLESHOOTING.ko.md)
+
+[Capture initialization fails](#capture-initialization-fails) · [Video works but audio does not](#video-works-but-audio-does-not) · [The picture is soft](#the-picture-is-soft) · [MJPEG color differs from another application](#mjpeg-color-differs-from-another-application) · [Frame drops or stutter](#frame-drops-or-stutter) · [Settings window is skipped](#settings-window-is-skipped) · [Collecting a useful report](#collecting-a-useful-report)
 
 ## Capture initialization fails
 
@@ -86,3 +90,7 @@ newest file from:
 Include the capture device, source resolution/FPS, selected format, capture
 audio device, output endpoint, Windows version, and whether another capture
 application had been running.
+
+---
+
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](TROUBLESHOOTING.ko.md)

@@ -1,6 +1,10 @@
+<img align="right" src="images/app-icon.png" width="40" height="40" alt="LLCV">
+
 # Video modes, scaling, and fullscreen
 
-> [한국어](VIDEO.ko.md) · [Back to README](../README.md)
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](VIDEO.ko.md)
+
+[Capture path](#capture-path) · [Mode detection](#mode-detection) · [NV12, YUY2, and MJPEG](#nv12-yuy2-and-mjpeg) · [Frame rate](#frame-rate) · [Presentation](#presentation) · [P010 HDR10](#p010-hdr10) · [Pixel-perfect and resizing](#pixel-perfect-and-resizing) · [Scaling and multi-monitor behavior](#scaling-and-multi-monitor-behavior)
 
 ## Capture path
 
@@ -125,7 +129,8 @@ changes are checked periodically.
   as SDR. Use NV12/YUY2 for SDR sources without color metadata. Turning Force
   HDR10 off does not disable the automatic HDR assumption for untagged P010.
 - Video PQ values are preserved without inventing mastering or peak-light
-  metadata. The app does not provide its own HDR-to-SDR tone mapper.
+  metadata. The app does not provide its own HDR-to-SDR tone mapper for **live viewing**.
+  [Screenshot saving](USAGE.md#screenshots) separately uses SDR sRGB tone mapping.
 - HDR overlays use linear-light composition with Windows' SDR UI white level,
   or a 203-nit reference when that query is unavailable. This does not adjust
   the video's brightness.
@@ -158,6 +163,12 @@ guarantee for every card. Avoid concurrent capture-device use by multiple apps.
 
 ## Pixel-perfect and resizing
 
+The original-size 1:1 behavior below describes **VSR disabled in settings**. Enabling
+VSR changes this option to **Lock display size**, which keeps the selected display
+resolution. F6 toggles the effect without changing that sizing policy; F5 restores
+input size. See [VSR usage](USAGE.md#nvidia-vsr-experimental) for capture/display
+resolution choices and requirements.
+
 With **Pixel-perfect** enabled, the client area is fixed to the selected capture
 resolution and mouse resizing is disabled. With it disabled, the window remains
 freely resizable while preserving the video aspect ratio.
@@ -175,7 +186,7 @@ window cannot fit the monitor work area, the HUD reports that it is unavailable.
 
 The fullscreen cursor defaults to **Auto-hide**: it disappears after two seconds
 without pointer activity and returns immediately on mouse movement or wheel
-input. Select **Always show** in the Video & window tab when a persistent
+input. Select **Always show** in the **Window** page when a persistent
 pointer is preferred.
 
 When capture and monitor resolutions match, the viewer starts in borderless
@@ -200,3 +211,7 @@ press `F5` to restore exact mapping.
 **Hide title bar** removes the caption and border in windowed mode. Edge snap
 works at outer monitor edges and shared boundaries. Entry and release distance
 is 20 DIP after DPI scaling. Hold Shift while dragging to bypass snap.
+
+---
+
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](VIDEO.ko.md)

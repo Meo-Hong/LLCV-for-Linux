@@ -1,13 +1,19 @@
+<img align="right" src="images/app-icon.png" width="40" height="40" alt="LLCV">
+
 # Diagnostics and logs
 
-> [한국어](DIAGNOSTICS.ko.md) · [Back to README](../README.md)
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](DIAGNOSTICS.ko.md)
+
+[Video fields](#video-fields) · [Audio fields](#audio-fields) · [Buffer terminology](#buffer-terminology) · [Buffer diagnosis](#buffer-diagnosis) · [Log files](#log-files)
 
 Press `Tab` in the viewer to show or hide the diagnostics overlay.
 
 In video mode, press `F3` to show or hide the audio meter OSD. Audio-only mode
 uses a separate, always-visible view for master volume, L/R peak levels and
-channel volume, and clipping status. Its L/R cards support the same mouse-wheel
-volume adjustment and double-click reset as the video OSD.
+channel volume, and clipping status. Use the wheel over an L/R card to adjust that
+channel. In audio-only mode, double-click the master or L/R region to reset its
+volume to 100%. In video mode, window dragging can intercept double-clicks depending
+on the window style, so do not assume the same reset behavior as audio-only mode.
 
 ## Video fields
 
@@ -84,14 +90,14 @@ With ASIO, the **app PCM queue and the ASIO driver output buffer are separate**.
 the app PCM diagnosis is normal but ASIO still breaks up, check the output buffer in
 the ASIO driver's control panel as well.
 
-New installations start with `20 ms (stable target)`. After verifying stable
-operation, use `15 ms (low-latency target)` or `10 ms (minimum latency)` only
-when the lower queueing delay is worth the reduced scheduling margin. For
-repeated errors, try `25 ms (extra stability)`, then `30 ms (stability first)`.
+New installations use a **25 ms** PCM target. A legacy saved 20 ms target is migrated
+to 25 ms once; other saved values are retained, and you can select 20 ms again afterward.
+After verifying stable operation, try `25 → 20 → 15 → 10 ms` only if lower latency is
+needed. Raise the target one step at a time if errors recur; try 30 ms if 25 ms is insufficient.
 
 ## Log files
 
-Enable **Save diagnostic log file** in the **Shortcuts & diagnostics** tab. Logs are
+Enable **Save diagnostic log file** in the **Guide & logs** tab. Logs are
 written to:
 
 ```text
@@ -120,3 +126,7 @@ console window. It is disabled by default and is not required for file logging.
 When reporting a problem, include the complete log and state the capture device,
 source resolution/FPS, selected pixel format, capture audio device, and output
 audio device.
+
+---
+
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](DIAGNOSTICS.ko.md)

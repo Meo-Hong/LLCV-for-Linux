@@ -1,6 +1,10 @@
+<img align="right" src="images/app-icon.png" width="40" height="40" alt="LLCV">
+
 # 소스에서 빌드
 
-> [English](BUILDING.md) · [README로 돌아가기](../README.ko.md)
+[README](../README.ko.md) · [문서 목록](INDEX.ko.md) · [English](BUILDING.md)
+
+[필요 환경](#필요-환경) · [Release 빌드](#release-빌드) · [설치 프로그램과 포터블 ZIP](#설치-프로그램과-포터블-zip)
 
 ## 필요 환경
 
@@ -65,3 +69,7 @@ PDB와 빌드 폴더는 포함하지 않습니다. 자동 테스트는 실제 �
 
 이전 버전의 실행 파일 옆에 `settings.ini`가 있으면 첫 실행 때 사용자 폴더로
 복사하며, 기존 파일은 자동으로 삭제하지 않습니다.
+
+---
+
+[README](../README.ko.md) · [문서 목록](INDEX.ko.md) · [English](BUILDING.md)

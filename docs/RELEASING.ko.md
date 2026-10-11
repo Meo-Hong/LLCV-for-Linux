@@ -1,9 +1,14 @@
+<img align="right" src="images/app-icon.png" width="40" height="40" alt="LLCV">
+
 # 릴리스 가이드
 
-> [English](RELEASING.md) · [README로 돌아가기](../README.ko.md)
+[README](../README.ko.md) · [문서 목록](INDEX.ko.md) · [English](RELEASING.md)
+
+[1. 버전 표기](#1-버전-표기) · [2. 빌드와 검사](#2-빌드와-검사) · [3. 패키지](#3-패키지) · [4. GitHub 공개](#4-github-공개)
 
 버전 표기, 빌드, 패키지와 GitHub 릴리스를 일관되게 유지하기 위한 체크리스트입니다.
-릴리스 작업은 기존 `agent/release-v2.0.2` 브랜치에서 진행합니다.
+아래의 `agent/release-v2.0.2`는 당시 사용한 브랜치 예시입니다. 새 릴리스에서는
+실제 작업 브랜치를 확인하고 명령의 브랜치명도 함께 바꿉니다.
 아래 실행 명령은 모두 **v2.0.2**의 실제 예시이며 빌드 폴더는 현재 관례인
 `build-v2020-release`를 사용합니다. 다른 버전은 버전·빌드 폴더·출력 경로를
 함께 변경합니다. 빌드 폴더에 점이 있는 버전을 넣고 패키지 기본 경로는 그대로
@@ -128,3 +133,7 @@ gh release create v2.0.2 `
 ```
 
 공개된 태그·자산은 덮어쓰지 않습니다. 문제가 생기면 다음 패치 버전으로 수정합니다.
+
+---
+
+[README](../README.ko.md) · [문서 목록](INDEX.ko.md) · [English](RELEASING.md)
