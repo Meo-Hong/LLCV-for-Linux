@@ -10,8 +10,8 @@ else
 LLCV_SDL3 := SYSTEM
 endif
 
-LLCV_SUITE := $(shell . /etc/os-release && echo "$${VERSION_CODENAME}")
 LLCV_APT_DIR := packaging/apt
+LLCV_SUITE := $(shell . ./$(LLCV_APT_DIR)/repository.conf && echo "$${LLCV_APT_SUITE}")
 LLCV_APT_URL := $(shell . ./$(LLCV_APT_DIR)/repository.conf && echo "$${LLCV_APT_URL}")
 LLCV_APT_COMPONENT := $(shell . ./$(LLCV_APT_DIR)/repository.conf && echo "$${LLCV_APT_COMPONENT}")
 LLCV_APT_KEY := $(wildcard $(LLCV_APT_DIR)/llcv-archive-keyring.asc)

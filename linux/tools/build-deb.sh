@@ -36,7 +36,7 @@ dpkg-buildpackage -b -us -uc $cross ${profiles:+-P"$profiles"}
 mkdir -p "$dist"
 rm -f "$dist"/llcv_*_"$host_arch".deb "$dist"/llcv-dbgsym_*_"$host_arch".ddeb \
     "$dist"/llcv_*_"$host_arch".buildinfo "$dist"/llcv_*_"$host_arch".changes
-echo "${VERSION_CODENAME:-}" > "$dist/suite"
+rm -f "$dist/suite"
 for file in "$parent"/llcv_*_"$host_arch".deb "$parent"/llcv-dbgsym_*_"$host_arch".ddeb \
     "$parent"/llcv_*_"$host_arch".buildinfo "$parent"/llcv_*_"$host_arch".changes; do
     if [ -e "$file" ]; then

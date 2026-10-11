@@ -18,12 +18,7 @@ jobs:
       matrix:
         include:
           - { image: "ubuntu:22.04", arch: "" }
-          - { image: "ubuntu:24.04", arch: "" }
-          - { image: "ubuntu:26.04", arch: "" }
-          - { image: "debian:12", arch: "" }
           - { image: "debian:12", arch: "arm64" }
-          - { image: "debian:13", arch: "" }
-          - { image: "debian:13", arch: "arm64" }
           - { image: "debian:13", arch: "armhf" }
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: ["fedora:latest", "almalinux:10", "almalinux:9"]
+        image: ["almalinux:9"]
     steps:
       - uses: actions/checkout@v4
       - name: Build package in ${{ matrix.image }}

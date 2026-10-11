@@ -2,16 +2,16 @@
 
 > [한국어](README.ko.md)
 
-The Linux build is ready to receive updates through an APT repository. The
-signing key and the repository address will be chosen together with the
-original author, so nothing has been published and no key has been created.
-Fill in the items below to publish.
+The Linux build is ready to receive updates through an APT repository at
+`https://meo-hong.github.io/LLCV-for-Linux/` (GitHub Pages, suite `stable`).
+Nothing has been published yet and no signing key has been created. Complete
+the steps below to publish.
 
 ## What is ready
 
 | File | Role |
 | --- | --- |
-| `apt/repository.conf` | Repository URL, Origin, Label, Component. `LLCV_APT_URL` is empty |
+| `apt/repository.conf` | Repository URL (`https://meo-hong.github.io/LLCV-for-Linux/`), suite (`stable`), Origin, Label, Component |
 | `apt/llcv.sources.in` | APT source template installed by the package (deb822) |
 | `../debian/rules` | Adds `/etc/apt/sources.list.d/llcv.sources` and `/etc/apt/keyrings/llcv-archive-keyring.asc` only when the URL and public key exist |
 | `../tools/install-build-deps.sh` | Detects the distribution and installs the build dependencies (apt, dnf or pacman) |
@@ -23,25 +23,26 @@ Fill in the items below to publish.
 | `../tools/build-rpm.sh` | Builds the `.rpm` on a Fedora or EL host |
 | `../tools/build-rpm-docker.sh` | Builds the `.rpm` in Docker (`fedora:latest`, `almalinux:9`, `almalinux:10`) |
 | `../tools/collect-release.sh` | Copies the installable packages from `dist/*/` into `dist/release/llcv-<version>/` with `SHA256SUMS`, leaving out debug, source and build-record files |
-| `../tools/build-apt-repo.sh` | Creates the repository tree from `dist/*/`, and signs it when a key is given |
-| `ci/linux-packages.yml` | GitHub Actions: Ubuntu 22.04/24.04/26.04 and Debian 12/13 `.deb` (with arm64/armhf), Fedora/EL `.rpm`, Arch package, signed repository on GitHub Pages |
+| `../tools/build-apt-repo.sh` | Puts every `.deb` from `dist/*/` into the one `stable` suite (one package per architecture), and signs it when a key is given |
+| `ci/linux-packages.yml` | GitHub Actions: the release packages (amd64 `.deb` on Ubuntu 22.04, arm64 on Debian 12, armhf on Debian 13, `.rpm` on AlmaLinux 9, Arch package), signed repository on GitHub Pages |
 | `arch/PKGBUILD` | Arch package (usable for the AUR) |
 
-Until the key and URL are set, packages do not register any repository. They
+Until the public key is added, packages do not register any repository. They
 behave like a plain `.deb`.
 
 ## Publishing steps
 
-1. **Create the signing key (the original author or an agreed maintainer)**
+1. **Create the signing key**
    ```sh
    gpg --quick-generate-key "LLCV Archive Signing Key <email>" ed25519 sign 3y
    gpg --armor --export <key id> > linux/packaging/apt/llcv-archive-keyring.asc
    gpg --armor --export-secret-keys <key id>
    ```
    Keep the secret key out of the repository; store it only in GitHub Secrets.
-2. **Choose the repository URL**
-   Set `LLCV_APT_URL` in `apt/repository.conf`. For GitHub Pages the form is
-   `https://<owner>.github.io/<repository>/`.
+2. **Repository URL (set)**
+   `apt/repository.conf` points to `https://meo-hong.github.io/LLCV-for-Linux/`
+   with the suite `stable`. Every supported release uses the same suite, since
+   one package per architecture covers them all.
 3. **GitHub settings**
    - Secrets: `LLCV_APT_PRIVATE_KEY` (the whole secret key), `LLCV_APT_KEY_ID`
    - Settings → Pages → Source: GitHub Actions
