@@ -10,6 +10,10 @@ capture-device window used alongside other work or viewed directly.
 
 No FFmpeg, codec pack, or separate Visual C++ Redistributable is required.
 
+![LLCV displaying live HDMI input from a Nintendo Switch](docs/images/viewer.png)
+
+*Live capture in LLCV 2.0.2.*
+
 ## What's new in 2.0.2
 
 See the [2.0.2 release notes](docs/release-notes-v2.0.2.md) for the changes.
@@ -71,6 +75,20 @@ matching audio input manually. If the app shows “Internal audio detected · us
 automatically,” no separate selection is needed.
 
 ## Finding your settings
+
+*The following examples are rendered directly from the 2.0.2 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
+
+### Video settings
+
+![Video settings: capture format, presentation, VSR, and screenshots](docs/images/settings-video-en.png)
+
+### Audio settings
+
+![Audio settings: output device, buffers, volume, and clock correction](docs/images/settings-audio-en.png)
+
+### F1 app information and shortcuts
+
+![App information, keyboard shortcuts, mouse controls, and screenshot help](docs/images/help-en.png)
 
 The sidebar separates **Video**, **Audio**, **Window**, **Guide & logs**, and **App**.
 Video contains capture/display settings, VSR, and screenshot options at the bottom.
