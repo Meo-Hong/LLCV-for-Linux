@@ -45,6 +45,13 @@ FFmpeg, 코덱 팩, 별도 Visual C++ 재배포 패키지는 필요하지 않습
 
 Windows 10/11 x64와 캡처보드 드라이버가 필요합니다.
 
+### Linux 커뮤니티 포크
+
+Linux 버전은 [LLCV for Linux](https://github.com/Meo-Hong/LLCV-for-Linux)를 참고하세요.
+
+Windows판과 별도로 관리되는 커뮤니티 포크입니다.
+설치 방법·지원 범위·문의는 해당 저장소를 확인하세요.
+
 ## 처음 사용하기
 
 1. OBS, 제조사 캡처 유틸리티 등 캡처보드를 열어 둔 프로그램을 모두 종료합니다.
