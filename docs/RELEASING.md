@@ -14,6 +14,8 @@ name `build-v2020-release`. For another version, update the version, build
 folder, and output paths together; do not substitute a dotted version into
 the build-folder name and leave the packaging defaults unchanged.
 
+<br>
+
 ## 1. Versioning
 
 Use `v2.0.2` for the Git tag and app version label. Resource and installer
@@ -35,6 +37,8 @@ notes and changelog entries keep their original version numbers.
 rg -n "2\.0\.1|2010" CMakeLists.txt src installer tools DEPENDENCIES.txt 실행안내.txt
 ```
 
+<br>
+
 ## 2. Build and verify
 
 Use an x64 Visual Studio developer PowerShell at the repository root. Set the
@@ -54,6 +58,8 @@ format, Tab diagnostics, F2 settings, and a clean exit/restart.
 Report any hardware checks not performed. Automated regressions and simulated
 long runs do not establish real-device compatibility or guarantee uninterrupted
 long-duration playback.
+
+<br>
 
 ## 3. Package
 
@@ -111,6 +117,8 @@ try {
 Also inspect the generated installer's payload/file list and confirm that the
 ASIO/Pretendard notices and `LICENSE` are included. `cmake --install` is a separate path;
 its success alone does not verify the ZIP or Inno Setup contents.
+
+<br>
 
 ## 4. Publish
 

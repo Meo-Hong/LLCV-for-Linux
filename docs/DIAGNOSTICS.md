@@ -15,6 +15,8 @@ channel. In audio-only mode, double-click the master or L/R region to reset its
 volume to 100%. In video mode, window dragging can intercept double-clicks depending
 on the window style, so do not assume the same reset behavior as audio-only mode.
 
+<br>
+
 ## Video fields
 
 - **Path:** selected capture device and DirectShow-to-D3D11 path
@@ -32,6 +34,8 @@ to prevent that queue.
 
 Video statistics exclude the first five seconds after startup.
 
+<br>
+
 ## Audio fields
 
 - **Audio output:** WASAPI mode, endpoint buffer, and current occupancy
@@ -48,6 +52,8 @@ The ppm value is an operational estimate rather than a direct hardware-clock
 measurement. Startup and scheduling stalls can affect it. Observe a stable
 session for 10–30 minutes before enabling drift correction solely from ppm.
 
+<br>
+
 ## Buffer terminology
 
 - **Output buffer:** the WASAPI endpoint buffer
@@ -61,6 +67,8 @@ An occasional underrun is not necessarily audible or harmful. If underruns
 repeat, first confirm that the output device is stable, then raise the PCM target
 one step. Enable clock correction only for a persistent drift pattern rather
 than an isolated scheduling interruption.
+
+<br>
 
 ## Buffer diagnosis
 
@@ -94,6 +102,8 @@ New installations use a **25 ms** PCM target. A legacy saved 20 ms target is mig
 to 25 ms once; other saved values are retained, and you can select 20 ms again afterward.
 After verifying stable operation, try `25 → 20 → 15 → 10 ms` only if lower latency is
 needed. Raise the target one step at a time if errors recur; try 30 ms if 25 ms is insufficient.
+
+<br>
 
 ## Log files
 

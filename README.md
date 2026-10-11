@@ -7,11 +7,15 @@ Use it to play console games without OBS, or listen in audio-only mode.
 
 **[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.0.2.md) · [한국어](README.ko.md)
 
+<br>
+
 | Video settings | Audio settings |
 | --- | --- |
 | [![Video settings](docs/images/settings-video-en.png)](docs/images/settings-video-en.png) | [![Audio settings](docs/images/settings-audio-en.png)](docs/images/settings-audio-en.png) |
 
 <sub>Example settings in 2.0.2. Click an image to view it at full resolution.</sub>
+
+<br>
 
 ## Install and run
 
@@ -27,6 +31,8 @@ For the portable version, extract **x64.zip** and run `LowLatencyCaptureViewer.e
 
 <kbd>F1</kbd> Help · <kbd>F2</kbd> Settings · <kbd>F6</kbd> VSR · <kbd>F11</kbd> Fullscreen · <kbd>F12</kbd> Screenshot · <kbd>Tab</kbd> Diagnostics
 
+<br>
+
 ## Features
 
 - Latest-frame-first presentation with Immediate or VSync output
@@ -38,8 +44,11 @@ For the portable version, extract **x64.zip** and run `LowLatencyCaptureViewer.e
 
 HDR10 needs compatible hardware and an HDR display; ASIO needs its driver.
 LPCM 5.1 requires multichannel capture and Shared output.
+
 VSR depends on GPU/driver support and may add latency. HDR screenshots are saved as SDR.
 See the [feature requirements](docs/USAGE.md#compatibility-and-feature-requirements).
+
+<br>
 
 ## Documentation
 

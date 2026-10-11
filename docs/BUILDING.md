@@ -6,6 +6,8 @@
 
 [Requirements](#requirements) · [Release build](#release-build) · [Installer and portable ZIP](#installer-and-portable-zip)
 
+<br>
+
 ## Requirements
 
 - Windows 10 or 11 x64
@@ -16,6 +18,8 @@
 The project uses Windows system APIs and libraries: Win32, DirectShow, D3D11,
 DXGI, Media Foundation for MJPEG decoding, and WASAPI. It does not
 require FFmpeg or a third-party codec pack.
+
+<br>
 
 ## Release build
 
@@ -36,6 +40,8 @@ build\Release\LowLatencyCaptureViewer.exe
 
 The release configuration uses the static MSVC runtime, so the packaged
 executable does not require a separate Visual C++ Redistributable installation.
+
+<br>
 
 ## Installer and portable ZIP
 

@@ -6,6 +6,8 @@
 
 [Capture initialization fails](#capture-initialization-fails) · [Video works but audio does not](#video-works-but-audio-does-not) · [The picture is soft](#the-picture-is-soft) · [MJPEG color differs from another application](#mjpeg-color-differs-from-another-application) · [Frame drops or stutter](#frame-drops-or-stutter) · [Settings window is skipped](#settings-window-is-skipped) · [Collecting a useful report](#collecting-a-useful-report)
 
+<br>
+
 ## Capture initialization fails
 
 Close every application that may already hold the capture device, including
@@ -31,6 +33,8 @@ unavailable requested mode, a missing compatible capture pin, or no compatible
 48 kHz mono/stereo uncompressed PCM or 32-bit float audio path. The stage and
 pin diagnostics in the log are more useful than the code by itself.
 
+<br>
+
 ## Video works but audio does not
 
 Some USB devices expose video and audio as separate DirectShow filters. Choose
@@ -42,6 +46,8 @@ If audio breaks up only after a long session and separate filters are selected,
 observe the PCM trend in the Tab overlay and try clock-drift correction. For
 immediate, repeated underruns, increase the PCM target one step instead.
 
+<br>
+
 ## The picture is soft
 
 Pixel-perfect gives exact 1:1 mapping when the window can use the capture
@@ -51,6 +57,8 @@ queue and falls back to Smooth when unavailable.
 
 Also confirm that the source and capture resolution match. Capturing a 1440p
 source as 4K does not create additional detail.
+
+<br>
 
 ## MJPEG color differs from another application
 
@@ -63,6 +71,8 @@ interpretation** control that appears. Compare BT.709 Full/Limited first, then
 BT.601 combinations for SD input. If none matches, include screenshots of the
 same scene with the diagnostic log. The manual setting affects MJPEG only.
 
+<br>
+
 ## Frame drops or stutter
 
 Confirm that Input FPS matches the selected source rate and compare it with
@@ -73,10 +83,14 @@ monitor.
 Mixed monitor refresh rates and DWM composition can change windowed frame
 pacing. Compare Low latency and VSync on the monitor where the viewer will stay.
 
+<br>
+
 ## Settings window is skipped
 
 If **Start directly next time** is enabled, hold Shift while launching. You can
 also press `F2` from the viewer to close it safely and return to settings.
+
+<br>
 
 ## Collecting a useful report
 

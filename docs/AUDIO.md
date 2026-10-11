@@ -6,6 +6,8 @@
 
 [Capture audio selection](#capture-audio-selection) · [Console LPCM 5.1 (since v1.2.10)](#console-lpcm-51-since-v1210) · [Audio-only mode](#audio-only-mode) · [WASAPI Shared and Exclusive](#wasapi-shared-and-exclusive) · [ASIO](#asio) · [Output-device switching](#output-device-switching) · [WASAPI buffer and PCM target](#wasapi-buffer-and-pcm-target) · [Clock-drift correction](#clock-drift-correction) · [Volume and background mute](#volume-and-background-mute)
 
+<br>
+
 ## Capture audio selection
 
 Automatic selection first looks for a 48 kHz stereo PCM audio pin inside the
@@ -17,6 +19,8 @@ Video and audio from separate filters can use slightly different hardware
 clocks. Over a long session this can move the PCM queue away from its target.
 Clock-drift correction is normally unnecessary for a device with a shared
 clock, but may be useful for separate USB video and audio paths.
+
+<br>
 
 ## Console LPCM 5.1 (since v1.2.10)
 
@@ -44,6 +48,8 @@ for failures. Do not open another capture app concurrently during testing.
 If the input channel count or format changes during playback, playback stops and
 settings reopen. Finalize the console audio settings before starting again.
 
+<br>
+
 ## Audio-only mode
 
 Enable **Audio-only mode** to skip the video pin, D3D11 renderer, and video
@@ -65,6 +71,8 @@ it at a fixed aspect ratio. Master and L/R controls highlight on hover while
 remaining draggable.
 The minimum window size follows Windows display scaling to keep text and controls readable in a compact window.
 The chosen size is saved independently of video-mode sizing and restored on the next launch.
+
+<br>
 
 ## WASAPI Shared and Exclusive
 
@@ -99,6 +107,8 @@ initialization but do not deliver usable event timing. A passing preflight is
 not a universal guarantee, so switch back to Shared or ASIO and attach a log if
 the endpoint still misbehaves.
 
+<br>
+
 ## ASIO
 
 ASIO appears in the settings only when an installed ASIO driver is detected.
@@ -110,6 +120,8 @@ clock-drift correction choices as WASAPI. When enabled, the resampler adjusts
 the capture PCM rate without adding a separate queue. Use WASAPI Shared when
 Windows APO/DSP effects are required.
 
+<br>
+
 ## Output-device switching
 
 With **Follow the Windows default output device**, changing the Windows default
@@ -120,6 +132,8 @@ during the switch.
 
 Choose a fixed endpoint when the viewer should remain on one device regardless
 of Windows default-device changes.
+
+<br>
 
 ## WASAPI buffer and PCM target
 
@@ -144,6 +158,8 @@ The DirectShow allocator reported in the log is controlled partly by the
 capture driver. Its block size or buffer count does not necessarily equal the
 amount of audio queued by this application.
 
+<br>
+
 ## Clock-drift correction
 
 **Off** leaves PCM samples unaltered. **Auto** (the default) watches the PCM
@@ -157,6 +173,8 @@ Correction makes small continuous rate adjustments to keep the PCM queue near
 its target. It does not intentionally add another frame or packet queue. Use the
 Tab overlay for 10–30 minutes before deciding from the estimated ppm value;
 short startup or scheduling disturbances can distort the estimate.
+
+<br>
 
 ## Volume and background mute
 

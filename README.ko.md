@@ -7,11 +7,15 @@ OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리�
 
 **[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.0.2.md) · [English](README.md)
 
+<br>
+
 | 영상 설정 | 오디오 설정 |
 | --- | --- |
 | [![영상 설정](docs/images/settings-video.png)](docs/images/settings-video.png) | [![오디오 설정](docs/images/settings-audio.png)](docs/images/settings-audio.png) |
 
 <sub>2.0.2 설정 화면 예시입니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
+
+<br>
 
 ## 설치 및 실행
 
@@ -27,6 +31,8 @@ Windows 10/11 x64와 캡처보드 드라이버가 필요합니다.
 
 <kbd>F1</kbd> 도움말 · <kbd>F2</kbd> 설정 · <kbd>F6</kbd> VSR · <kbd>F11</kbd> 전체화면 · <kbd>F12</kbd> 스크린샷 · <kbd>Tab</kbd> 진단
 
+<br>
+
 ## 지원 기능
 
 - 최신 프레임 우선 표시, 저지연·VSync 출력
@@ -38,8 +44,11 @@ Windows 10/11 x64와 캡처보드 드라이버가 필요합니다.
 
 HDR10은 호환 장치와 HDR 디스플레이가, ASIO는 전용 드라이버가 필요합니다.
 LPCM 5.1은 다채널 캡처·Shared 출력 전용입니다.
+
 VSR 동작은 GPU·드라이버에 따라 다르며 지연이 늘 수 있습니다. HDR 스크린샷은 SDR로 저장됩니다.
 [기능별 지원 조건](docs/USAGE.ko.md#호환성-및-사용-조건)을 확인하세요.
+
+<br>
 
 ## 문서
 

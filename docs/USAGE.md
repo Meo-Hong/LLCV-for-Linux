@@ -6,6 +6,8 @@
 
 [Download](#download) · [First use](#first-use) · [Finding your settings](#finding-your-settings) · [What should I choose?](#what-should-i-choose) · [Everyday controls](#everyday-controls) · [NVIDIA VSR (experimental)](#nvidia-vsr-experimental) · [Screenshots](#screenshots) · [Troubleshooting](#troubleshooting) · [Compatibility and feature requirements](#compatibility-and-feature-requirements)
 
+<br>
+
 ## Download
 
 Get one of the files from the [latest release](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest):
@@ -19,6 +21,8 @@ and refined installer alignment. The version remains 2.0.2; the app executable a
 portable ZIP are unchanged. Existing users do not need to reinstall.
 
 Windows 10/11 x64 and a capture-device driver are required.
+
+<br>
 
 ## First use
 
@@ -36,6 +40,8 @@ If video works but audio does not, check **Capture audio device**. USB capture
 devices can expose separate video and audio devices; in that case, choose the
 matching audio input manually. If the app shows “Internal audio detected · use
 automatically,” no separate selection is needed.
+
+<br>
 
 ## Finding your settings
 
@@ -68,6 +74,8 @@ contrast against the picture, regardless of the app theme.
 Supported format/FPS combinations are queried in the background and reused while
 the settings window remains open. **Refresh** requests a new query. Start remains
 unavailable while the required video capabilities are being checked or could not be queried.
+
+<br>
 
 ## What should I choose?
 
@@ -151,6 +159,8 @@ levels, and clipping status.
 Console LPCM 5.1 is available in audio-only mode when its requirements are met.
 See the [audio-only guide](AUDIO.md) for details.
 
+<br>
+
 ## Everyday controls
 
 | Control | Action |
@@ -218,6 +228,8 @@ Korean or English. The same page offers automatic update checks after startup
 (enabled by default) and manual checks. It does not install updates
 automatically; accepting the prompt opens the installer link in your browser.
 
+<br>
+
 ## NVIDIA VSR (experimental)
 
 **Since 2.0.1:** HDR10/YUY2 + VSR support below is not included in v2.0.0.
@@ -266,6 +278,8 @@ The viewer does not change NVIDIA profiles or add a frame queue/wait to match
 ON/OFF latency. VSR processing can increase latency and GPU use. Screenshots
 remain source images without VSR.
 
+<br>
+
 ## Screenshots
 
 Press **F12** during video playback to save a PNG in **Pictures / LowLatencyCaptureViewer**.
@@ -291,6 +305,8 @@ Use F1, Esc, or its Close button to dismiss it; Esc here does not exit the viewe
 - A busy clipboard does not prevent file saving. Closing the viewer cancels pending work;
   wait for the completion notice if you need the screenshot. Photos already saved are retained.
 
+<br>
+
 ## Troubleshooting
 
 | Problem | Try this first |
@@ -305,6 +321,8 @@ Use F1, Esc, or its Close button to dismiss it; Esc here does not exit the viewe
 
 Settings and optional logs are stored in `%LOCALAPPDATA%\LowLatencyCaptureViewer`.
 The uninstaller can remove this user data on request.
+
+<br>
 
 ## Compatibility and feature requirements
 
