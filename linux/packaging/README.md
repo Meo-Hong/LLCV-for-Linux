@@ -49,7 +49,9 @@ behave like a plain `.deb`.
    - Copy `ci/linux-packages.yml` to `.github/workflows/` in the repository root
 4. **Release**
    Push a tag that starts with `linux-v`, such as `linux-v2.0.2`. The
-   workflow builds, signs and deploys to Pages.
+   workflow builds the packages, signs and deploys the APT repository to
+   Pages, and creates a GitHub release with the five packages and
+   `SHA256SUMS`.
 5. **Arch (optional)**
    For the AUR, change the build path in `arch/PKGBUILD` to download the
    release tarball.

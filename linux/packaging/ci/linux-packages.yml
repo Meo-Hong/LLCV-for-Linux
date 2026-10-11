@@ -117,3 +117,57 @@ jobs:
           path: apt-repo
       - id: deploy
         uses: actions/deploy-pages@v4
+
+  release:
+    name: GitHub release
+    needs: [deb, rpm, arch]
+    if: startsWith(github.ref, 'refs/tags/linux-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: deb-*
+          path: linux/dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rpm-*
+          path: linux/dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: arch-package
+          path: linux/dist/arch
+      - name: Collect release files
+        run: sh linux/tools/collect-release.sh
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          dir="$(ls -d linux/dist/release/llcv-*)"
+          version="${dir##*/llcv-}"
+          cat > release-notes.md <<EOF
+          | 파일 / File | 설치할 OS / Install on |
+          | --- | --- |
+          | \`llcv_${version}_amd64.deb\` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali |
+          | \`llcv_${version}_arm64.deb\` | Debian 12·13, Raspberry Pi OS 64-bit |
+          | \`llcv_${version}_raspberrypi-32bit_armhf.deb\` | Raspberry Pi OS 32-bit (trixie) |
+          | \`llcv-${version}-1.x86_64.rpm\` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 |
+          | \`llcv-${version}-1-x86_64.pkg.tar.zst\` | Arch Linux, Manjaro, EndeavourOS |
+
+          - \`.deb\`: \`sudo apt install ./<file>\`. 설치하면 APT 업데이트 저장소가 등록됩니다. / Installing registers the APT update repository.
+          - \`.rpm\`: \`sudo dnf install ./<file>\`
+          - Arch: \`sudo pacman -U ./<file>\`
+          - \`SHA256SUMS\`: \`sha256sum -c SHA256SUMS --ignore-missing\`
+
+          안내 / Guide: [linux/README.ko.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/linux/README.ko.md) · [linux/README.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/linux/README.md)
+          EOF
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$dir"/* --clobber
+          else
+            gh release create "$TAG" "$dir"/* --title "LLCV for Linux $version" --notes-file release-notes.md
+          fi

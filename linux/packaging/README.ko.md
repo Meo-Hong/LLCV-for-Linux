@@ -47,8 +47,9 @@ LLCV 리눅스판은 `https://meo-hong.github.io/LLCV-for-Linux/`(GitHub Pages,
    - Settings → Pages → Source: GitHub Actions
    - `ci/linux-packages.yml`을 저장소 루트의 `.github/workflows/`로 복사
 4. **릴리스**
-   `linux-v2.0.2`처럼 `linux-v`로 시작하는 태그를 푸시하면, 빌드부터 서명,
-   Pages 배포까지 진행됩니다.
+   `linux-v2.0.2`처럼 `linux-v`로 시작하는 태그를 푸시하면, 패키지 빌드,
+   APT 저장소 서명과 Pages 배포, GitHub 릴리스 생성(패키지 5개와
+   `SHA256SUMS` 업로드)까지 진행됩니다.
 5. **Arch (선택)**
    AUR에 올리려면 `arch/PKGBUILD`의 빌드 경로를 릴리스 tarball을 받는 방식으로
    바꿔서 등록합니다.
