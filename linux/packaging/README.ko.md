@@ -23,7 +23,7 @@ LLCV 리눅스판은 `https://meo-hong.github.io/LLCV-for-Linux/`(GitHub Pages,
 | `../tools/build-rpm-docker.sh` | Docker에서 `.rpm` 빌드 (`fedora:latest`, `almalinux:9`, `almalinux:10`) |
 | `../tools/collect-release.sh` | `dist/*/`에서 설치용 패키지만 모아 `dist/release/llcv-<버전>/`에 복사하고 `SHA256SUMS`를 만듦. 디버그·소스·빌드 기록 파일은 뺌 |
 | `../tools/build-apt-repo.sh` | `dist/*/`의 `.deb`를 하나의 `stable` 스위트에 넣어 저장소 생성(아키텍처마다 패키지 하나). 키가 있으면 서명 |
-| `ci/linux-packages.yml` | GitHub Actions: 배포용 패키지(amd64 `.deb`는 Ubuntu 22.04, arm64는 Debian 12, armhf는 Debian 13, `.rpm`은 AlmaLinux 9, Arch 패키지) 빌드, 서명된 저장소를 GitHub Pages에 배포 |
+| `../../.github/workflows/linux-packages.yml` | GitHub Actions: 배포용 패키지(amd64 `.deb`는 Ubuntu 22.04, arm64는 Debian 12, armhf는 Debian 13, `.rpm`은 AlmaLinux 9, Arch 패키지) 빌드, 서명된 저장소를 GitHub Pages에 배포, GitHub 릴리스 생성 |
 | `arch/PKGBUILD` | Arch 패키지 (AUR 등록 시 그대로 사용 가능) |
 
 공개 키를 넣기 전까지는 패키지가 저장소를 등록하지 않습니다. 일반 `.deb`와
@@ -45,7 +45,7 @@ LLCV 리눅스판은 `https://meo-hong.github.io/LLCV-for-Linux/`(GitHub Pages,
 3. **GitHub 설정**
    - Secrets: `LLCV_APT_PRIVATE_KEY`(비밀 키 전체), `LLCV_APT_KEY_ID`(키 ID)
    - Settings → Pages → Source: GitHub Actions
-   - `ci/linux-packages.yml`을 저장소 루트의 `.github/workflows/`로 복사
+   - Settings → Environments → `github-pages` → 배포 태그 규칙에 `linux-v*` 추가
 4. **릴리스**
    `linux-v2.0.2`처럼 `linux-v`로 시작하는 태그를 푸시하면, 패키지 빌드,
    APT 저장소 서명과 Pages 배포, GitHub 릴리스 생성(패키지 5개와

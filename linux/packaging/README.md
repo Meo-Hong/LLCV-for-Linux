@@ -24,7 +24,7 @@ the steps below to publish.
 | `../tools/build-rpm-docker.sh` | Builds the `.rpm` in Docker (`fedora:latest`, `almalinux:9`, `almalinux:10`) |
 | `../tools/collect-release.sh` | Copies the installable packages from `dist/*/` into `dist/release/llcv-<version>/` with `SHA256SUMS`, leaving out debug, source and build-record files |
 | `../tools/build-apt-repo.sh` | Puts every `.deb` from `dist/*/` into the one `stable` suite (one package per architecture), and signs it when a key is given |
-| `ci/linux-packages.yml` | GitHub Actions: the release packages (amd64 `.deb` on Ubuntu 22.04, arm64 on Debian 12, armhf on Debian 13, `.rpm` on AlmaLinux 9, Arch package), signed repository on GitHub Pages |
+| `../../.github/workflows/linux-packages.yml` | GitHub Actions: the release packages (amd64 `.deb` on Ubuntu 22.04, arm64 on Debian 12, armhf on Debian 13, `.rpm` on AlmaLinux 9, Arch package), signed repository on GitHub Pages, GitHub release |
 | `arch/PKGBUILD` | Arch package (usable for the AUR) |
 
 Until the public key is added, packages do not register any repository. They
@@ -46,7 +46,7 @@ behave like a plain `.deb`.
 3. **GitHub settings**
    - Secrets: `LLCV_APT_PRIVATE_KEY` (the whole secret key), `LLCV_APT_KEY_ID`
    - Settings → Pages → Source: GitHub Actions
-   - Copy `ci/linux-packages.yml` to `.github/workflows/` in the repository root
+   - Settings → Environments → `github-pages` → add a deployment tag rule for `linux-v*`
 4. **Release**
    Push a tag that starts with `linux-v`, such as `linux-v2.0.2`. The
    workflow builds the packages, signs and deploys the APT repository to
