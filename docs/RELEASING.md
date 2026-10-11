@@ -1,9 +1,14 @@
+<img align="right" src="images/app-icon.png" width="40" height="40" alt="LLCV">
+
 # Release guide
 
-> [한국어](RELEASING.ko.md) · [Back to README](../README.md)
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](RELEASING.ko.md)
+
+[1. Versioning](#1-versioning) · [2. Build and verify](#2-build-and-verify) · [3. Package](#3-package) · [4. Publish](#4-publish)
 
 Use this checklist to keep versioning, builds, packages, and GitHub releases
-consistent. Release work stays on the existing `agent/release-v2.0.2` branch.
+consistent. The `agent/release-v2.0.2` branch below is the historical example.
+For a new release, confirm the actual working branch and update the commands to match.
 All executable examples below are for **v2.0.2**, using the compact build-folder
 name `build-v2020-release`. For another version, update the version, build
 folder, and output paths together; do not substitute a dotted version into
@@ -133,3 +138,7 @@ gh release create v2.0.2 `
 
 Never overwrite published tags or assets. Fix a published-release issue in the
 next patch version instead.
+
+---
+
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](RELEASING.ko.md)

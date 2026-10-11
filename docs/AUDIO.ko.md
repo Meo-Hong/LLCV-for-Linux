@@ -1,6 +1,10 @@
+<img align="right" src="images/app-icon.png" width="40" height="40" alt="LLCV">
+
 # 저지연 오디오
 
-> [English](AUDIO.md) · [README로 돌아가기](../README.ko.md)
+[README](../README.ko.md) · [문서 목록](INDEX.ko.md) · [English](AUDIO.md)
+
+[캡처 오디오 선택](#캡처-오디오-선택) · [콘솔 LPCM 5.1 (v1.2.10부터)](#콘솔-lpcm-51-v1210부터) · [오디오 only 모드](#오디오-only-모드) · [WASAPI Shared와 Exclusive](#wasapi-shared와-exclusive) · [ASIO](#asio) · [출력 장치 전환](#출력-장치-전환) · [WASAPI 버퍼와 PCM 목표](#wasapi-버퍼와-pcm-목표) · [클록 드리프트 보정](#클록-드리프트-보정) · [음량과 백그라운드 음소거](#음량과-백그라운드-음소거)
 
 ## 캡처 오디오 선택
 
@@ -157,3 +161,7 @@ L/R 개별 게인은 100%로 제한되며, 선택적인 200% 증폭은 마스터
 
 백그라운드 자동 음소거는 출력 게인만 변경합니다. 창이 비활성화되어도 캡처와
 WASAPI 소비는 계속되므로 다시 돌아왔을 때 PCM 누적 지연이 생기지 않습니다.
+
+---
+
+[README](../README.ko.md) · [문서 목록](INDEX.ko.md) · [English](AUDIO.md)

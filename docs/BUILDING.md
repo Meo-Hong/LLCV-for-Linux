@@ -1,6 +1,10 @@
+<img align="right" src="images/app-icon.png" width="40" height="40" alt="LLCV">
+
 # Building from source
 
-> [한국어](BUILDING.ko.md) · [Back to README](../README.md)
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](BUILDING.ko.md)
+
+[Requirements](#requirements) · [Release build](#release-build) · [Installer and portable ZIP](#installer-and-portable-zip)
 
 ## Requirements
 
@@ -67,3 +71,7 @@ Runtime settings and logs are stored per user under:
 
 An older `settings.ini` beside the executable is copied to that location on the
 first launch and is not deleted automatically.
+
+---
+
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](BUILDING.ko.md)

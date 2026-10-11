@@ -1,6 +1,10 @@
+<img align="right" src="images/app-icon.png" width="40" height="40" alt="LLCV">
+
 # 문제 해결
 
-> [English](TROUBLESHOOTING.md) · [README로 돌아가기](../README.ko.md)
+[README](../README.ko.md) · [문서 목록](INDEX.ko.md) · [English](TROUBLESHOOTING.md)
+
+[캡처 초기화 실패](#캡처-초기화-실패) · [영상은 나오지만 소리가 없음](#영상은-나오지만-소리가-없음) · [화면이 흐림](#화면이-흐림) · [MJPEG 색이 다른 프로그램과 다름](#mjpeg-색이-다른-프로그램과-다름) · [프레임 드랍 또는 끊김](#프레임-드랍-또는-끊김) · [설정 창을 건너뜀](#설정-창을-건너뜀) · [문제 제보에 필요한 정보](#문제-제보에-필요한-정보)
 
 ## 캡처 초기화 실패
 
@@ -83,3 +87,7 @@ Tab 정보창에서 입력 FPS가 선택한 소스 속도와 맞는지, Present 
 
 캡처보드 모델, 입력 해상도/FPS, 선택 포맷, 캡처 오디오 장치, 출력 장치,
 Windows 버전과 다른 캡처 프로그램을 실행했는지도 함께 알려주세요.
+
+---
+
+[README](../README.ko.md) · [문서 목록](INDEX.ko.md) · [English](TROUBLESHOOTING.md)
