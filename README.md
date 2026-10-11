@@ -46,6 +46,13 @@ Get one of the files from the [latest release](https://github.com/seria-aa/LowLa
 
 Windows 10/11 x64 and a capture-device driver are required.
 
+### Linux community fork
+
+For Linux, see [LLCV for Linux](https://github.com/Meo-Hong/LLCV-for-Linux).
+
+This community fork is maintained separately from the Windows version.
+Refer to its repository for installation, supported environments, and support.
+
 ## First use
 
 1. Close OBS, the vendor capture utility, and any other application using the
