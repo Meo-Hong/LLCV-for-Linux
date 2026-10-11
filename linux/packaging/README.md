@@ -1,11 +1,15 @@
-# Release readiness (update repository)
+# Releases and the update repository
 
 > [한국어](README.ko.md)
 
-The Linux build is ready to receive updates through an APT repository at
-`https://meo-hong.github.io/LLCV-for-Linux/` (GitHub Pages, suite `stable`).
-Nothing has been published yet and no signing key has been created. Complete
-the steps below to publish.
+The Linux build is released by Meo-hong, separately from the original LLCV
+project. Version 2.0.2 is published on the
+[Releases](https://github.com/Meo-Hong/LLCV-for-Linux/releases) page, and the
+`.deb` packages update through the APT repository at
+`https://meo-hong.github.io/LLCV-for-Linux/` (GitHub Pages, suite `stable`),
+signed with "LLCV Archive Signing Key <busimh001@gmail.com>". The publishing
+steps below are already done; for a new version see
+[New version](#new-version).
 
 ## What is ready
 
@@ -27,10 +31,10 @@ the steps below to publish.
 | `../../.github/workflows/linux-packages.yml` | GitHub Actions: the release packages (amd64 `.deb` on Ubuntu 22.04, arm64 on Debian 12, armhf on Debian 13, `.rpm` on AlmaLinux 9, Arch package), signed repository on GitHub Pages, GitHub release |
 | `arch/PKGBUILD` | Arch package (usable for the AUR) |
 
-Until the public key is added, packages do not register any repository. They
-behave like a plain `.deb`.
+Packages register the repository because the public key
+`apt/llcv-archive-keyring.asc` is in the source tree.
 
-## Publishing steps
+## Publishing steps (done)
 
 1. **Create the signing key**
    ```sh
@@ -55,6 +59,14 @@ behave like a plain `.deb`.
 5. **Arch (optional)**
    For the AUR, change the build path in `arch/PKGBUILD` to download the
    release tarball.
+
+## New version
+
+1. Raise the version in `linux/CMakeLists.txt`, `debian/changelog`,
+   `rpm/llcv.spec` and `arch/PKGBUILD`.
+2. Commit and push `main`.
+3. Push a tag such as `linux-v2.0.3`. GitHub Actions builds the five packages,
+   updates the APT repository and creates the release.
 
 ## On user machines
 

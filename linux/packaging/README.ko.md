@@ -1,10 +1,13 @@
-# 배포 준비 상태 (업데이트 저장소)
+# 릴리스와 업데이트 저장소
 
 > [English](README.md)
 
-LLCV 리눅스판은 `https://meo-hong.github.io/LLCV-for-Linux/`(GitHub Pages,
-스위트 `stable`)의 APT 저장소로 업데이트를 받도록 준비되어 있습니다. 아직
-배포하지 않았고 서명 키도 만들지 않았습니다. 아래 단계를 마치면 배포됩니다.
+리눅스판은 원본 LLCV 프로젝트와 별도로 Meo-hong이 배포합니다. 2.0.2가
+[Releases](https://github.com/Meo-Hong/LLCV-for-Linux/releases)에 공개되어 있고,
+`.deb` 패키지는 `https://meo-hong.github.io/LLCV-for-Linux/`(GitHub Pages, 스위트
+`stable`)의 APT 저장소로 업데이트됩니다. 저장소는 "LLCV Archive Signing Key
+<busimh001@gmail.com>"로 서명됩니다. 아래 배포 단계는 이미 마쳤고, 새 버전은
+[새 버전 내기](#새-버전-내기)를 보세요.
 
 ## 준비된 것
 
@@ -26,10 +29,10 @@ LLCV 리눅스판은 `https://meo-hong.github.io/LLCV-for-Linux/`(GitHub Pages,
 | `../../.github/workflows/linux-packages.yml` | GitHub Actions: 배포용 패키지(amd64 `.deb`는 Ubuntu 22.04, arm64는 Debian 12, armhf는 Debian 13, `.rpm`은 AlmaLinux 9, Arch 패키지) 빌드, 서명된 저장소를 GitHub Pages에 배포, GitHub 릴리스 생성 |
 | `arch/PKGBUILD` | Arch 패키지 (AUR 등록 시 그대로 사용 가능) |
 
-공개 키를 넣기 전까지는 패키지가 저장소를 등록하지 않습니다. 일반 `.deb`와
-똑같이 동작합니다.
+소스에 공개 키(`apt/llcv-archive-keyring.asc`)가 들어 있으므로 패키지가
+저장소를 등록합니다.
 
-## 배포할 때 할 일
+## 배포할 때 할 일 (완료)
 
 1. **서명 키 만들기**
    ```sh
@@ -53,6 +56,14 @@ LLCV 리눅스판은 `https://meo-hong.github.io/LLCV-for-Linux/`(GitHub Pages,
 5. **Arch (선택)**
    AUR에 올리려면 `arch/PKGBUILD`의 빌드 경로를 릴리스 tarball을 받는 방식으로
    바꿔서 등록합니다.
+
+## 새 버전 내기
+
+1. `linux/CMakeLists.txt`, `debian/changelog`, `rpm/llcv.spec`,
+   `arch/PKGBUILD`의 버전을 올립니다.
+2. 커밋하고 `main`을 푸시합니다.
+3. `linux-v2.0.3` 같은 태그를 푸시하면 GitHub Actions가 패키지 5개를 빌드하고,
+   APT 저장소를 갱신하고, 릴리스를 만듭니다.
 
 ## 사용자 쪽 동작
 

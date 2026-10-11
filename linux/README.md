@@ -3,15 +3,23 @@
 > [한국어](README.ko.md)
 
 LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices with low
-latency. This directory is a Linux rewrite, by Meo-hong, of the Windows LLCV
-2.0.2 viewer by [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer).
-The reference device is the AVerMedia Live Gamer ULTRA S GC553Pro. The
-reference desktop is Ubuntu 26.04 (GNOME, Wayland).
+latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.0.2 viewer
+by [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer). The
+reference device is the AVerMedia Live Gamer ULTRA S GC553Pro. The reference
+desktop is Ubuntu 26.04 (GNOME, Wayland).
+
+> **Maintained separately from the original LLCV.** The Linux port is
+> developed, released and supported by Meo-hong in
+> [Meo-Hong/LLCV-for-Linux](https://github.com/Meo-Hong/LLCV-for-Linux). It is
+> not an official release of the original project, and the original author
+> does not maintain it. Report Linux problems in
+> [this repository's issues](https://github.com/Meo-Hong/LLCV-for-Linux/issues),
+> not in the original repository.
 
 | Area | Windows build | Linux build |
 | --- | --- | --- |
 | Video capture | DirectShow | V4L2 memory-mapped buffers, latest frame first |
-| Presentation | D3D11 / DXGI | OpenGL 3.3 (EGL on Wayland, GLX on X11) |
+| Presentation | D3D11 / DXGI | OpenGL 3.3 (EGL on Wayland, GLX on X11), or OpenGL ES 3.0 |
 | Color conversion | D3D11 Video Processor | GLSL shaders, BT.601/709/2020, limited/full range |
 | HDR10 | P010 + DXGI HDR10 | P010 + Wayland `wp_color_management_v1`, or tone mapping |
 | MJPEG | Media Foundation | libjpeg-turbo (decoded to YUV planes) |
@@ -20,52 +28,61 @@ reference desktop is Ubuntu 26.04 (GNOME, Wayland).
 | Settings | `%LOCALAPPDATA%` | `~/.config/llcv/settings.ini` |
 | Logs | `%LOCALAPPDATA%` | `~/.local/state/llcv/logs/` |
 | Screenshots | Pictures | `$XDG_PICTURES_DIR/LLCV/` |
+| Updates | In-app update check | APT repository (`.deb`) |
 
 Not available on Linux: NVIDIA VSR, WASAPI Exclusive, ASIO, console LPCM 5.1,
 and the vendor tone-mapping requests.
 
+## Install
+
+Download the file for your system from
+[Releases](https://github.com/Meo-Hong/LLCV-for-Linux/releases/latest).
+
+| File | Install on | Command |
+| --- | --- | --- |
+| `llcv_2.0.2_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.0.2_amd64.deb` |
+| `llcv_2.0.2_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.0.2_arm64.deb` |
+| `llcv_2.0.2_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.0.2_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.0.2-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.0.2-1.x86_64.rpm` |
+| `llcv-2.0.2-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.0.2-1-x86_64.pkg.tar.zst` |
+
+- Installing a `.deb` also registers the LLCV APT repository, so later
+  versions arrive through `apt upgrade` or Software Updater. For `.rpm` and
+  Arch, download the new file from Releases.
+- `SHA256SUMS` on the release page checks the downloads:
+  `sha256sum -c SHA256SUMS --ignore-missing`.
+- The notice "Download is performed unsandboxed as root" when installing from
+  your home folder is harmless.
+- Remove with `sudo apt remove llcv` (`sudo apt purge llcv` also removes the
+  repository entry), `sudo dnf remove llcv` or `sudo pacman -R llcv`.
+
 ## Supported systems
 
-| | Ubuntu 22.04 | Ubuntu 24.04 | Debian 13 / Ubuntu 26.04 | Arch Linux |
-| --- | --- | --- | --- | --- |
-| Package | `.deb` | `.deb` | `.deb` (`debian/`) | `PKGBUILD` (`packaging/arch/`) |
-| SDL3 | bundled 3.4.18, static | bundled 3.4.18, static | system 3.2 or newer | system 3.2 or newer |
-| Dear ImGui | bundled 1.92.2b | bundled 1.92.2b | bundled 1.92.2b | bundled 1.92.2b |
-| HDR input (P010) | needs Linux 7.1+ | needs Linux 7.1+ | needs Linux 7.1+ | current kernels |
-| HDR output | compositor too old (GNOME 42) | compositor too old (GNOME 46) | GNOME 48+ / KDE Plasma 6 | GNOME 48+ / KDE Plasma 6 |
-
-| | Debian 12 (bookworm) | Debian 13 (trixie) |
-| --- | --- | --- |
-| Also for | LMDE 6, Raspberry Pi OS (bookworm) | Kali, Raspberry Pi OS (trixie) |
-| Package | `.deb` amd64, arm64 | `.deb` amd64, arm64, armhf |
-| SDL3 | bundled 3.4.18, static | system 3.2 or newer |
-| HDR input (P010) | needs Linux 7.1+ | needs Linux 7.1+ |
-| HDR output | compositor too old (GNOME 43) | GNOME 48 / KDE Plasma 6 (not the Raspberry Pi desktop) |
-
-Linux Mint 21, Pop!_OS 22.04, Zorin OS 17 and elementary OS 7 are Ubuntu
-22.04 based; use the Ubuntu 22.04 package. Linux Mint 22, Pop!_OS 24.04 and
-Zorin OS 18 are Ubuntu 24.04 based; use the Ubuntu 24.04 package. A package
-built on a newer release does not install on an older one. Raspberry Pi OS 64-bit uses the `arm64` package, and
-Raspberry Pi OS 32-bit uses `armhf` (Raspberry Pi 2 or newer; Pi Zero and Pi 1
-are not supported).
-
-| | Fedora 43 or newer, Nobara | RHEL / Rocky / AlmaLinux 9 and 10 |
-| --- | --- | --- |
-| Package | `.rpm` (`packaging/rpm/llcv.spec`) | `.rpm` (same spec) |
-| SDL3 | system 3.4 | bundled 3.4.18, static (EPEL has no SDL3) |
-| HDR input (P010) | needs Linux 7.1+ | needs a P010-capable uvcvideo (not in EL 9/10 kernels) |
-| HDR output | GNOME 48+ / KDE Plasma 6 | compositor too old (GNOME 40 / 47) |
-
-When HDR is not available, the app says so and gives the reason. The reason
-appears in Settings → Video → HDR, in the F1 help, in the Tab diagnostics,
-and in a message when an HDR session starts. HDR signals are then shown as
-SDR.
-
-| GPU driver | SDR | HDR10 passthrough (Wayland) | Tone mapping |
+| Distribution | File | HDR output | Tested |
 | --- | --- | --- | --- |
-| AMD / Intel (Mesa) | yes | yes, with a 10-bit EGL buffer | yes |
-| NVIDIA (proprietary) | yes | when the driver offers a 10-bit EGL buffer on Wayland | yes |
-| Raspberry Pi 4/5 (VideoCore, Mesa v3d) | yes, through OpenGL ES 3.0 | no (the Pi desktop has no color management) | yes |
+| Ubuntu 26.04 | amd64 `.deb` | yes (GNOME 48 or newer) | **runs on real hardware**, APT updates work |
+| Ubuntu 24.04, Linux Mint 22, Pop!_OS 24.04, Zorin OS 18 | amd64 `.deb` | no (GNOME 46) | build, install check |
+| Ubuntu 22.04, Linux Mint 21, Pop!_OS 22.04, Zorin OS 17, elementary OS 7 | amd64 `.deb` | no (GNOME 42) | build, install check |
+| Debian 13, Kali | amd64 `.deb` | yes (GNOME 48 / KDE Plasma 6) | install check |
+| Debian 12, LMDE 6 | amd64 `.deb` | no (GNOME 43) | install check |
+| Raspberry Pi OS 64-bit (bookworm, trixie) | arm64 `.deb` | no | build |
+| Raspberry Pi OS 32-bit (trixie) | armhf `.deb` | no | build |
+| Fedora 43 or newer, Nobara | `.rpm` | yes (GNOME 48 or newer / KDE Plasma 6) | install check (Fedora 44) |
+| RHEL, Rocky Linux, AlmaLinux 9 and 10 | `.rpm` | no (GNOME 40 / 47) | build, install check |
+| Arch Linux, Manjaro, EndeavourOS | `.pkg.tar.zst` | yes (GNOME 48 or newer / KDE Plasma 6) | build |
+
+"Install check" means the package manager accepted the package and its
+dependencies; the app itself was not run on that system. HDR output needs a
+Wayland session. Raspberry Pi OS 32-bit needs a Raspberry Pi 2 or newer; Pi
+Zero and Pi 1 are not supported, and Raspberry Pi OS bookworm 32-bit is not
+supported.
+
+| GPU | Driver | Presentation | HDR10 passthrough (Wayland) | Tested |
+| --- | --- | --- | --- | --- |
+| NVIDIA | proprietary | OpenGL 3.3 | when the driver offers a 10-bit EGL buffer | **real hardware (GeForce RTX 2070)** |
+| AMD | Mesa | OpenGL 3.3 | yes | not yet |
+| Intel | Mesa | OpenGL 3.3 | yes | not yet |
+| Raspberry Pi 4/5 | Mesa v3d | OpenGL ES 3.0 | no (the Pi desktop has no color management) | not yet |
 
 When desktop OpenGL 3.3 is not available, LLCV switches to OpenGL ES 3.0
 automatically. On a Raspberry Pi, MJPEG is decoded by the CPU, so prefer NV12
@@ -81,7 +98,23 @@ ship it in `libnvidia-egl-wayland1`. Arch ships it in `egl-wayland`, which
 `nvidia-utils` already depends on. Fedora and EL ship it in `egl-wayland`
 (RPM Fusion or the NVIDIA repository installs it with the driver).
 
-## Build and install
+When HDR is not available, the app says so and gives the reason. The reason
+appears in Settings → Video → HDR, in the F1 help, in the Tab diagnostics,
+and in a message when an HDR session starts. HDR signals are then shown as
+SDR.
+
+### Capture modes (GC553Pro)
+
+| Resolution | NV12 (uncompressed) | MJPEG | P010 (HDR) |
+| --- | --- | --- | --- |
+| 1920 × 1080 | up to 120 fps | 240 fps | up to 60 fps |
+| 2560 × 1440 | up to 60 fps | 120 / 144 fps | up to 30 fps |
+| 3840 × 2160 | up to 30 fps | 60 fps | not offered |
+
+The frame rate list in the settings comes from the device for the selected
+resolution and format. P010 needs Linux 7.1 or newer (see [HDR](#hdr)).
+
+## Building from source
 
 ```sh
 git clone https://github.com/Meo-Hong/LLCV-for-Linux.git
@@ -159,6 +192,10 @@ menu, to close it.
 
 - **No picture.** Close OBS and any other application that uses the capture
   device.
+- **Only 60 fps in the list.** The device offers higher rates only at some
+  resolutions. Choose 1920 × 1080 for 120 fps (NV12), or 2560 × 1440 with
+  MJPEG for 120 or 144 fps. The source must send a matching signal, and VSync
+  presentation is limited to the monitor's refresh rate.
 - **4K 60 fps.** The GC553Pro offers 4K 60 fps only as MJPEG. Uncompressed
   NV12 is limited to 4K 30 fps, and P010 to 1440p 30 fps.
 - **Washed-out colors with an HDR source.** The source is sending HDR while an
@@ -172,14 +209,15 @@ menu, to close it.
 
 ## Updates
 
-Updates will come from the APT repository at
-`https://meo-hong.github.io/LLCV-for-Linux/` (suite `stable`). It is not
-published yet; the signing key still has to be created. See [packaging/README.md](packaging/README.md) for the release
-checklist. Release packages are built on the oldest supported release of each
-family, so one file serves the newer releases too, and file names carry no
-distribution name.
+The `.deb` packages register the APT repository
+`https://meo-hong.github.io/LLCV-for-Linux/` (suite `stable`), signed with the
+"LLCV Archive Signing Key <busimh001@gmail.com>". New versions then arrive with
+the regular system updates. Each release is built by GitHub Actions from a
+`linux-v*` tag, which also publishes the files on the Releases page. See
+[packaging/README.md](packaging/README.md) for the release process.
 
 ## License
 
-GPL-3.0-or-later. Dear ImGui is MIT licensed. Pretendard is licensed under the
-SIL Open Font License 1.1.
+GPL-3.0-or-later. The original Windows LLCV is by seria-aa; the Linux port is
+by Meo-hong. Dear ImGui is MIT licensed. Pretendard is licensed under the SIL
+Open Font License 1.1.
