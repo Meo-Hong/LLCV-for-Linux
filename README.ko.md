@@ -5,7 +5,7 @@
 HDMI 캡처보드로 들어오는 영상과 소리를 재생하는 Windows용 저지연 뷰어입니다.
 OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리만 들을 수 있습니다.
 
-**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.0.2.md) · [English](README.md)
+**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.0.3.md) · [English](README.md)
 
 <br>
 
@@ -13,7 +13,16 @@ OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리�
 | --- | --- |
 | [![영상 설정](docs/images/settings-video.png)](docs/images/settings-video.png) | [![오디오 설정](docs/images/settings-audio.png)](docs/images/settings-audio.png) |
 
-<sub>2.0.2 설정 화면 예시입니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
+<sub>2.0.3 UI 코드로 렌더링한 설정 예시입니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
+
+<br>
+
+## 2.0.3 업데이트
+
+재생 중 자동 절전 방지 옵션을 추가했습니다. 작은 화면에서는 설정을 스크롤 없이
+페이지로 나누고, 장치·출력 모드 전환과 설정 저장·종료 동작을 보완했습니다.
+MJPEG 버퍼 재사용 등 영상·오디오 처리도 정리했습니다.
+기존 설정과 설치 경로는 유지합니다. 자세한 내용은 [변경 내역](docs/release-notes-v2.0.3.md)을 확인하세요.
 
 <br>
 
@@ -40,6 +49,7 @@ Windows 10/11 x64와 캡처보드 드라이버가 필요합니다.
 - NVIDIA VSR (실험적), 캡처·표시 해상도 개별 설정
 - WASAPI Shared·Exclusive, ASIO, 콘솔 LPCM 5.1, 오디오 전용 모드
 - 입력 해상도 PNG 스크린샷과 클립보드 복사
+- 재생 중 자동 절전 방지 — 오디오 전용 모드에서는 화면 꺼짐 허용
 - 다크·라이트 테마, 전체화면, 창 크기 고정, 음량 조절, 한국어·영어
 
 HDR10은 호환 장치와 HDR 디스플레이가, ASIO는 전용 드라이버가 필요합니다.
@@ -54,7 +64,7 @@ VSR 동작은 GPU·드라이버에 따라 다르며 지연이 늘 수 있습니�
 
 [전체 문서 목록](docs/INDEX.ko.md)에서 릴리스 노트와 개발·검증 기록도 확인할 수 있습니다.
 
-- [사용 가이드](docs/USAGE.ko.md) — 설정, 단축키, VSR, 스크린샷
+- [사용 가이드](docs/USAGE.ko.md) — 설정, 절전 방지, 단축키, VSR, 스크린샷
 - [영상·HDR](docs/VIDEO.ko.md) / [오디오·5.1](docs/AUDIO.ko.md)
 - [문제 해결](docs/TROUBLESHOOTING.ko.md) / [진단·로그](docs/DIAGNOSTICS.ko.md) / [소스 빌드](docs/BUILDING.ko.md)
 

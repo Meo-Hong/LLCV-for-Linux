@@ -21,6 +21,12 @@ frames using stale settings. Equivalent format confirmations continue normally.
 Restart capture if prompted after changing the console's HDR or resolution.
 This does not detect source changes that the device never reports.
 
+Reported device loss or input-path errors also stop playback and provide restart
+guidance; the app does not repeatedly rescan or reconnect the device. An explicit
+end of all capture streams returns to settings and releases sleep-prevention
+requests. Temporary no-signal alone is not treated as stream completion. See
+[playback troubleshooting](TROUBLESHOOTING.md#playback-stops-or-input-disappears).
+
 The app-processing value in the Tab overlay covers this application path. It is
 not the total HDMI-to-display latency; the capture device, source, desktop
 composition, monitor, and input device add latency outside the application.
@@ -29,8 +35,13 @@ composition, monitor, and input device add latency outside the application.
 
 ## Mode detection
 
-Changing the capture device or resolution refreshes the pixel-format and
-frame-rate lists. A fresh configuration starts at 1920 x 1080. The selected
+Changing the capture device or resolution updates the pixel-format and
+frame-rate lists using background queries and cached results. Results are reused
+while settings remain open; **Refresh** requests a fresh device/capability query
+after a device or driver change. Start is unavailable while required video
+capabilities are being checked or could not be queried.
+
+A fresh configuration starts at 1920 x 1080. The selected
 resolution is saved and does not change when the settings or viewer window is
 moved to another monitor.
 
@@ -59,6 +70,8 @@ MJPEG uses Windows Media Foundation for decoding and is intended for devices
 that cannot provide a useful raw mode. Decoding does not add an application
 frame queue, but the device encoder and decoder path can still add more latency
 and load than NV12 or YUY2.
+Decode buffers are reused to reduce repeated allocation. This does not change
+the latest-frame policy or guarantee lower end-to-end latency on every device.
 The viewer prefers the decoder-reported color range and BT.601/709 matrix, then
 DirectShow metadata, and falls back to JPEG full range when neither is present.
 The Tab overlay and diagnostic log report the applied result and its source.
@@ -186,6 +199,11 @@ resolution choices and requirements.
 With **Pixel-perfect** enabled, the client area is fixed to the selected capture
 resolution and mouse resizing is disabled. With it disabled, the window remains
 freely resizable while preserving the video aspect ratio.
+
+Resizing updates only the necessary video-output resources and reuses resources
+that do not depend on window size. This reduces recreation work; it does not
+change capture resolution or buffering, and does not guarantee a measured
+latency improvement.
 
 Pixel-perfect fullscreen keeps a strict 1:1 mapping whenever the capture fits
 the monitor, centers the original image, and clears unused space to black. Both

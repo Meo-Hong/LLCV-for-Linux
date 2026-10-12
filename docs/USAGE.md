@@ -16,9 +16,11 @@ Get one of the files from the [latest release](https://github.com/seria-aa/LowLa
   shortcut is created automatically; the desktop shortcut is optional.
 - **x64.zip — portable:** extract it, then run `LowLatencyCaptureViewer.exe`.
 
-**Installer refreshed on 2026-10-06:** restored automatic Start Menu shortcut creation
-and refined installer alignment. The version remains 2.0.2; the app executable and
-portable ZIP are unchanged. Existing users do not need to reinstall.
+**Updating to 2.0.3:** existing settings and installation paths are retained.
+The new **Prevent sleep during playback** option is enabled by default; turn it
+off on the **App** page if preferred. See the [2.0.3 release notes](release-notes-v2.0.3.md)
+for this update's changes.
+The earlier installer-only refresh is recorded in the [2.0.2 release notes](release-notes-v2.0.2.md).
 
 Windows 10/11 x64 and a capture-device driver are required.
 
@@ -35,6 +37,7 @@ The defaults are a good first test: 1080p, low-latency presentation, WASAPI
 Shared, a 25 ms PCM buffer, and automatic clock-drift correction. A saved 20 ms
 PCM target from an older build is upgraded to 25 ms once on first launch; other
 saved values are preserved. You can select 20 ms again afterward.
+Settings that already went through this migration are not changed again by 2.0.3.
 
 If video works but audio does not, check **Capture audio device**. USB capture
 devices can expose separate video and audio devices; in that case, choose the
@@ -45,7 +48,7 @@ automatically,” no separate selection is needed.
 
 ## Finding your settings
 
-*The following examples are rendered directly from the 2.0.2 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
+*The following examples are rendered directly from the 2.0.3 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
 
 | <a id="video-settings"></a>Video settings | <a id="audio-settings"></a>Audio settings |
 | --- | --- |
@@ -65,15 +68,32 @@ Video contains capture/display settings, VSR, and screenshot options at the bott
 Audio contains output devices, buffers, volume options, audio-only mode, and LPCM 5.1.
 Window controls placement, resizing, borders, and cursor behavior.
 Guide & logs groups keyboard shortcuts and diagnostic logging; App contains language,
-theme, startup, and update preferences.
+theme, startup, sleep prevention, and update preferences.
+
+On small screens or at high display scales, settings fit within the desktop work
+area. When space is limited, use the section selector at the top to access pages
+of options without scrolling.
 
 Choose **Dark** or **Light** under **App → App theme**. Settings, F1 help, and
 the audio-only view share the theme. Overlays drawn over video remain dark for
 contrast against the picture, regardless of the app theme.
 
-Supported format/FPS combinations are queried in the background and reused while
-the settings window remains open. **Refresh** requests a new query. Start remains
+Supported format/FPS combinations, internal capture audio, and WASAPI Shared
+capabilities are queried in the background and reused while the settings window
+remains open. **Refresh** requests a new query. Start remains
 unavailable while the required video capabilities are being checked or could not be queried.
+After changing device connections, refresh and confirm the selection if old information
+remains. Switching between WASAPI and ASIO retains each backend's output device
+and valid buffer choices.
+
+**App → Prevent sleep during playback** is enabled by default. Video playback
+requests that the screen and system stay awake; audio-only playback allows the
+screen to turn off. Requests are released on playback end, capture errors, or
+exit, and are not active while only the settings dialog is open. Explicit sleep,
+lid-close actions, and Windows power policies take precedence. Requests are
+restored when the user returns from sleep and playback continues, not on an
+unattended automatic wake. This does not
+change Windows power settings or disable screen savers or security locks.
 
 <br>
 
@@ -316,11 +336,17 @@ Use F1, Esc, or its Close button to dismiss it; Esc here does not exit the viewe
 | No audio | Select the audio input that belongs to the chosen video device |
 | Occasional audio breakup | Check for buffer shortage in Tab diagnostics, then raise the PCM target in 5 ms steps and test again |
 | Exclusive shows retry required | Check the device connection and whether another app is using it, then select **Recheck all devices**. Use WASAPI Shared to resume playback without an Exclusive check |
+| Playback stops with a device-error message | Check connections and other capture apps, then confirm the device in settings and start again. Devices are not repeatedly reconnected automatically |
+| Settings could not be saved | Check write access, free space, and file locks at the path shown. Previous settings are preserved; changes that failed to save may not survive the next launch |
 | VSR appears to have no effect | Check NV12/YUY2/MJPEG SDR or P010 HDR10 input, a supported NVIDIA rendering GPU/driver, native-size or larger output, the Tab state, and NVIDIA's active indicator; a successful request alone does not confirm activation |
 | Need more evidence | Enable logging in Guide & logs, reproduce the issue, then send the newest `.log` file from **Open log folder** together with screenshots of settings and Tab diagnostics |
 
 Settings and optional logs are stored in `%LOCALAPPDATA%\LowLatencyCaptureViewer`.
-The uninstaller can remove this user data on request.
+The uninstaller can remove this user data on request. Data is retained if the
+running account and target path cannot be verified safely.
+When the capture source explicitly completes all streams, the viewer returns to
+settings. Temporary loss of signal alone is not treated as normal completion.
+See [troubleshooting](TROUBLESHOOTING.md) for recovery steps.
 
 <br>
 

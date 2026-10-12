@@ -70,13 +70,12 @@ void RefreshSettingsPageHeader(SettingsControls* state) {
 }
 
 int SettingsClientHeightDip(const SettingsControls* state) {
-    (void)state;
-    return kSettingsTabbedClientHeightDip;
+    return state ? state->clientHeightDip : kSettingsTabbedClientHeightDip;
 }
 
 SIZE SettingsDialogOuterSize(HWND hwnd, UINT dpi,
                                     const SettingsControls* state) {
-    RECT rect{0, 0, SettingsPixels(kSettingsClientWidthDip, dpi),
+    RECT rect{0, 0, SettingsPixels(state ? state->clientWidthDip : kSettingsClientWidthDip, dpi),
               SettingsPixels(SettingsClientHeightDip(state), dpi)};
     const DWORD style =
         static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_STYLE));
@@ -122,7 +121,7 @@ void PlaceSettingsControl(HWND control, int x, int y, int width,
                  SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
-static void ApplySettingsComboMetrics(HWND control, UINT dpi) {
+void ApplySettingsComboMetrics(HWND control, UINT dpi) {
     if (!control) return;
     RECT previous{};
     GetWindowRect(control, &previous);
@@ -184,7 +183,7 @@ void ApplySettingsFont(SettingsControls* state, HWND hwnd,
                          state->vsrStatus, state->screenshotHelp,
                          state->relativeSizeWarning, state->fullscreenCursorHint,
                          state->guideDiagnosticsText, state->guideVideoHint, state->skipStartupHint,
-                         state->updateText, state->updateStatus}) {
+                         state->preventSleepHint, state->updateText, state->updateStatus}) {
         if (control) SendMessageW(control, WM_SETFONT,
                                   reinterpret_cast<WPARAM>(secondaryFont), FALSE);
     }
@@ -391,13 +390,15 @@ void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
     place(state->languageCombo, 184, 164, 376, 120);
     place(state->themeLabel, 600, 140, 376, 20);
     place(state->themeCombo, 600, 164, 376, 120);
-    place(state->skipStartupCheck, 184, 212, 760, 32);
-    place(state->skipStartupHint, 212, 252, 732, 28);
-    place(state->updateTitle, 184, 312, 792, 24);
-    place(state->updateText, 184, 344, 730, 56);
-    place(state->checkForUpdatesCheck, 184, 412, 760, 32);
-    place(state->updateNowButton, 184, 456, 185, 32);
-    place(state->updateStatus, 184, 500, 792, 48);
+    place(state->skipStartupCheck, 184, 212, 376, 32);
+    place(state->skipStartupHint, 212, 252, 348, 56);
+    place(state->preventSleepCheck, 600, 212, 376, 32);
+    place(state->preventSleepHint, 628, 252, 348, 56);
+    place(state->updateTitle, 184, 344, 792, 24);
+    place(state->updateText, 184, 376, 730, 44);
+    place(state->checkForUpdatesCheck, 184, 432, 760, 32);
+    place(state->updateNowButton, 184, 476, 185, 32);
+    place(state->updateStatus, 184, 520, 792, 48);
     for (HWND combo : {state->audioCombo, state->audioOutputCombo,
                         state->bufferCombo, state->volumeHudCombo,
                         state->driftCombo, state->pcmQueueCombo,
@@ -406,12 +407,15 @@ void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
                         state->pixelFormatCombo, state->presentationCombo,
                         state->displayMonitorCombo, state->scalingCombo,
                         state->hdrChromaCombo, state->mjpegColorCombo,
-                        state->fullscreenCursorCombo, state->languageCombo, state->themeCombo})
+                        state->fullscreenCursorCombo, state->languageCombo, state->themeCombo,
+                        state->sectionNavigation})
         ApplySettingsComboMetrics(combo, dpi);
+    LayoutCompactSettingsControls(state, dpi);
 }
 
 void SetSettingsControlVisible(HWND control, bool visible, bool enabled) {
     if (!control) return;
+    visible = visible && SettingsControlOnCurrentPage(control);
     const bool wasVisible = (GetWindowLongPtrW(control, GWL_STYLE) & WS_VISIBLE) != 0;
     if (wasVisible != visible) ShowWindow(control, visible ? SW_SHOWNA : SW_HIDE);
     const bool shouldEnable = visible && enabled;
@@ -454,6 +458,7 @@ void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
     const bool video = state->activeTab == SettingsTab::VideoWindow;
     const bool guide = state->activeTab == SettingsTab::GuideDiagnostics;
     const bool updates = state->activeTab == SettingsTab::Updates;
+    LayoutCompactSettingsControls(state, state->layoutDpi);
     RefreshSettingsPageHeader(state);
     for (HWND control : {state->tabControl, state->brandLabel,
                          state->pageTitle, state->pageSubtitle,
@@ -462,9 +467,12 @@ void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
         SetSettingsControlVisible(control, true);
     }
     SetSettingsControlVisible(state->startButton, true, availability.start);
+    SetSettingsControlVisible(state->sectionNavigationLabel, SettingsCompactLayout(state));
+    SetSettingsControlVisible(state->sectionNavigation, SettingsCompactLayout(state));
     for (HWND control : {state->languageLabel, state->languageCombo,
                          state->themeLabel, state->themeCombo,
                          state->skipStartupCheck, state->skipStartupHint,
+                         state->preventSleepCheck, state->preventSleepHint,
                          state->appPreferencesSection})
         SetSettingsControlVisible(control, updates);
     for (HWND control : {state->audioOutputSection,

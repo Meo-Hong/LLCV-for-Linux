@@ -1,6 +1,7 @@
 #pragma once
 
 #include "capture/SampleGrabberCompat.h"
+#include "capture/CaptureGraphEvents.h"
 
 #include <dshow.h>
 #include <memory>
@@ -26,6 +27,7 @@ public:
     IGraphBuilder* graph = nullptr;
     IMediaControl* control = nullptr;
     IMediaFilter* mediaFilter = nullptr;
+    CaptureGraphEvents events;
     IBaseFilter* capture = nullptr;
     IBaseFilter* audioCapture = nullptr;
     IPin* videoPin = nullptr;

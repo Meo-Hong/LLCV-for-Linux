@@ -41,12 +41,17 @@ build\Release\LowLatencyCaptureViewer.exe
 Release 구성은 정적 MSVC 런타임을 사용하므로 패키지 실행에 별도 Visual C++
 재배포 패키지가 필요하지 않습니다.
 
+2.0.3에는 설정 페이지·장치 전환·저장 실패·스트림 종료·절전 요청 수명에 대한
+회귀 검사가 포함됩니다. 일부 파일 저장 테스트는 쓰기·이름 변경이 가능한 임시 폴더가
+필요합니다. GPU나 Windows 기능이 없어 건너뛴 검사는 통과한 검사와 구분해 기록하세요.
+절전 API 검사는 PC를 실제로 재우지 않으며, 실제 절전·복귀 검증을 대신하지 않습니다.
+
 <br>
 
 ## 설치 프로그램과 포터블 ZIP
 
 Release 빌드 뒤 저장소 루트에서 아래 명령을 실행합니다. 다음은 위에서 만든
-`build\Release` 실행 파일을 v2.0.2로 패키징하는 예시입니다. 릴리스 스크립트의
+`build\Release` 실행 파일을 v2.0.3로 패키징하는 예시입니다. 릴리스 스크립트의
 기본 경로는 버전별 빌드 폴더이므로 아래 빌드 경로 재정의가 필요합니다.
 
 ```powershell
@@ -54,11 +59,11 @@ chcp.com 65001 > $null
 & "C:\Program Files\Inno Setup 7\ISCC.exe" `
   "--define=BuildDir=..\build\Release" ".\installer\LowLatencyCaptureViewer.iss"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-v1.ps1 `
-  -Version 2.0.2 -BuildDir ..\build\Release -OutputDir outputs\v2.0.2
+  -Version 2.0.3 -BuildDir ..\build\Release -OutputDir outputs\v2.0.3
 ```
 
-생성 파일은 `outputs\v2.0.2\LowLatencyCaptureViewer_v2.0.2_Setup.exe`와
-`outputs\v2.0.2\LowLatencyCaptureViewer_v2.0.2_x64.zip`입니다. 다른 버전은
+생성 파일은 `outputs\v2.0.3\LowLatencyCaptureViewer_v2.0.3_Setup.exe`와
+`outputs\v2.0.3\LowLatencyCaptureViewer_v2.0.3_x64.zip`입니다. 다른 버전은
 먼저 릴리스 관련 버전 표기를 맞춰야 합니다. ZIP 이름만 바꿔도 실행 파일 버전이
 바뀌지는 않습니다. 자세한 절차는 [릴리스 체크리스트](RELEASING.ko.md)를 따릅니다.
 
