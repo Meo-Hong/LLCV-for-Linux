@@ -339,12 +339,16 @@ void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
     place(state->videoCapabilityStatus, 184, 392, 376, 84);
     place(state->forceHdr10Check, 184, 480, 344, 40);
     place(state->forceHdr10Help, 536, 488, 24, 24);
-    place(state->hdrChromaLabel, 184, 528, 322, 20);
-    place(state->hdrChromaCombo, 184, 552, 344, 150);
-    place(state->hdrChromaHelp, 536, 555, 24, 24);
+    // Keep the full compatibility captions readable in the closed field,
+    // including the themed text inset and dropdown arrow.
+    place(state->hdrChromaLabel, 184, 524, 112, 20);
+    place(state->hdrChromaCombo, 304, 520, 224, 150);
+    place(state->hdrChromaHelp, 536, 523, 24, 24);
     place(state->mjpegColorLabel, 184, 488, 322, 20);
     place(state->mjpegColorCombo, 184, 512, 344, 150);
     place(state->mjpegColorHelp, 536, 515, 24, 24);
+    place(state->capture40Check, 184, 554, 344, 28);
+    place(state->capture40Help, 536, 556, 24, 24);
 
     place(state->videoDisplaySection, 600, 112, 376, 20);
     place(state->presentationLabel, 600, 140, 300, 20);
@@ -383,6 +387,7 @@ void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
     place(state->saveLogCheck, 600, 208, 376, 32);
     place(state->showConsoleCheck, 600, 248, 376, 32);
     place(state->guideLogFolderButton, 600, 296, 185, 32);
+    place(state->guideLsButton, 600, 360, 376, 32);
 
     // App-wide preferences no longer dominate every page.
     place(state->appPreferencesSection, 184, 112, 792, 20);
@@ -512,7 +517,11 @@ void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
     }
     SetSettingsControlVisible(state->captureDeviceCombo, video, availability.captureDevice);
     SetSettingsControlVisible(state->pixelFormatCombo, video, availability.formats);
-    SetSettingsControlVisible(state->frameRateCombo, video, availability.formats);
+    const bool capture40 = SendMessageW(state->capture40Check, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    SetSettingsControlVisible(state->frameRateCombo, video, availability.formats && !capture40);
+    SetSettingsControlVisible(state->capture40Check, video, availability.formats);
+    SetSettingsControlVisible(state->capture40Help, video);
+    SetSettingsControlVisible(state->guideLsButton, guide);
     // This row has two mutually exclusive controls: the device picker for a
     // separate capture endpoint, or the short "built-in audio" status. Keep
     // its existing video-tab choice intact; hide both together off-tab.
@@ -627,6 +636,36 @@ bool IsSettingsHelpControl(const SettingsControls* state,
 }
 
 const wchar_t* SettingsHelpText(SettingsHelpTopic topic, bool english) {
+    if (topic == SettingsHelpTopic::Capture40) {
+        // Frame generation is only an external-app example, not an integration.
+        return english
+            ? L"40 fps capture\n"
+              L"• Leave off for normal viewing.\n"
+              L"• Enable to request 40 fps; disable to restore your setting.\n"
+              L"• Support is checked on Start. No fallback to another FPS.\n"
+              L"\n"
+              L"Keep in mind\n"
+              L"• Does not lock game FPS or replace VRR.\n"
+              L"\n"
+              L"Example: Lossless Scaling (LS)\n"
+              L"Console 120 Hz → LLCV 40 fps → LS 3x → Monitor 120 Hz\n"
+              L"• Assumes steady 40 fps. At 30–40 fps, stutter may persist or become more noticeable with LS.\n"
+              L"• LS is separate; configure it and refresh rate yourself.\n"
+              L"• May add latency or artifacts. If worse, disable and compare."
+            : L"40fps 캡처\n"
+              L"• 일반적인 시청에는 끈 채 사용하세요.\n"
+              L"• 체크하면 40fps 요청, 해제하면 기존 설정으로 돌아갑니다.\n"
+              L"• 지원은 시작할 때 확인하며, 다른 FPS로 대체하지 않습니다.\n"
+              L"\n"
+              L"주의사항\n"
+              L"• 게임 FPS 고정·VRR 대체 기능이 아닙니다.\n"
+              L"\n"
+              L"활용 예시: Lossless Scaling (LS)\n"
+              L"콘솔 120Hz → LLCV 40fps → LS 3배 → 모니터 120Hz\n"
+              L"• 40fps 유지 시 예시입니다. 30~40fps로 흔들리면 LS를 써도 끊김이 남거나 더 두드러질 수 있습니다.\n"
+              L"• LS는 별도 앱입니다. 주사율·LS는 직접 설정하세요.\n"
+              L"• 지연·화면 왜곡이 생길 수 있습니다. 더 끊기면 끄고 비교하세요.";
+    }
     if (english) {
         switch (topic) {
         case SettingsHelpTopic::Drift:

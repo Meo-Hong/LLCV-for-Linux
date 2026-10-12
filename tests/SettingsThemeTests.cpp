@@ -360,7 +360,7 @@ void CreateActualContents(TestWindow& state, HWND hwnd, bool english, UINT dpi, 
         settings.allowVolumeBoost = true;
         settings.consoleSurround51 = true;
         settings.captureDeviceId = L"sample-capture";
-        const SettingsControlInitialValues initial{settings, english, asioAvailable, L"v2.0.3 · Preview",
+        const SettingsControlInitialValues initial{settings, english, asioAvailable, L"v2.0.4 · Preview",
             VideoPreset::R1920x1080, devices, devices, presets, pcm, monitors};
         SettingsControlPopulation population{
             &state.controls,
@@ -425,6 +425,7 @@ void CheckActualTabOrder() {
                         c.hdrChromaCombo, c.hdrChromaHelp});
                 if (format == VideoPixelFormat::Mjpeg)
                     expected.insert(expected.end(), {c.mjpegColorCombo, c.mjpegColorHelp});
+                expected.insert(expected.end(), {c.capture40Check, c.capture40Help});
                 expected.insert(expected.end(), {c.presentationCombo, c.presentationHelp,
                     c.displayMonitorCombo, c.pixelCheck});
                 expected.push_back(c.scalingCombo); // fixture enables VSR; lock is display-size only
@@ -444,7 +445,7 @@ void CheckActualTabOrder() {
                     c.roundedCornersCheck, c.windowSnapCheck, c.fullscreenCursorCombo});
                 break;
             case SettingsTab::GuideDiagnostics:
-                expected.insert(expected.end(), {c.saveLogCheck, c.showConsoleCheck, c.guideLogFolderButton});
+                expected.insert(expected.end(), {c.saveLogCheck, c.showConsoleCheck, c.guideLogFolderButton, c.guideLsButton});
                 break;
             case SettingsTab::Updates:
                 expected.insert(expected.end(), {c.languageCombo, c.themeCombo, c.skipStartupCheck,

@@ -1,4 +1,17 @@
-LLCV v2.0.3 x64 (continued from the v0.14.2 rework)
+LLCV v2.0.4 x64 (continued from the v0.14.2 rework)
+
+v2.0.4 Optional 40 fps capture
+----------------------------------------------------------
+- Adds an off-by-default 40 fps driver request, retaining the normal FPS preference.
+- Requires driver acceptance and 40 fps active/connected formats; no silent rate fallback.
+- Leaves detected capability lists unchanged and verifies support only on Start.
+- Preserves accepted-candidate color metadata when an unlisted rate loses readback tags.
+- Keeps explicit connected-format metadata authoritative and normal capture behavior unchanged.
+- Adds bilingual capture guidance; LS appears only as an external-app usage example.
+- Adjusts English HDR chroma layout and isolates saved 40 fps settings from private VSR tests.
+- Extends settings, negotiation, metadata, and UI regression coverage.
+- Retains playback/audio defaults and existing installation/settings paths.
+- Does not establish support for every capture device or guarantee real-game/LS results.
 
 v2.0.3 Settings responsiveness and playback reliability
 -----------------------------------------------------

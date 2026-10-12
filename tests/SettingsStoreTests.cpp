@@ -61,6 +61,7 @@ void TestDefaults(const std::wstring& path) {
     const auto loaded = llcv::settings::LoadFromIni(path);
     Check(!loaded.settings.settingsLightTheme, "legacy and fresh profiles retain dark settings");
     Check(!loaded.settings.screenshotClipboard, "screenshot clipboard is opt-in");
+    Check(!loaded.settings.capture40Fps, "40fps is opt-in for fresh and legacy profiles");
     Check(!loaded.settings.vsrEnabled, "VSR defaults OFF for fresh/legacy settings");
     Check(!loaded.settings.consoleSurround51, "5.1 is opt-in for old and fresh profiles");
     Check(loaded.settings.audioOnlyWidth == 380 && loaded.settings.audioOnlyHeight == 230,
@@ -287,6 +288,7 @@ void TestRoundTrip(const std::wstring& path) {
     saved.windowSnap = false;
     saved.saveLog = true;
     saved.screenshotClipboard = true;
+    saved.capture40Fps = true;
     saved.showDiagnosticConsole = true;
     saved.skipStartupSettings = true;
     saved.checkForUpdates = false;
@@ -346,6 +348,7 @@ void TestRoundTrip(const std::wstring& path) {
     Check(loaded.saveLog && loaded.showDiagnosticConsole,
           "diagnostics round trip");
     Check(loaded.screenshotClipboard, "screenshot clipboard round trip");
+    Check(loaded.capture40Fps, "40fps opt-in round trip");
     Check(loaded.skipStartupSettings && !loaded.checkForUpdates &&
               loaded.audioOnly && !loaded.preventSleep,
           "general settings round trip");

@@ -4,7 +4,7 @@
 
 [README](../README.md) · [Documentation](INDEX.md) · [한국어](VIDEO.ko.md)
 
-[Capture path](#capture-path) · [Mode detection](#mode-detection) · [NV12, YUY2, and MJPEG](#nv12-yuy2-and-mjpeg) · [Frame rate](#frame-rate) · [Presentation](#presentation) · [P010 HDR10](#p010-hdr10) · [Pixel-perfect and resizing](#pixel-perfect-and-resizing) · [Scaling and multi-monitor behavior](#scaling-and-multi-monitor-behavior)
+[Capture path](#capture-path) · [Mode detection](#mode-detection) · [NV12, YUY2, and MJPEG](#nv12-yuy2-and-mjpeg) · [Frame rate](#frame-rate) · [40 fps capture](#40-fps-capture) · [Presentation](#presentation) · [P010 HDR10](#p010-hdr10) · [Pixel-perfect and resizing](#pixel-perfect-and-resizing) · [Scaling and multi-monitor behavior](#scaling-and-multi-monitor-behavior)
 
 <br>
 
@@ -98,6 +98,58 @@ a stable 60 or 120 fps source provides lower video latency and smoother motion.
 When several valid source rates exist, a rate with an even cadence on the target
 display can improve VSync pacing—for example, 120 fps on a 120 or 240 Hz display.
 The source's real maximum rate still takes priority over monitor refresh rate.
+
+<br>
+
+### 40 fps capture
+
+**40 fps capture** is off by default. Enable it at the bottom-left of Video settings
+to request 40 fps from the capture driver instead of the normal frame-rate selection. Disabling it
+restores that selection. Mode detection does not insert synthetic 40 fps entries.
+An unlisted rate may work, but support depends on the device, resolution and pixel
+format. If the driver rejects the request or the connected format does not report
+40 fps, startup fails rather than silently substituting another rate. The check
+runs on **Start**; toggling the option alone does not open or test the device.
+Driver-reported format and actual delivery rate can differ, so check the measured
+input FPS in the Tab overlay too.
+
+The option requests a capture rate within a supported resolution/format combination.
+Which NV12, YUY2, P010, or MJPEG combinations accept 40 fps depends on the driver.
+The app does not interpolate frames or convert a faster stream to 40 fps in software.
+Each 40 fps frame spans 25 ms, so input changes may appear later than with
+60/120 fps capture. The option alone does not reduce latency or smooth motion.
+
+Keep the normal frame-rate selection for ordinary viewing. A 40 fps game can
+also be viewed by capturing its supported 120 Hz output at 120 fps; the game's
+40 fps rate alone is not a reason to enable this option. Use it only when a
+specific capture rate is needed.
+
+A game varying between 30 and 40 fps can produce repeated frames in fixed 40 fps
+capture, for example held for 25 or 50 ms, even without losing unique frames.
+This does not lock the game to 40 fps or replace VRR. The app also includes
+**Guide & logs → 40 fps capture guide** for the basic behavior and cautions.
+
+#### Usage example: Lossless Scaling
+
+This is an example of supplying 40 fps input to an external frame-generation app,
+not a built-in LS integration or a required combination.
+
+**This assumes a game holding a steady 40 fps.** If it fluctuates between 30 and
+40 fps, repeated frames can leave stutter intact or make it more noticeable with LS.
+
+For a console's 40 fps game mode, use 120 Hz HDMI output when supported and confirm
+the signal in the capture card's input information. HDMI 120 Hz does not imply
+120 unique game frames. A 60 Hz signal cannot preserve evenly spaced 40 fps motion.
+
+[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) is
+a separate app, not a built-in LLCV feature. If you choose to use it, leave GPU
+headroom and apply its frame generation to the LLCV window. For example, 40 fps multiplied by three targets
+120 fps; compare on a 120 Hz viewing monitor. LLCV does not change the monitor
+refresh rate or configure LS automatically.
+
+LS can add latency and visual artifacts; actual game/LS
+results are not guaranteed. If worse, disable this option and LS, then compare
+normal capture.
 
 <br>
 

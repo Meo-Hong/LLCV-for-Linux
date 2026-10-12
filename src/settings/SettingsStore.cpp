@@ -314,6 +314,7 @@ LoadResult LoadFromIni(const std::wstring& path) {
     }
     settings.videoFrameRate =
         std::max(0, ReadInt(path, L"Video", L"FrameRate"));
+    settings.capture40Fps = ReadBool(path, L"Video", L"Capture40Fps");
     const auto presentation = ReadString(path, L"Video", L"Presentation",
                                          L"AllowTearing");
     settings.presentationMode = _wcsicmp(presentation.c_str(), L"Compatibility") == 0
@@ -472,6 +473,7 @@ static DWORD WriteSettings(const std::wstring& file, const AppSettings& settings
     WriteString(path, L"Video", L"PixelFormat",
                 PixelFormatSettingName(settings.pixelFormat));
     WriteInt(path, L"Video", L"FrameRate", settings.videoFrameRate);
+    WriteInt(path, L"Video", L"Capture40Fps", settings.capture40Fps ? 1 : 0);
     WriteString(path, L"Video", L"Presentation",
                 settings.presentationMode == PresentationMode::Compatibility
                     ? L"Compatibility"

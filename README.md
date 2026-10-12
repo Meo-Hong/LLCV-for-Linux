@@ -5,7 +5,7 @@
 A low-latency Windows viewer for video and audio from HDMI capture devices.
 Use it to play console games without OBS, or listen in audio-only mode.
 
-**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.0.3.md) · [한국어](README.ko.md)
+**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.0.4.md) · [한국어](README.ko.md)
 
 <br>
 
@@ -13,17 +13,17 @@ Use it to play console games without OBS, or listen in audio-only mode.
 | --- | --- |
 | [![Video settings](docs/images/settings-video-en.png)](docs/images/settings-video-en.png) | [![Audio settings](docs/images/settings-audio-en.png)](docs/images/settings-audio-en.png) |
 
-<sub>Settings examples rendered from the 2.0.3 UI code. Click an image to view it at full resolution.</sub>
+<sub>Settings examples rendered from the 2.0.4 UI code. Click an image to view it at full resolution.</sub>
 
 <br>
 
-## What's new in 2.0.3
+## What's new in 2.0.4
 
-Added optional sleep prevention during playback. Settings use pages instead of
-scrollbars on small screens, with fixes for device/output-mode changes, saving,
-and shutdown. Video/audio processing also reuses more resources, including MJPEG
-decode buffers. Existing settings and installation paths are retained.
-See the [release notes](docs/release-notes-v2.0.3.md) for details.
+Added **40 fps capture** in Video settings. Enable it to request 40 fps from the
+driver; disable it to restore the normal frame-rate selection. It is off by
+default, and support is checked at startup. Enable it only when needed; normal
+viewing can keep the existing frame-rate selection. Existing settings and installation paths are retained.
+[40 fps capture guide](docs/VIDEO.md#40-fps-capture) · [Full release notes](docs/release-notes-v2.0.4.md)
 
 <br>
 
@@ -47,6 +47,7 @@ For the portable version, extract **x64.zip** and run `LowLatencyCaptureViewer.e
 
 - Latest-frame-first presentation with Immediate or VSync output
 - NV12/YUY2, MJPEG, and P010 HDR10 input
+- Optional 40 fps capture where supported by the device and driver
 - NVIDIA VSR (experimental), with separate capture and display resolutions
 - WASAPI Shared/Exclusive, ASIO, console LPCM 5.1, and audio-only mode
 - Source-resolution PNG screenshots with optional clipboard copy

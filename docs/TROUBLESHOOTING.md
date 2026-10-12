@@ -4,7 +4,7 @@
 
 [README](../README.md) · [Documentation](INDEX.md) · [한국어](TROUBLESHOOTING.ko.md)
 
-[Capture initialization fails](#capture-initialization-fails) · [Playback stops or input disappears](#playback-stops-or-input-disappears) · [Devices or supported modes look out of date](#devices-or-supported-modes-look-out-of-date) · [Video works but audio does not](#video-works-but-audio-does-not) · [The picture is soft](#the-picture-is-soft) · [MJPEG color differs from another application](#mjpeg-color-differs-from-another-application) · [Frame drops or stutter](#frame-drops-or-stutter) · [Settings window is skipped](#settings-window-is-skipped) · [Settings could not be saved](#settings-could-not-be-saved) · [Sleep or screen-off behavior](#sleep-or-screen-off-behavior) · [Collecting a useful report](#collecting-a-useful-report)
+[Capture initialization fails](#capture-initialization-fails) · [40 fps startup](#40-fps-capture-will-not-start) · [Playback stops or input disappears](#playback-stops-or-input-disappears) · [Devices or supported modes look out of date](#devices-or-supported-modes-look-out-of-date) · [Video works but audio does not](#video-works-but-audio-does-not) · [The picture is soft](#the-picture-is-soft) · [MJPEG color differs from another application](#mjpeg-color-differs-from-another-application) · [Frame drops or stutter](#frame-drops-or-stutter) · [Settings window is skipped](#settings-window-is-skipped) · [Settings could not be saved](#settings-could-not-be-saved) · [Sleep or screen-off behavior](#sleep-or-screen-off-behavior) · [Collecting a useful report](#collecting-a-useful-report)
 
 <br>
 
@@ -32,6 +32,25 @@ already owns the device, or when a driver rejects the requested allocation.
 unavailable requested mode, a missing compatible capture pin, or no compatible
 48 kHz mono/stereo uncompressed PCM or 32-bit float audio path. The stage and
 pin diagnostics in the log are more useful than the code by itself.
+
+<br>
+
+## 40 fps capture will not start
+
+Enabling **40 fps capture** does not add 40 fps to the detected modes. A driver
+may accept an unlisted rate, but an available checkbox is not proof of support.
+The app checks acceptance and the connected format when you select **Start**.
+
+1. Disable 40 fps capture and retry the normal frame-rate selection.
+2. If normal capture works, check 40 fps support for that resolution/pixel format.
+   Try only other formats actually offered by the driver.
+3. If it still fails, include a diagnostic log, capture-device name, resolution,
+   and pixel format in your report.
+
+The app does not silently replace a failed 40 fps request with 60/120 fps.
+Even after successful startup, the reported format and actual delivery rate are
+separate: check **Actual FPS** in Tab. Check the console's HDMI input Hz separately
+in the capture-card utility.
 
 <br>
 
@@ -108,6 +127,12 @@ same scene with the diagnostic log. The manual setting affects MJPEG only.
 <br>
 
 ## Frame drops or stutter
+
+If using 40 fps capture with LS, first disable LS and the 40 fps option and compare normal capture.
+For 40 fps or LS 3× output, try 120 Hz on a monitor that supports it. Since 144 is
+not an integer multiple of 40, fixed-refresh presentation can have uneven spacing.
+Matching refresh rate does not remove the game's own variation between 30 and
+40 fps. See the [40 fps capture guide](VIDEO.md#40-fps-capture).
 
 Confirm that Input FPS matches the selected source rate and compare it with
 Present FPS in the Tab overlay. Try NV12 before YUY2 or MJPEG, reduce resolution
