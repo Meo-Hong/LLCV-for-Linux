@@ -34,6 +34,11 @@ to prevent that queue.
 
 Video statistics exclude the first five seconds after startup.
 
+With 40 fps capture enabled, check the measured Input rate under **Actual FPS**,
+not just the format's nominal FPS. This counts samples arriving at the app, not
+unique game frames or the console's HDMI output Hz. Repeated pictures count as
+input samples too. Frames generated later by LS are not part of LLCV's Present FPS.
+
 <br>
 
 ## Audio fields

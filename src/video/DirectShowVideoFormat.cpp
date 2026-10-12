@@ -464,12 +464,23 @@ bool FindMatchingDirectShowColorMetadata(
     return found;
 }
 
+bool Is40FpsMediaType(const AM_MEDIA_TYPE* mediaType) {
+    int width = 0, height = 0;
+    REFERENCE_TIME duration = 0;
+    DWORD bytes = 0;
+    return VideoFormatDetails(mediaType, width, height, duration, bytes) &&
+        duration >= 249000 && duration <= 251000;
+}
+
 HRESULT ConfigureVideoPin(
     IPin* videoPin, int wantedWidth, int wantedHeight, int wantedFps,
     VideoPixelFormat wantedFormat, DWORD& imageBytes, UINT32& stride,
     int& configuredFps, VideoPixelFormat& configuredFormat,
-    LogCallback logCallback) {
+    LogCallback logCallback, bool request40Fps,
+    CaptureColorMetadata* acceptedCandidateColor) {
+    if (acceptedCandidateColor) *acceptedCandidateColor = {};
     if (!videoPin) return E_POINTER;
+    if (request40Fps && wantedFps != 40) return E_INVALIDARG;
     IAMStreamConfig* config = nullptr;
     HRESULT hr = videoPin->QueryInterface(IID_PPV_ARGS(&config));
     if (FAILED(hr)) return hr;
@@ -518,7 +529,7 @@ HRESULT ConfigureVideoPin(
             height == wantedHeight && duration >= 0) {
             LogMode(logCallback, i, format, width, height, duration, streamCaps);
             if (wantedFps > 0 && fps != wantedFps &&
-                FrameRateAllowedByCaps(streamCaps, wantedFps)) {
+                (FrameRateAllowedByCaps(streamCaps, wantedFps) || request40Fps)) {
                 auto* adjusted = CloneMediaType(candidate);
                 if (adjusted && SetVideoFrameDuration(adjusted, FrameDurationForRate(wantedFps)))
                     candidates.push_back({adjusted, wantedFps, bytes, format});
@@ -564,6 +575,9 @@ HRESULT ConfigureVideoPin(
     if (!requestedRateAdvertised) LogQuery(logCallback, L"requested-rate-not-advertised", wantedFps,
                                           HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED));
     for (auto& candidate : candidates) {
+        // Explicit opt-in only: never substitute another rate or advertise
+        // synthetic capabilities. Some drivers accept rates absent from caps.
+        if (request40Fps && candidate.fps != 40) continue;
         DWORD candidateBytes = 0;
         UINT32 candidateStride = 0;
         int candidateFps = candidate.fps;
@@ -575,12 +589,31 @@ HRESULT ConfigureVideoPin(
         }
         hr = config->SetFormat(candidate.mediaType);
         LogQuery(logCallback, L"SetFormat/fps", candidate.fps, hr);
+        if (SUCCEEDED(hr) && request40Fps) {
+            AM_MEDIA_TYPE* actual = nullptr;
+            hr = config->GetFormat(&actual);
+            if (SUCCEEDED(hr)) {
+                hr = Is40FpsMediaType(actual)
+                    ? ValidateVideoLayout(actual, wantedWidth, wantedHeight,
+                        candidate.format, candidateBytes, candidateStride, candidateFps)
+                    : VFW_E_TYPE_NOT_ACCEPTED;
+            }
+            DeleteMediaType(actual);
+            LogQuery(logCallback, L"40fps/readback", 40, hr);
+        }
         if (SUCCEEDED(hr)) {
             selected = &candidate;
             imageBytes = candidateBytes;
             stride = candidateStride;
             configuredFps = candidateFps;
             configuredFormat = candidate.format;
+            // Retimed modes may not exist in GetStreamCaps, and GetFormat can
+            // omit their color flags. Retain only the accepted candidate's
+            // hints; active/connected metadata still takes precedence later.
+            if (acceptedCandidateColor) {
+                ExtractDirectShowColorMetadata(
+                    candidate.mediaType, *acceptedCandidateColor);
+            }
             break;
         }
     }

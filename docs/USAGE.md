@@ -16,10 +16,11 @@ Get one of the files from the [latest release](https://github.com/seria-aa/LowLa
   shortcut is created automatically; the desktop shortcut is optional.
 - **x64.zip — portable:** extract it, then run `LowLatencyCaptureViewer.exe`.
 
-**Updating to 2.0.3:** existing settings and installation paths are retained.
-The new **Prevent sleep during playback** option is enabled by default; turn it
-off on the **App** page if preferred. See the [2.0.3 release notes](release-notes-v2.0.3.md)
-for this update's changes.
+**Updating to 2.0.4:** existing settings and installation paths are retained.
+The new **40 fps capture** option is off by default; enable it under **Video**
+only when needed. See the [2.0.4 release notes](release-notes-v2.0.4.md).
+Sleep prevention and earlier settings improvements are covered in the
+[2.0.3 release notes](release-notes-v2.0.3.md).
 The earlier installer-only refresh is recorded in the [2.0.2 release notes](release-notes-v2.0.2.md).
 
 Windows 10/11 x64 and a capture-device driver are required.
@@ -37,7 +38,7 @@ The defaults are a good first test: 1080p, low-latency presentation, WASAPI
 Shared, a 25 ms PCM buffer, and automatic clock-drift correction. A saved 20 ms
 PCM target from an older build is upgraded to 25 ms once on first launch; other
 saved values are preserved. You can select 20 ms again afterward.
-Settings that already went through this migration are not changed again by 2.0.3.
+Settings that already went through this migration are not changed again on update.
 
 If video works but audio does not, check **Capture audio device**. USB capture
 devices can expose separate video and audio devices; in that case, choose the
@@ -48,7 +49,7 @@ automatically,” no separate selection is needed.
 
 ## Finding your settings
 
-*The following examples are rendered directly from the 2.0.3 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
+*The following settings examples are rendered directly from the 2.0.4 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
 
 | <a id="video-settings"></a>Video settings | <a id="audio-settings"></a>Audio settings |
 | --- | --- |
@@ -64,10 +65,10 @@ automatically,” no separate selection is needed.
 </details>
 
 The sidebar separates **Video**, **Audio**, **Window**, **Guide & logs**, and **App**.
-Video contains capture/display settings, VSR, and screenshot options at the bottom.
+Video contains capture/display settings, VSR, and 40 fps capture/screenshot options at the bottom.
 Audio contains output devices, buffers, volume options, audio-only mode, and LPCM 5.1.
 Window controls placement, resizing, borders, and cursor behavior.
-Guide & logs groups keyboard shortcuts and diagnostic logging; App contains language,
+Guide & logs groups keyboard shortcuts, 40 fps capture guidance, and diagnostic logging; App contains language,
 theme, startup, sleep prevention, and update preferences.
 
 On small screens or at high display scales, settings fit within the desktop work
@@ -106,6 +107,7 @@ change Windows power settings or disable screen savers or security locks.
 | Capture resolution | **1920 × 1080** to start. With VSR enabled, this field becomes **Display resolution**; set input size separately in **VSR capture** |
 | Pixel format | **Auto (NV12 preferred)** |
 | Frame rate | **Auto**, or the source's actual output rate |
+| 40 fps capture | **Off (default)**. Enable to request 40 fps instead of the normal frame-rate selection; support is checked at startup |
 | Presentation | **Immediate (minimum latency)**; **VSync (reduced tearing)** waits for refresh. **Compatibility (Blt + VSync)** uses an alternative output path, may add latency/GPU load, and does not support HDR10 |
 | Display monitor | **Auto (restore last position)**; select a monitor to choose the startup location. A missing monitor falls back to the primary display; moving the window afterward is still allowed |
 | Pixel-perfect / Lock display size | Without VSR, locks the source-sized window. With VSR, locks the selected display size. Turn off to resize manually |
@@ -113,6 +115,12 @@ change Windows power settings or disable screen savers or security locks.
 A 120 fps capture mode does not create extra visual information when the game
 does not output a new frame at that rate. Choose only frame rates that the
 source and capture device actually support.
+
+Disabling 40 fps capture restores the normal frame-rate selection. Unsupported
+requests produce a startup error rather than silently falling back to another
+FPS. This does not lock a game's FPS or replace VRR. Keep normal capture for
+ordinary viewing. See the [40 fps capture guide](VIDEO.md#40-fps-capture)
+for requirements and usage examples.
 
 ### Audio
 
@@ -332,6 +340,7 @@ Use F1, Esc, or its Close button to dismiss it; Esc here does not exit the viewe
 | Problem | Try this first |
 | --- | --- |
 | No video | Close OBS/vendor tools, check the capture device and supported resolution, then choose Auto pixel format |
+| 40 fps capture will not start | Disable the option and retry the normal rate. Support depends on the device, resolution, and format; see [40 fps troubleshooting](TROUBLESHOOTING.md#40-fps-capture-will-not-start) |
 | Monitor briefly loses signal in Low latency mode | The graphics driver may be incompatible with the tearing presentation path. Change Presentation to **VSync**; borderless mode can remain enabled |
 | No audio | Select the audio input that belongs to the chosen video device |
 | Occasional audio breakup | Check for buffer shortage in Tab diagnostics, then raise the PCM target in 5 ms steps and test again |

@@ -1,4 +1,5 @@
 #include "video/DirectShowVideoFormat.h"
+#include "video/HdrPolicy.h"
 
 #include <dvdmedia.h>
 #include <mfapi.h>
@@ -194,6 +195,160 @@ void TestChangingDriverCapabilities() {
     std::puts("range-only enumeration/selection and distinct failure logging passed.");
 }
 
+void TestExplicit40Fps() {
+    using namespace llcv::video;
+    for (const auto format : {VideoPixelFormat::Nv12, VideoPixelFormat::Yuy2,
+                              VideoPixelFormat::P010, VideoPixelFormat::Mjpeg}) {
+        FakeVideoPin pin;
+        pin.modes = {{60}};
+        auto& mode = pin.modes.front();
+        mode.subtype = format == VideoPixelFormat::Nv12 ? MEDIASUBTYPE_NV12 :
+            format == VideoPixelFormat::Yuy2 ? MEDIASUBTYPE_YUY2 :
+            format == VideoPixelFormat::P010 ? MFVideoFormat_P010 : MEDIASUBTYPE_MJPG;
+        mode.imageBytes = format == VideoPixelFormat::P010 ? 1920*1080*3 :
+            format == VideoPixelFormat::Yuy2 ? 1920*1080*2 : 1920*1080*3/2;
+        pin.echoAcceptedFormat = true;
+        DWORD bytes = 0; UINT32 stride = 0; int fps = 0;
+        VideoPixelFormat actual{};
+        auto configure = [&](bool enabled) {
+            pin.attemptedRates.clear();
+            return ConfigureVideoPin(&pin,1920,1080,40,format,
+                bytes,stride,fps,actual,nullptr,enabled);
+        };
+        Check(SUCCEEDED(configure(true)) && fps == 40 && actual == format &&
+            pin.attemptedRates == std::vector<int>{40},
+            "opt-in negotiates unlisted 40fps for each supported pixel format");
+        const auto caps = ProbePixelFormats(&pin,1920,1080);
+        Check(caps.size()==1 && caps.front().selectedFps==60,
+            "40fps request never contaminates advertised capabilities");
+        pin.rejectedRate = 40;
+        Check(FAILED(configure(true)) && pin.attemptedRates==std::vector<int>{40},
+            "40fps refusal cannot fall back to 60fps");
+        pin.rejectedRate = 0; pin.echoAcceptedFormat = false;
+        Check(FAILED(configure(true)), "driver silently returning 60fps is rejected");
+        pin.nullActiveFormat = true;
+        Check(FAILED(configure(true)), "missing driver readback is rejected");
+        pin.nullActiveFormat = false;
+        Check(SUCCEEDED(configure(false)) && fps==60,
+            "disabled opt-in preserves legacy negotiation and fallback");
+        Check(pin.references==1,"40fps negotiation releases COM references");
+    }
+    VIDEOINFOHEADER2 info{};
+    info.bmiHeader.biWidth=1920; info.bmiHeader.biHeight=1080;
+    AM_MEDIA_TYPE media{};
+    media.majortype=MEDIATYPE_Video; media.subtype=MEDIASUBTYPE_NV12;
+    media.formattype=FORMAT_VideoInfo2; media.cbFormat=sizeof(info);
+    media.pbFormat=reinterpret_cast<BYTE*>(&info);
+    for (REFERENCE_TIME duration : {0LL,166667LL,248999LL,251001LL,333333LL}) {
+        info.AvgTimePerFrame=duration;
+        Check(!Is40FpsMediaType(&media),"connected timing outside 40fps tolerance is rejected");
+    }
+    for (REFERENCE_TIME duration : {249000LL,250000LL,251000LL}) {
+        info.AvgTimePerFrame=duration;
+        Check(Is40FpsMediaType(&media),"valid 40fps connected timing accepted");
+    }
+}
+
+void TestAcceptedCandidateColorMetadata() {
+    using namespace llcv::video;
+    // DXVA extended color data: left chroma, studio range, BT.2020 NCL/PQ.
+    constexpr DWORD pqLeft = AMCONTROL_COLORINFO_PRESENT |
+        (5u << 8) | (2u << 12) | (4u << 15) | (9u << 22) | (15u << 27);
+    constexpr DWORD hlgLeft = (pqLeft & ~(31u << 27)) | (16u << 27);
+    const auto modeWithColor = [](DWORD flags) {
+        FakeVideoPin::Mode mode{60};
+        mode.subtype = MFVideoFormat_P010;
+        mode.imageBytes = 1920 * 1080 * 3;
+        mode.controlFlags = flags;
+        return mode;
+    };
+    DWORD bytes = 0;
+    UINT32 stride = 0;
+    int fps = 0;
+    VideoPixelFormat format{};
+    CaptureColorMetadata selected{};
+    auto configure = [&](FakeVideoPin& pin, bool request40 = true) {
+        return ConfigureVideoPin(&pin, 1920, 1080, request40 ? 40 : 60,
+            VideoPixelFormat::P010, bytes, stride, fps, format, nullptr,
+            request40, &selected);
+    };
+
+    for (const DWORD flags : {pqLeft, hlgLeft}) {
+        for (const bool legacy : {false, true}) {
+            FakeVideoPin pin;
+            pin.modes = {modeWithColor(flags)};
+            pin.echoAcceptedFormat = true;
+            pin.stripReadbackColor = true;
+            pin.legacyReadback = legacy;
+            Check(SUCCEEDED(configure(pin)) && fps == 40 && selected.present &&
+                selected.controlFlags == flags && selected.chromaSubsampling == 5 &&
+                selected.transferFunction == (flags == pqLeft ? 15u : 16u),
+                "unlisted 40fps retains exact accepted caps-only PQ/HLG color hints");
+            Check(pin.formatQueries == 1,
+                "retaining color does not add a driver query to strict negotiation");
+            CaptureColorMetadata matched{};
+            Check(!FindMatchingDirectShowColorMetadata(&pin, VideoPixelFormat::P010,
+                1920, 1080, 40, matched),
+                "reproduction: exact-rate caps lookup cannot recover retimed color hints");
+            AM_MEDIA_TYPE* active = nullptr;
+            Check(SUCCEEDED(GetActiveVideoPinFormat(&pin, &active)),
+                "query stripped active format after selecting 40fps");
+            CaptureColorMetadata activeColor{};
+            Check(!ExtractDirectShowColorMetadata(active, activeColor),
+                "reproduction: readback omits color for both header styles");
+            MergeDirectShowColorMetadata(selected, activeColor);
+            const auto resolved = llcv::hdr::ResolveInput(selected, false);
+            if (flags == pqLeft) {
+                Check(resolved.kind == llcv::hdr::InputKind::Hdr10 && !resolved.assumed &&
+                    resolved.colorSpace == DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020,
+                    "retimed PQ preserves left chroma instead of assuming top-left");
+            } else {
+                Check(resolved.kind == llcv::hdr::InputKind::Unsupported,
+                    "retimed HLG remains unsupported instead of being assumed HDR10");
+            }
+            if (active) {
+                if (active->pUnk) active->pUnk->Release();
+                CoTaskMemFree(active->pbFormat);
+                CoTaskMemFree(active);
+            }
+            // The original explicitly advertised mode still has the same color
+            // and no new readback query in ordinary negotiation.
+            const int queriesBefore = pin.formatQueries;
+            Check(SUCCEEDED(configure(pin, false)) && fps == 60 &&
+                selected.controlFlags == flags && pin.formatQueries == queriesBefore,
+                "normal 60fps selection retains color without extra driver work");
+            Check(pin.references == 1, "caps-only color tests release COM references");
+        }
+    }
+
+    FakeVideoPin pin;
+    pin.echoAcceptedFormat = true;
+    pin.stripReadbackColor = true;
+    pin.modes = {modeWithColor(pqLeft), modeWithColor(hlgLeft)};
+    pin.rejectedControlFlags = pqLeft;
+    Check(SUCCEEDED(configure(pin)) && selected.controlFlags == hlgLeft &&
+        pin.attemptedRates == std::vector<int>({40, 40}),
+        "rejected candidate color cannot replace a later accepted candidate");
+    pin.modes[1].controlFlags = 0;
+    Check(SUCCEEDED(configure(pin)) && !selected.present && selected.controlFlags == 0,
+        "a later untagged accepted candidate does not inherit rejected color");
+    pin.modes = {modeWithColor(pqLeft)};
+    selected.present = true; selected.controlFlags = hlgLeft;
+    Check(FAILED(configure(pin)) && !selected.present && selected.controlFlags == 0,
+        "SetFormat refusal clears previous selected metadata");
+    pin.rejectedControlFlags = 0;
+    pin.echoAcceptedFormat = false;
+    selected.present = true; selected.controlFlags = hlgLeft;
+    Check(FAILED(configure(pin)) && !selected.present && selected.controlFlags == 0,
+        "readback refusal does not expose the rejected candidate's color");
+    selected.present = true; selected.controlFlags = hlgLeft;
+    Check(ConfigureVideoPin(nullptr, 1920, 1080, 40, VideoPixelFormat::P010,
+        bytes, stride, fps, format, nullptr, true, &selected) == E_POINTER &&
+        !selected.present && selected.controlFlags == 0,
+        "invalid call clears selected metadata before returning");
+    Check(pin.references == 1, "failed metadata selections release COM references");
+}
+
 void TestSelectedVersusActiveFormat() {
     using namespace llcv::video;
     FakeVideoPin pin;
@@ -320,6 +475,8 @@ int main(int argc, char** argv) {
     TestColorMetadataMerge();
     TestChangingDriverCapabilities();
     TestSelectedVersusActiveFormat();
+    TestExplicit40Fps();
+    TestAcceptedCandidateColorMetadata();
     TestLayoutBoundariesAndProbeErrors();
     if (failures != 0) {
         std::fprintf(stderr, "%d test(s) failed.\n", failures);

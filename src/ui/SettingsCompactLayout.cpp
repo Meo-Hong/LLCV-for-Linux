@@ -134,6 +134,7 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
             {s->captureAudioDeviceCombo,0,24,width,30},{s->captureAudioStatus,0,24,width,30}});
         pages.Field(s->videoLabel,s->videoCombo);
         pages.Field(s->frameRateLabel,s->frameRateCombo);
+        pages.Check(s->capture40Check,s->capture40Help);
         pages.Group(text(L"영상 형식",L"Video format"));
         pages.Field(s->pixelFormatLabel,s->pixelFormatCombo);
         pages.Text(s->videoCapabilityStatus,88);
@@ -203,6 +204,7 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
         pages.Check(s->saveLogCheck);
         pages.Check(s->showConsoleCheck);
         pages.Button(s->guideLogFolderButton);
+        pages.Button(s->guideLsButton);
         break;
     case SettingsTab::Updates:
         pages.Group(text(L"일반",L"General"));

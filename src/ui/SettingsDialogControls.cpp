@@ -381,6 +381,22 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     state->guideDiagnosticsTitle = makeLabel(
         initial.english ? L"Diagnostics" : L"진단", 505, 62);
     state->screenshotTitle = makeLabel(text(L"스크린샷 (F12)"), 505, 470);
+    state->capture40Check = CreateWindowExW(0, L"BUTTON",
+        initial.english ? L"40 fps capture" : L"40fps 캡처",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+        0, 0, 344, 32, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_CAPTURE_40)), instance, nullptr);
+    SendMessageW(state->capture40Check, BM_SETCHECK,
+        initial.settings.capture40Fps ? BST_CHECKED : BST_UNCHECKED, 0);
+    state->capture40Help = CreateWindowExW(0, L"BUTTON", L"?",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+        0, 0, 24, 24, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_CAPTURE_40_HELP)), instance, nullptr);
+    state->guideLsButton = CreateWindowExW(0, L"BUTTON",
+        initial.english ? L"40 fps capture guide" : L"40fps 캡처 안내",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+        0, 0, 376, 32, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_LS_GUIDE)), instance, nullptr);
     state->videoRefreshButton = CreateWindowExW(0, L"BUTTON",
         initial.english ? L"Refresh" : L"새로고침",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
@@ -862,6 +878,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         state->forceHdr10Check, state->forceHdr10Help,
         state->hdrChromaLabel, state->hdrChromaCombo, state->hdrChromaHelp,
         state->mjpegColorLabel, state->mjpegColorCombo, state->mjpegColorHelp,
+        state->capture40Check, state->capture40Help,
         state->videoDisplaySection,
         state->presentationLabel, state->presentationCombo, state->presentationHelp,
         state->displayMonitorLabel, state->displayMonitorCombo, state->pixelCheck,
@@ -891,6 +908,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         state->guideShortcutsTitle, state->guideVideoHint,
         state->guideDiagnosticsTitle, state->guideDiagnosticsText,
         state->saveLogCheck, state->showConsoleCheck, state->guideLogFolderButton,
+        state->guideLsButton,
 
         state->appPreferencesSection, state->languageLabel, state->languageCombo,
         state->themeLabel, state->themeCombo,

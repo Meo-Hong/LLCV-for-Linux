@@ -29,6 +29,9 @@ static LRESULT CALLBACK CountEnableTransitions(HWND hwnd, UINT message, WPARAM w
     return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 static constexpr Member kMembers[] = {
+    {&SettingsControls::capture40Check, "capture40Check"},
+    {&SettingsControls::capture40Help, "capture40Help"},
+    {&SettingsControls::guideLsButton, "guideLsButton"},
     {&SettingsControls::videoRefreshButton, "videoRefreshButton"},
     {&SettingsControls::brandLabel, "brandLabel"},
     {&SettingsControls::pageTitle, "pageTitle"},
@@ -169,7 +172,10 @@ static constexpr Geometry kGeometry[] = {
     {&SettingsControls::frameRateCombo, "frameRateCombo", 380, 292, 292, 180, 30},
     {&SettingsControls::pixelFormatCombo, "pixelFormatCombo", 184, 356, 356, 376, 30},
     {&SettingsControls::videoCapabilityStatus, "videoCapabilityStatus", 184, 392, 392, 376, 84},
-    {&SettingsControls::hdrChromaCombo, "hdrChromaCombo", 184, 552, 552, 344, 30},
+    {&SettingsControls::hdrChromaCombo, "hdrChromaCombo", 304, 520, 520, 224, 30},
+    {&SettingsControls::capture40Check, "capture40Check", 184, 554, 554, 344, 28},
+    {&SettingsControls::capture40Help, "capture40Help", 536, 556, 556, 24, 24},
+    {&SettingsControls::guideLsButton, "guideLsButton", 600, 360, 360, 376, 32},
     {&SettingsControls::vsrCheck, "vsrCheck", 600, 376, 376, 264, 32},
     {&SettingsControls::vsrGuideButton, "vsrGuideButton", 876, 376, 376, 100, 32},
     {&SettingsControls::vsrCaptureCombo, "vsrCaptureCombo", 786, 412, 412, 190, 30},
@@ -255,7 +261,11 @@ static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
               (CBS_OWNERDRAWFIXED | CBS_HASSTRINGS), "all dropdown rows use centered paint with native strings");
         const RECT label = ClientRectOf(parent, pair.label);
         const RECT field = ClientRectOf(parent, pair.field);
-        Check(field.left == label.left && field.top - label.bottom == SettingsPixels(4, dpi),
+        if (pair.field == state.hdrChromaCombo) {
+            Check(field.left-label.right == SettingsPixels(8,dpi) &&
+                label.top-field.top == SettingsPixels(4,dpi),
+                "HDR inline label remains aligned with the field above 40fps");
+        } else Check(field.left == label.left && field.top - label.bottom == SettingsPixels(4, dpi),
               "labels align with their fields across a consistent four-DIP gap");
         if (field.bottom - field.top != SettingsPixels(30, dpi)) {
             wchar_t name[128]{};
@@ -392,6 +402,40 @@ static void CheckCaptionFits(HWND control, const char* name, UINT dpi,
     }
 }
 
+static void CheckHdrChromaChoicesFit(SettingsControls& state, UINT dpi, bool english) {
+    const HWND combo = state.hdrChromaCombo;
+    const LRESULT selected = SendMessageW(combo, CB_GETCURSEL, 0, 0);
+    const LRESULT count = SendMessageW(combo, CB_GETCOUNT, 0, 0);
+    Check(count == 3, "measure every actual HDR chroma choice");
+    RECT client{}; GetClientRect(combo, &client);
+    // Match SettingsTheme::PaintControl's separately rounded 11/31-DIP
+    // insets, not the expanded list width or the full closed control width.
+    const int availableWidth = client.right - SettingsPixels(11, dpi) - SettingsPixels(31, dpi);
+    HDC dc = GetDC(combo);
+    const auto previous = SelectObject(dc,
+        reinterpret_cast<HFONT>(SendMessageW(combo, WM_GETFONT, 0, 0)));
+    for (LRESULT index = 0; index < count; ++index) {
+        Check(SendMessageW(combo, CB_SETCURSEL, index, 0) != CB_ERR,
+              "select every HDR caption in the closed field");
+        wchar_t caption[256]{};
+        Check(GetWindowTextW(combo, caption, ARRAYSIZE(caption)) > 0,
+              "read actual selected HDR caption");
+        SIZE measured{};
+        Check(GetTextExtentPoint32W(dc, caption, static_cast<int>(std::wcslen(caption)), &measured) != FALSE,
+              "measure HDR caption using the actual control font");
+        if (measured.cx > availableWidth || measured.cy > client.bottom)
+            std::fwprintf(stderr, L"HDR choice clipped: %ls lang=%ls dpi=%u needed=%ldx%ld available=%dx%ld\n",
+                caption, english ? L"en" : L"ko", dpi, measured.cx, measured.cy, availableWidth, client.bottom);
+        Check(measured.cx <= availableWidth && measured.cy <= client.bottom,
+              "every HDR choice fits the closed field with theme padding");
+    }
+    SelectObject(dc, previous); ReleaseDC(combo, dc);
+    SendMessageW(combo, CB_SETCURSEL, selected, 0);
+    Check(SendMessageW(combo, CB_GETCURSEL, 0, 0) == selected,
+          "caption measurements preserve the user's HDR selection");
+    CheckCaptionFits(state.hdrChromaLabel, "HDR chroma label", dpi, english, 0, false);
+}
+
 static void CheckAllCaptionsFit(SettingsControls& state, UINT dpi, bool english) {
     for (const auto& entry : kMembers) {
         const HWND control = state.*entry.handle;
@@ -458,6 +502,26 @@ static void CheckAllCaptionsFit(SettingsControls& state, UINT dpi, bool english)
 }
 static void TestHelpText() {
     for (bool english : {false, true}) {
+        const auto* ls = SettingsHelpText(SettingsHelpTopic::Capture40, english);
+        const auto* caution = std::wcsstr(ls, english ? L"Keep in mind" : L"주의사항");
+        const auto* example = std::wcsstr(ls, english ? L"Example: Lossless Scaling" : L"활용 예시: Lossless Scaling");
+        Check(std::wcsstr(ls, english ? L"40 fps capture" : L"40fps 캡처") == ls &&
+            std::wcsstr(ls, english ? L"Leave off for normal viewing" : L"일반적인 시청에는 끈 채") &&
+            caution && example && caution < example,
+            "capture behavior and cautions precede the optional external-app example");
+        Check(std::wcsstr(ls,L"Lossless Scaling") && std::wcsstr(ls,L"VRR") &&
+            std::wcsstr(ls,english ? L"Start" : L"시작") &&
+            std::wcsstr(ls,english ? L"latency" : L"지연") &&
+            std::wcsstr(ls,english ? L"LS 3x" : L"LS 3배"),
+            "short 40fps help retains startup validation, LS example and caveats");
+        Check(std::wcsstr(ls, english ? L"Assumes steady 40 fps" : L"40fps 유지 시") &&
+            std::wcsstr(ls, english ? L"At 30–40 fps" : L"30~40fps로 흔들리면") &&
+            std::wcsstr(ls, english ? L"stutter may persist or become more noticeable with LS" :
+                L"LS를 써도 끊김이 남거나 더 두드러질 수 있습니다"),
+            "LS example warns that variable game FPS can retain or emphasize stutter");
+        Check(std::wcslen(ls) <= (english ? 550u : 350u) &&
+            std::wcsstr(ls,L"\n\n") && std::wcsstr(ls,L"•"),
+            "40fps popup stays brief with separated sections and short bullets");
         const wchar_t* guide = llcv::ui_text::VsrSetupGuide(english);
         Check(std::wcsstr(guide,L"NV12/YUY2") && std::wcsstr(guide,L"MJPEG"),
             "VSR guide includes both raw SDR formats and decoded MJPEG");
@@ -626,6 +690,9 @@ static void TestActualControlCreation() {
     {&SettingsControls::checkForUpdatesCheck, 2035},
     {&SettingsControls::guideLogFolderButton, 2039},
     {&SettingsControls::screenshotClipboardCheck, 2047},
+    {&SettingsControls::capture40Check, 2057},
+    {&SettingsControls::capture40Help, 2058},
+    {&SettingsControls::guideLsButton, 2059},
     {&SettingsControls::screenshotFolderButton, 2048},
     {&SettingsControls::updateNowButton, 2038},
     {&SettingsControls::presentationCombo, 2009},
@@ -689,6 +756,7 @@ static void TestActualControlCreation() {
         settings.consoleSurround51 = profile % 2 != 0;
         settings.saveLog = !settings.borderlessWindow;
         settings.screenshotClipboard = profile % 2 != 0;
+        settings.capture40Fps = profile % 2 != 0;
         settings.vsrEnabled = profile % 2 != 0;
         settings.vsrCapturePreset = presets[(profile + 1) % 4].preset;
         settings.showDiagnosticConsole = !settings.windowSnap;
@@ -765,6 +833,7 @@ static void TestActualControlCreation() {
             {state.surround51Check, settings.consoleSurround51},
             {state.saveLogCheck, settings.saveLog},
             {state.screenshotClipboardCheck, settings.screenshotClipboard},
+            {state.capture40Check, settings.capture40Fps},
             {state.showConsoleCheck, settings.showDiagnosticConsole},
             {state.skipStartupCheck, settings.skipStartupSettings},
             {state.checkForUpdatesCheck, settings.checkForUpdates},
@@ -775,6 +844,9 @@ static void TestActualControlCreation() {
         wchar_t caption[512]{};
         GetWindowTextW(state.startButton, caption, 512);
         Check(std::wcscmp(caption, english ? L"Start" : L"시작") == 0, "factory language is explicit");
+        GetWindowTextW(state.guideLsButton, caption, 512);
+        Check(std::wcscmp(caption, english ? L"40 fps capture guide" : L"40fps 캡처 안내") == 0,
+              "capture guide caption does not imply LS integration");
         GetWindowTextW(state.updateTitle, caption, 512);
         Check(std::wcsstr(caption, L"vTEST") != nullptr, "explicit version label");
         GetWindowTextW(state.fullscreenCursorHint, caption, 512);
@@ -793,11 +865,23 @@ static void TestActualControlCreation() {
             ? L"Console 5.1: output period is negotiated on start; actual value in Tab diagnostics."
             : L"콘솔 5.1: 출력 주기는 시작 시 협상 · 실제 값은 Tab 진단에서 확인");
         const SettingsTab initialTab = state.activeTab;
+        state.activeTab = SettingsTab::VideoWindow;
+        const LRESULT savedFrameChoice = selection(state.frameRateCombo);
+        for (int toggle = 0; toggle < 10; ++toggle) {
+            const bool checked = toggle % 2 == 0;
+            SendMessageW(state.capture40Check, BM_SETCHECK, checked ? BST_CHECKED : BST_UNCHECKED, 0);
+            UpdateAdvancedControlVisibility(&state, false, VideoPixelFormat::Nv12);
+            Check((IsWindowEnabled(state.frameRateCombo) != FALSE) == !checked &&
+                selection(state.frameRateCombo) == savedFrameChoice,
+                "40fps toggles normal picker availability without changing its selection");
+        }
+        SendMessageW(state.capture40Check, BM_SETCHECK, settings.capture40Fps ? BST_CHECKED : BST_UNCHECKED, 0);
         for (UINT textDpi : {96u, 120u, 144u, 192u}) {
             ApplySettingsFont(&state, parent, textDpi);
             LayoutSettingsControls(&state, textDpi);
             CheckFontHierarchy(state, textDpi, english);
             CheckFieldMetrics(state, parent, textDpi);
+            CheckHdrChromaChoicesFit(state, textDpi, english);
             const auto savedVsrCheck = SendMessageW(state.vsrCheck, BM_GETCHECK, 0, 0);
             state.activeTab = SettingsTab::VideoWindow;
             for (bool unknown : {false, true}) {
@@ -985,6 +1069,8 @@ static void TestCompactWorkAreas() {
                         seen.insert(child);
                     }
                     Check(Visible(state.startButton)&&Visible(state.cancelButton),"action buttons always remain visible");
+                    if (Visible(state.hdrChromaCombo))
+                        CheckHdrChromaChoicesFit(state, area.dpi, english);
                     if(SettingsCompactLayout(&state)) {
                         // The sidebar itself can fit while its owner-drawn
                         // rows are clipped or internally scrolled off-screen.
@@ -1163,6 +1249,9 @@ int main(int argc, char** argv) {
             ExpectVisible(state.roundedCornersCheck, tab == SettingsTab::Window);
             ExpectVisible(state.guideLogFolderButton, tab == SettingsTab::GuideDiagnostics);
             ExpectVisible(state.screenshotTitle, tab == SettingsTab::VideoWindow);
+            ExpectVisible(state.capture40Check, tab == SettingsTab::VideoWindow);
+            ExpectVisible(state.capture40Help, tab == SettingsTab::VideoWindow);
+            ExpectVisible(state.guideLsButton, tab == SettingsTab::GuideDiagnostics);
             ExpectVisible(state.vsrCheck, video);
             ExpectVisible(state.vsrGuideButton, video);
             ExpectVisible(state.vsrStatus, video);

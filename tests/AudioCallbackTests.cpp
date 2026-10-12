@@ -203,6 +203,128 @@ LRESULT CALLBACK CapabilityReplayProc(HWND hwnd, UINT message, WPARAM wParam, LP
     return SettingsWndProc(hwnd, message, wParam, lParam);
 }
 
+void Test40FpsSettingsIntegration() {
+    const auto saved = g_settings;
+    g_settings.capture40Fps = false;
+    g_settings.videoFrameRate = 120;
+    Require(RequestedVideoFrameRate()==120,"normal capture rate retained");
+    g_settings.capture40Fps = true;
+    Require(RequestedVideoFrameRate()==40 && g_settings.videoFrameRate==120,
+        "40fps override leaves saved frame-rate preference unchanged");
+    g_settings.capture40Fps = false;
+    Require(RequestedVideoFrameRate()==120,"disabling override restores normal request");
+    g_settings=saved;
+
+    HWND parent=CreateWindowW(L"STATIC",L"40fps settings fixture",WS_POPUP,
+        0,0,400,300,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    Require(parent!=nullptr,"40fps hidden parent");
+    SettingsDialogState state;
+    state.frameRateCombo=CreateWindowW(L"COMBOBOX",L"",WS_CHILD|CBS_DROPDOWNLIST,
+        0,0,180,100,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+    state.capture40Check=CreateWindowW(L"BUTTON",L"40fps",WS_CHILD|BS_AUTOCHECKBOX,
+        0,110,180,32,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+    state.pixelFormats={{VideoPixelFormat::Nv12,120}};
+    SendMessageW(state.frameRateCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"120fps"));
+    SendMessageW(state.frameRateCombo,CB_SETCURSEL,0,0);
+    for (int i=0;i<20;++i) {
+        const bool checked=i%2==0;
+        SendMessageW(state.capture40Check,BM_SETCHECK,checked?BST_CHECKED:BST_UNCHECKED,0);
+        UpdateVideoCapabilityStatus(&state);
+        Require((IsWindowEnabled(state.frameRateCombo)!=FALSE)==!checked &&
+            SendMessageW(state.frameRateCombo,CB_GETCURSEL,0,0)==0,
+            "async capability refresh preserves 40fps override and normal selection");
+    }
+    state.videoModesPending=true;
+    UpdateVideoCapabilityStatus(&state);
+    Require(!IsWindowEnabled(state.frameRateCombo) && !IsWindowEnabled(state.capture40Check),
+        "mode query gates both normal and 40fps selectors");
+    DestroyWindow(parent);
+}
+
+void TestCaptureColorStartupFallback() {
+    const auto saved = g_settings;
+    constexpr DWORD pqLeft = AMCONTROL_COLORINFO_PRESENT |
+        (5u << DXVA_VideoChromaSubsamplingShift) |
+        (2u << DXVA_NominalRangeShift) | (4u << DXVA_VideoTransferMatrixShift) |
+        (9u << DXVA_VideoPrimariesShift) | (15u << DXVA_VideoTransFuncShift);
+    constexpr DWORD hlgLeft = (pqLeft & ~(31u << DXVA_VideoTransFuncShift)) |
+        (16u << DXVA_VideoTransFuncShift);
+    for (bool request40 : {false, true}) for (bool legacy : {false, true})
+    for (DWORD flags : {pqLeft, hlgLeft}) {
+        g_settings.capture40Fps = request40;
+        FakeVideoPin pin;
+        pin.modes = {{60}};
+        pin.modes[0].subtype = MFVideoFormat_P010;
+        pin.modes[0].imageBytes = 1920 * 1080 * 3;
+        pin.modes[0].controlFlags = flags;
+        pin.echoAcceptedFormat = pin.stripReadbackColor = true;
+        pin.legacyReadback = legacy;
+        DWORD bytes = 0;
+        UINT32 stride = 0;
+        int fps = 0;
+        VideoPixelFormat format{};
+        DirectShowColorMetadata candidate{}, effective{};
+        Require(SUCCEEDED(ConfigureVideoPin(&pin, 1920, 1080, request40 ? 40 : 60,
+            VideoPixelFormat::P010, bytes, stride, fps, format, candidate)),
+            "production wrapper negotiates caps-only color driver");
+        Require(candidate.present == request40,
+            "ordinary capture retains its existing metadata lookup path");
+        AM_MEDIA_TYPE* active = nullptr;
+        Require(SUCCEEDED(GetActiveVideoPinFormat(&pin, &active)), "read active color fixture");
+        Require(ResolveInitialVideoColorMetadata(&pin, active, format, 1920, 1080,
+            fps, candidate, effective) && effective.controlFlags == flags,
+            "startup preserves caps-only color at ordinary 60 and unlisted 40fps");
+        const auto input = llcv::hdr::ResolveInput(effective, false);
+        Require(flags == pqLeft
+            ? input.kind == llcv::hdr::InputKind::Hdr10 && !input.assumed &&
+                input.colorSpace == DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020
+            : input.kind == llcv::hdr::InputKind::Unsupported,
+            "production startup preserves Left chroma and rejects reported HLG");
+
+        VIDEOINFOHEADER2 taggedInfo = pin.acceptedInfo;
+        taggedInfo.dwControlFlags = flags == pqLeft ? hlgLeft : pqLeft;
+        AM_MEDIA_TYPE tagged = *active;
+        tagged.formattype = FORMAT_VideoInfo2;
+        tagged.cbFormat = sizeof(taggedInfo);
+        tagged.pbFormat = reinterpret_cast<BYTE*>(&taggedInfo);
+        Require(ResolveInitialVideoColorMetadata(&pin, &tagged, format, 1920, 1080,
+            fps, candidate, effective) && effective.controlFlags == taggedInfo.dwControlFlags,
+            "explicit active metadata takes priority over accepted candidate hints");
+        DirectShowColorMetadata connected{};
+        Require(ExtractVideoColorMetadata(&tagged, connected), "extract connected color fixture");
+        const auto finalColor = llcv::hdr::ConnectedMetadata(candidate, connected);
+        Require(finalColor.controlFlags == taggedInfo.dwControlFlags &&
+            finalColor.transferFunction == connected.transferFunction,
+            "explicit connected metadata still overrides startup color");
+        FreeMediaType(*active);
+        CoTaskMemFree(active);
+        Require(pin.references == 1, "startup metadata fixture releases COM references");
+    }
+    g_settings = saved;
+}
+
+void TestVsrLiveTestRateIsolation() {
+    const auto saved = g_settings;
+    for (bool capture40 : {false, true}) for (int rate : {0, 40, 60, 120}) {
+        g_settings = saved;
+        g_settings.capture40Fps = capture40;
+        g_settings.videoFrameRate = rate;
+        g_settings.audioMode = AudioMode::WasapiShared;
+        g_settings.volumePercent = 73;
+        ApplyVsrLiveTestSettings(g_settings);
+        Require(!g_settings.capture40Fps && g_settings.videoFrameRate == 120 &&
+            RequestedVideoFrameRate() == 120,
+            "live VSR experiment always requests 120fps regardless of saved override");
+        Require(g_settings.videoPreset == VideoPreset::R2560x1440 &&
+            g_settings.vsrCapturePreset == VideoPreset::R1920x1080 && g_settings.vsrEnabled &&
+            g_settings.pixelFormat == VideoPixelFormat::Nv12 &&
+            g_settings.presentationMode == PresentationMode::AllowTearing &&
+            g_settings.audioMode == AudioMode::WasapiShared && g_settings.volumePercent == 73,
+            "VSR experiment keeps its capture plan and unrelated audio preferences");
+    }
+    g_settings = saved;
+}
+
 void TestSettingsCapabilityRefresh() {
     const auto saved = g_settings;
     const bool savedSuppress = g_suppressSettingsSave;
@@ -828,6 +950,9 @@ int main(int argc, char** argv) {
     TestRealtimeDiagnosticQueue();
     TestStartupWaitBoundary();
     TestSettingsCapabilityRefresh();
+    Test40FpsSettingsIntegration();
+    TestCaptureColorStartupFallback();
+    TestVsrLiveTestRateIsolation();
     TestExclusiveScanResultLifetime();
     TestOutputTransitions();
     TestSurroundWasapiFill();

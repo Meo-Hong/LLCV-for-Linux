@@ -57,6 +57,9 @@ struct SettingsControls {
     HWND guideDiagnosticsText = nullptr;
     HWND guideLogFolderButton = nullptr;
     HWND screenshotClipboardCheck = nullptr;
+    HWND capture40Check = nullptr;
+    HWND capture40Help = nullptr;
+    HWND guideLsButton = nullptr;
     HWND screenshotTitle = nullptr;
     HWND screenshotHelp = nullptr;
     HWND screenshotFolderButton = nullptr;
@@ -155,6 +158,7 @@ struct SettingsControls {
 };
 
 enum class SettingsHelpTopic {
+    Capture40,
     Drift,
     PcmQueue,
     Presentation,

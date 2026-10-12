@@ -41,8 +41,9 @@ build\Release\LowLatencyCaptureViewer.exe
 The release configuration uses the static MSVC runtime, so the packaged
 executable does not require a separate Visual C++ Redistributable installation.
 
-The 2.0.3 suite covers settings pages, device transitions, save failures, stream
-completion, and power-request lifetimes. File-save tests need a temporary
+The 2.0.4 suite adds 40 fps settings restoration, format negotiation, color
+metadata, and bilingual UI coverage to existing settings-page, device-transition,
+save-failure, stream-completion, and power-lifetime checks. File-save tests need a temporary
 directory that permits writing and renaming files. Record tests skipped because
 a GPU or Windows feature is unavailable separately from passes. Power API tests
 do not put the PC to sleep and do not replace real sleep/resume validation.
@@ -52,7 +53,7 @@ do not put the PC to sleep and do not replace real sleep/resume validation.
 ## Installer and portable ZIP
 
 After the Release build, run these commands from the repository root. These
-examples package v2.0.3 using the `build\Release` output above; the build-directory
+examples package v2.0.4 using the `build\Release` output above; the build-directory
 override is required because the release scripts normally use a versioned
 build directory.
 
@@ -61,11 +62,11 @@ chcp.com 65001 > $null
 & "C:\Program Files\Inno Setup 7\ISCC.exe" `
   "--define=BuildDir=..\build\Release" ".\installer\LowLatencyCaptureViewer.iss"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-v1.ps1 `
-  -Version 2.0.3 -BuildDir ..\build\Release -OutputDir outputs\v2.0.3
+  -Version 2.0.4 -BuildDir ..\build\Release -OutputDir outputs\v2.0.4
 ```
 
-The outputs are `outputs\v2.0.3\LowLatencyCaptureViewer_v2.0.3_Setup.exe`
-and `outputs\v2.0.3\LowLatencyCaptureViewer_v2.0.3_x64.zip`. When preparing
+The outputs are `outputs\v2.0.4\LowLatencyCaptureViewer_v2.0.4_Setup.exe`
+and `outputs\v2.0.4\LowLatencyCaptureViewer_v2.0.4_x64.zip`. When preparing
 another version, update the versioned release files first; changing a ZIP name
 does not update the executable. See the [release checklist](RELEASING.md).
 

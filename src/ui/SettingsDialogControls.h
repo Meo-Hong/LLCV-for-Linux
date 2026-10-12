@@ -65,6 +65,9 @@ inline constexpr int IDC_SETTINGS_THEME = 2053;
 inline constexpr int IDC_SETTINGS_ROUNDED_CORNERS = 2054;
 inline constexpr int IDC_SETTINGS_SECTION = 2055;
 inline constexpr int IDC_SETTINGS_PREVENT_SLEEP = 2056;
+inline constexpr int IDC_SETTINGS_CAPTURE_40 = 2057;
+inline constexpr int IDC_SETTINGS_CAPTURE_40_HELP = 2058;
+inline constexpr int IDC_SETTINGS_LS_GUIDE = 2059;
 } // namespace control_id
 
 // Borrowed for the duration of creation only; no settings/device list copies.
