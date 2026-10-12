@@ -5,7 +5,7 @@
 A low-latency Windows viewer for video and audio from HDMI capture devices.
 Use it to play console games without OBS, or listen in audio-only mode.
 
-**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.0.2.md) · [한국어](README.ko.md)
+**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.0.3.md) · [한국어](README.ko.md)
 
 <br>
 
@@ -13,7 +13,17 @@ Use it to play console games without OBS, or listen in audio-only mode.
 | --- | --- |
 | [![Video settings](docs/images/settings-video-en.png)](docs/images/settings-video-en.png) | [![Audio settings](docs/images/settings-audio-en.png)](docs/images/settings-audio-en.png) |
 
-<sub>Example settings in 2.0.2. Click an image to view it at full resolution.</sub>
+<sub>Settings examples rendered from the 2.0.3 UI code. Click an image to view it at full resolution.</sub>
+
+<br>
+
+## What's new in 2.0.3
+
+Added optional sleep prevention during playback. Settings use pages instead of
+scrollbars on small screens, with fixes for device/output-mode changes, saving,
+and shutdown. Video/audio processing also reuses more resources, including MJPEG
+decode buffers. Existing settings and installation paths are retained.
+See the [release notes](docs/release-notes-v2.0.3.md) for details.
 
 <br>
 
@@ -40,6 +50,7 @@ For the portable version, extract **x64.zip** and run `LowLatencyCaptureViewer.e
 - NVIDIA VSR (experimental), with separate capture and display resolutions
 - WASAPI Shared/Exclusive, ASIO, console LPCM 5.1, and audio-only mode
 - Source-resolution PNG screenshots with optional clipboard copy
+- Sleep prevention during playback, with display sleep allowed in audio-only mode
 - Dark/light themes, fullscreen, window size locking, volume controls, Korean/English UI
 
 HDR10 needs compatible hardware and an HDR display; ASIO needs its driver.
@@ -54,7 +65,7 @@ See the [feature requirements](docs/USAGE.md#compatibility-and-feature-requireme
 
 The [documentation index](docs/INDEX.md) also lists release notes and development/validation records.
 
-- [User guide](docs/USAGE.md) — settings, shortcuts, VSR, and screenshots
+- [User guide](docs/USAGE.md) — settings, sleep prevention, shortcuts, VSR, and screenshots
 - [Video and HDR](docs/VIDEO.md) / [Audio and 5.1](docs/AUDIO.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md) / [Diagnostics and logs](docs/DIAGNOSTICS.md) / [Build from source](docs/BUILDING.md)
 

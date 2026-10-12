@@ -38,12 +38,16 @@ Video statistics exclude the first five seconds after startup.
 
 ## Audio fields
 
-- **Audio output:** WASAPI mode, endpoint buffer, and current occupancy
+- **Audio output:** active WASAPI/ASIO mode and device, output buffer, and WASAPI occupancy
 - **Capture audio:** packet size and callback interval
 - **Clock correction:** enabled state and applied rate adjustment
 - **PCM buffer:** current, target, and observed minimum queue depth
 - **Audio errors:** underrun and overrun counts and durations
 - **Cause/trend:** recent diagnosis and estimated long-term imbalance
+
+If ASIO startup falls back to WASAPI Shared, the overlay reports Shared and the
+actual output device. The saved ASIO selection remains available for the next
+attempt; it does not identify the active backend after a fallback.
 
 The first five seconds are excluded from audio error diagnostics. Capture and
 playback still begin immediately; only the statistics wait for warmup.
@@ -56,8 +60,8 @@ session for 10–30 minutes before enabling drift correction solely from ppm.
 
 ## Buffer terminology
 
-- **Output buffer:** the WASAPI endpoint buffer
-- **Output occupancy:** audio currently queued in the endpoint
+- **Output buffer:** the WASAPI endpoint buffer or ASIO driver buffer
+- **Output occupancy:** audio currently queued in the WASAPI endpoint
 - **PCM buffer:** the application's capture-to-render safety queue
 
 These are separate. Raising the PCM target adds application audio queueing;
@@ -118,11 +122,16 @@ The log records selected devices and modes, actual allocator sizes, WASAPI
 initialization, fallback paths, capture-graph stages, and filter pin/media-type
 details after an initialization failure.
 
+Audio-processing diagnostics are queued or collected as counters and emitted
+later on the UI thread, outside the audio callback/processing path. Audio-error
+history uses bounded storage to reduce allocation. If the diagnostic queue fills
+while the UI is busy, messages can be skipped and a skipped-message count is
+logged. These changes do not establish a measured latency or FPS improvement.
+
 For display interruptions, check `display-event` records for timestamped display
 or device changes and swapchain occlusion/recovery. If D3D11 transfer, Present, or
 output recreation fails, a `video-event` record includes the HRESULT and
-`GetDeviceRemovedReason` result. Normal frames are not logged, so this adds no
-per-frame logging overhead during normal operation.
+`GetDeviceRemovedReason` result. Normal frames do not generate these event logs.
 
 Saved logs are automatically bounded: each part is limited to 2 MB, and the
 newest five managed log files are retained up to a combined 10 MB. Managed logs

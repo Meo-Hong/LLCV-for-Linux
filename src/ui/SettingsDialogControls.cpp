@@ -17,6 +17,20 @@ using settings::FullscreenCursorMode;
 using settings::PresentationMode;
 using settings::ScalingMode;
 
+void PopulateCaptureDevicePicker(HWND picker, std::span<const capture::DeviceInfo> devices,
+                                 const std::wstring& selected, bool audio, bool english) {
+    SendMessageW(picker, CB_RESETCONTENT, 0, 0);
+    const wchar_t* automatic = ui_text::Translate(audio
+        ? L"자동 선택 (영상 장치 오디오 우선 · 권장)" : L"자동 선택 (권장)", english);
+    SendMessageW(picker, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(automatic));
+    LRESULT choice = 0;
+    for (size_t i=0; i<devices.size(); ++i) {
+        const LRESULT row = SendMessageW(picker, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(devices[i].name.c_str()));
+        if (devices[i].id == selected) choice = row;
+    }
+    SendMessageW(picker, CB_SETCURSEL, choice, 0);
+}
+
 void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                                   HINSTANCE instance,
                                   const SettingsControlInitialValues& initial,
@@ -34,6 +48,10 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     state->brandLabel = makeLabel(L"LLCV", 12, 28);
     state->pageTitle = makeLabel(L"", 184, 24);
     state->pageSubtitle = makeLabel(L"", 184, 60);
+    state->sectionNavigationLabel = makeLabel(initial.english ? L"Section" : L"설정 항목", 184, 90);
+    state->sectionNavigation = CreateWindowExW(0, L"COMBOBOX", nullptr,
+        kSettingsDropdownStyle, 270, 90, 290, 180, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SECTION)), instance, nullptr);
     state->appPreferencesSection = makeLabel(initial.english ? L"General" : L"일반", 184, 110);
     state->tabControl = CreateWindowExW(
         0, L"LISTBOX", nullptr,
@@ -321,8 +339,21 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         0, L"STATIC", initial.english
             ? L"Uses saved settings. Hold Shift at launch or press F2 to return here."
             : L"저장된 설정으로 실행합니다. Shift를 누른 채 실행하거나 F2로 설정을 여세요.",
-        WS_CHILD | WS_VISIBLE | SS_LEFTNOWORDWRAP,
+        WS_CHILD | WS_VISIBLE | SS_LEFT,
         44, 424, 431, 42, hwnd, nullptr, instance, nullptr);
+    state->preventSleepCheck = CreateWindowExW(
+        0, L"BUTTON", initial.english ? L"Prevent sleep during playback" : L"재생 중 자동 절전 방지",
+        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
+        0, 0, 376, 32, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_PREVENT_SLEEP)), instance, nullptr);
+    SendMessageW(state->preventSleepCheck, BM_SETCHECK,
+                 initial.settings.preventSleep ? BST_CHECKED : BST_UNCHECKED, 0);
+    state->preventSleepHint = CreateWindowExW(
+        0, L"STATIC", initial.english
+            ? L"Video keeps the screen on.\r\nAudio-only allows the screen to turn off."
+            : L"영상 재생 중에는 화면도 켜둡니다.\r\n오디오 전용 모드에서는 화면 꺼짐을 허용합니다.",
+        WS_CHILD | WS_VISIBLE | SS_LEFT,
+        0, 0, 348, 56, hwnd, nullptr, instance, nullptr);
     state->checkForUpdatesCheck = CreateWindowExW(
         0, L"BUTTON", initial.english ? L"Check for updates automatically" : L"업데이트 자동 확인",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
@@ -513,20 +544,8 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         reinterpret_cast<HMENU>(
             static_cast<INT_PTR>(IDC_SETTINGS_CAPTURE_DEVICE)),
         instance, nullptr);
-    SendMessageW(state->captureDeviceCombo, CB_ADDSTRING, 0,
-                 reinterpret_cast<LPARAM>(
-                     text(L"자동 선택 (권장)")));
-    LRESULT selectedCaptureDevice = 0;
-    for (size_t i = 0; i < initial.captureDevices.size(); ++i) {
-        std::wstring label = initial.captureDevices[i].name;
-        SendMessageW(state->captureDeviceCombo, CB_ADDSTRING, 0,
-                     reinterpret_cast<LPARAM>(label.c_str()));
-        if (initial.captureDevices[i].id == initial.settings.captureDeviceId) {
-            selectedCaptureDevice = static_cast<LRESULT>(i + 1);
-        }
-    }
-    SendMessageW(state->captureDeviceCombo, CB_SETCURSEL,
-                 selectedCaptureDevice, 0);
+    PopulateCaptureDevicePicker(state->captureDeviceCombo, initial.captureDevices,
+        initial.settings.captureDeviceId, false, initial.english);
 
     state->captureAudioDeviceLabel = makeLabel(
         text(L"캡처 오디오 장치"), 430, 112);
@@ -537,21 +556,8 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         reinterpret_cast<HMENU>(
             static_cast<INT_PTR>(IDC_SETTINGS_CAPTURE_AUDIO_DEVICE)),
         instance, nullptr);
-    SendMessageW(state->captureAudioDeviceCombo, CB_ADDSTRING, 0,
-                 reinterpret_cast<LPARAM>(text(
-                     L"자동 선택 (영상 장치 오디오 우선 · 권장)")));
-    LRESULT selectedCaptureAudioDevice = 0;
-    for (size_t i = 0; i < initial.captureAudioDevices.size(); ++i) {
-        const std::wstring& label = initial.captureAudioDevices[i].name;
-        SendMessageW(state->captureAudioDeviceCombo, CB_ADDSTRING, 0,
-                     reinterpret_cast<LPARAM>(label.c_str()));
-        if (initial.captureAudioDevices[i].id ==
-            initial.settings.captureAudioDeviceId) {
-            selectedCaptureAudioDevice = static_cast<LRESULT>(i + 1);
-        }
-    }
-    SendMessageW(state->captureAudioDeviceCombo, CB_SETCURSEL,
-                 selectedCaptureAudioDevice, 0);
+    PopulateCaptureDevicePicker(state->captureAudioDeviceCombo, initial.captureAudioDevices,
+        initial.settings.captureAudioDeviceId, true, initial.english);
     state->captureAudioStatus = CreateWindowExW(
         0, L"STATIC", text(L"내부 오디오 확인 중…"),
         WS_CHILD | SS_LEFTNOWORDWRAP | SS_CENTERIMAGE,
@@ -846,6 +852,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     // Hidden/disabled fields are skipped by Windows; no input is intercepted.
     const HWND readingOrder[] = {
         state->brandLabel, state->tabControl, state->pageTitle, state->pageSubtitle,
+        state->sectionNavigationLabel, state->sectionNavigation,
 
         state->videoCaptureSection, state->videoRefreshButton,
         state->captureDeviceLabel, state->captureDeviceCombo,
@@ -888,6 +895,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         state->appPreferencesSection, state->languageLabel, state->languageCombo,
         state->themeLabel, state->themeCombo,
         state->skipStartupCheck, state->skipStartupHint,
+        state->preventSleepCheck, state->preventSleepHint,
         state->updateTitle, state->updateText, state->checkForUpdatesCheck,
         state->updateNowButton, state->updateStatus,
 

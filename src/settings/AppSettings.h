@@ -122,6 +122,7 @@ struct AppSettings {
     bool showDiagnosticConsole = false;
     bool skipStartupSettings = false;
     bool checkForUpdates = true;
+    bool preventSleep = true;
     bool audioOnly = false;
     // Client pixels, independent from video sizing preferences.
     int audioOnlyWidth = 380;

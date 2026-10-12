@@ -19,6 +19,7 @@ struct Layout {
     UINT32 width = 4, height = 2, stride = 8;
     DWORD bytes = 24, flags = 0;
     bool hasStride = true, hasSize = true, nv12 = true;
+    DWORD alignment = 64;
 };
 struct Candidate {
     HRESULT activate = S_OK, input = S_OK, info = S_OK;
@@ -54,11 +55,15 @@ public:
     STUB(GetStreamLimits, DWORD*, DWORD*, DWORD*, DWORD*)
     STUB(GetStreamCount, DWORD*, DWORD*)
     STUB(GetStreamIDs, DWORD, DWORD*, DWORD, DWORD*)
-    STUB(GetInputStreamInfo, DWORD, MFT_INPUT_STREAM_INFO*)
+    STDMETHODIMP GetInputStreamInfo(DWORD, MFT_INPUT_STREAM_INFO* info) override {
+        *info = {}; info->cbSize = 64; info->cbAlignment = c.changed ? 128 : 32;
+        return S_OK;
+    }
     STDMETHODIMP GetOutputStreamInfo(DWORD, MFT_OUTPUT_STREAM_INFO* info) override {
         ++c.infoCalls;
         const auto& layout = c.changed ? c.after : c.before;
         *info = {}; info->cbSize = layout.bytes; info->dwFlags = layout.flags;
+        info->cbAlignment = layout.alignment;
         return c.changed ? c.changedInfo : c.info;
     }
     STDMETHODIMP GetAttributes(IMFAttributes** p) override {
@@ -98,7 +103,16 @@ public:
     STUB(SetOutputBounds, LONGLONG, LONGLONG)
     STUB(ProcessEvent, DWORD, IMFMediaEvent*)
     STDMETHODIMP ProcessMessage(MFT_MESSAGE_TYPE, ULONG_PTR) override { return S_OK; }
-    STDMETHODIMP ProcessInput(DWORD, IMFSample*, DWORD) override { ++c.inputs; return S_OK; }
+    STDMETHODIMP ProcessInput(DWORD, IMFSample* sample, DWORD) override {
+        IMFMediaBuffer* buffer = nullptr;
+        Check(SUCCEEDED(sample->GetBufferByIndex(0, &buffer)), "input buffer available");
+        BYTE* data = nullptr; DWORD capacity = 0;
+        Check(SUCCEEDED(buffer->Lock(&data, &capacity, nullptr)), "input buffer locked");
+        Check(capacity >= 64 && reinterpret_cast<ULONG_PTR>(data) % (c.changed ? 128 : 32) == 0,
+              "input minimum capacity and alignment requirements honored");
+        buffer->Unlock(); buffer->Release();
+        ++c.inputs; return S_OK;
+    }
     STDMETHODIMP ProcessOutput(DWORD, DWORD, MFT_OUTPUT_DATA_BUFFER* output, DWORD*) override {
         if (!c.change) return MF_E_TRANSFORM_NEED_MORE_INPUT;
         if (c.outputStep == 0) {
@@ -135,6 +149,9 @@ private:
         Check(available >= capacity, "output allocation refreshed including padding and cbSize");
         BYTE* data = nullptr;
         Check(SUCCEEDED(buffer->Lock(&data, nullptr, nullptr)), "output locked");
+        if (!(layout.flags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES))
+            Check(!layout.alignment || reinterpret_cast<ULONG_PTR>(data) % layout.alignment == 0,
+                  "caller-supplied output honors required memory alignment");
         std::memset(data, c.changed ? 22 : 11, bytes);
         buffer->Unlock(); buffer->SetCurrentLength(bytes); buffer->Release();
         ++c.framesProduced;
@@ -352,9 +369,48 @@ static void TestNativeDecoder() {
             output->Unlock(); ++decoded;
         }
         Check(decoded == 8, "native decoder outputs each frame without accumulating a queue");
+        const auto inputStats = decoder.inputAllocations(), outputStats = decoder.outputAllocations();
+        Check(inputStats.reuses > 0 && (!outputStats.allocations || outputStats.reuses > 0),
+              "native decoder reuses memory buffers after their consumers release them");
         std::printf("Native MJPEG: %u x %u, stride %ld, %u/8 frames passed.\n", width, height, decoder.stride(), decoded);
+        std::printf("MJPEG buffer allocations/reuses: input %u/%u, output %u/%u.\n",
+            inputStats.allocations, inputStats.reuses, outputStats.allocations, outputStats.reuses);
     }
     useSystemDecoder = false;
+}
+
+static void TestBufferReuse() {
+    using Microsoft::WRL::ComPtr;
+    llcv::video::MediaBufferPool pool;
+    std::array<ComPtr<IMFMediaBuffer>, 5> held;
+    for (unsigned i = 0; i < held.size(); ++i) {
+        Check(pool.Acquire(256, 128, &held[i]) == S_OK, "retained buffers can exceed bounded cache safely");
+        BYTE* data = nullptr; held[i]->Lock(&data, nullptr, nullptr);
+        Check(reinterpret_cast<ULONG_PTR>(data) % 128 == 0, "aligned buffer address");
+        std::memset(data, static_cast<int>(i), 256); held[i]->Unlock(); held[i]->SetCurrentLength(256);
+    }
+    for (unsigned i = 0; i < held.size(); ++i) {
+        BYTE* data = nullptr; held[i]->Lock(&data, nullptr, nullptr);
+        Check(data[0] == i && data[255] == i, "externally held buffers are never overwritten by pool reuse");
+        held[i]->Unlock();
+    }
+    auto* releasedIdentity = held[1].Get(); held[1].Reset();
+    Check(pool.Acquire(128, 64, &held[1]) == S_OK && held[1].Get() == releasedIdentity,
+          "only released cached storage is reused for compatible requirements");
+    DWORD length = 1; held[1]->GetCurrentLength(&length);
+    Check(length == 0 && pool.Stats().allocations == 5 && pool.Stats().reuses == 1,
+          "reused buffers reset length and allocator counts remain bounded");
+    pool.Reset();
+    BYTE* survivor = nullptr;
+    Check(SUCCEEDED(held[0]->Lock(&survivor, nullptr, nullptr)) && survivor[255] == 0,
+          "consumer buffers survive decoder reset/destruction");
+    held[0]->Unlock();
+    for (auto& buffer : held) buffer.Reset();
+    Check(pool.Acquire(256, 3, &held[0]) == E_INVALIDARG, "invalid alignment is rejected, not silently ignored");
+    Check(pool.Acquire(256, 0, &held[0]) == S_OK, "unspecified alignment remains supported");
+    held[0].Reset();
+    Check(pool.Acquire(512, 256, &held[0]) == S_OK,
+          "free cached buffers are resized for changed stream requirements");
 }
 
 int main(int argc, char** argv) {
@@ -399,6 +455,7 @@ int main(int argc, char** argv) {
         Check(!decoder.validOutputBuffer(24, 24), "reset decoder has no usable output layout");
     }
     TestStreamChanges();
+    TestBufferReuse();
     CoUninitialize();
     std::puts("MJPEG: 6 selection cases, packet bounds, 15 stream changes and 4 attribute/layout cases passed.");
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <condition_variable>
+#include <algorithm>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -49,6 +50,12 @@ public:
         std::lock_guard lock(mutex_);
         ++epoch_;
         cache_.clear();
+        pending_.reset();
+    }
+    void InvalidateDevice(const std::wstring& device) {
+        std::lock_guard lock(mutex_);
+        ++epoch_;
+        std::erase_if(cache_, [&](const auto& entry) { return entry.first.device == device; });
         pending_.reset();
     }
     void Stop() {

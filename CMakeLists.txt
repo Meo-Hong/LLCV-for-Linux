@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
-project(LowLatencyCaptureViewer VERSION 2.0.2 LANGUAGES CXX)
+project(LowLatencyCaptureViewer VERSION 2.0.3 LANGUAGES CXX)
+
+include(cmake/MsvcDependencies.cmake)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -31,6 +33,7 @@ add_executable(LowLatencyCaptureViewer
     src/ui/AudioOnlyView.cpp
     src/ui/PresentationModeUi.cpp
     src/ui/SettingsView.cpp
+    src/ui/SettingsCompactLayout.cpp
     src/ui/SettingsTheme.cpp
     src/ui/SettingsDialogControls.cpp
     src/ui/UiText.cpp
@@ -51,28 +54,6 @@ target_include_directories(LowLatencyCaptureViewer PRIVATE
     third_party/asio/host/pc
 )
 
-# Keep help layout ABI and shared shortcut text current with localized MSVC scans.
-set_property(SOURCE src/main.cpp src/ui/AudioOnlyView.cpp src/ui/ViewerHelpWindow.cpp
-    src/ui/SettingsTheme.cpp tests/ViewerHelpTests.cpp tests/AudioOnlyViewTests.cpp
-    APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/AppPalette.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/AudioOnlyView.h")
-set_property(SOURCE src/main.cpp src/ui/ViewerHelpWindow.cpp src/ui/SettingsDialogControls.cpp
-    tests/SettingsViewTests.cpp tests/ViewerHelpTests.cpp
-    APPEND PROPERTY OBJECT_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerHelpWindow.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerShortcuts.h")
-set_property(SOURCE src/main.cpp src/ui/SettingsView.cpp src/ui/SettingsTheme.cpp
-    src/ui/SettingsDialogControls.cpp tests/SettingsViewTests.cpp tests/SettingsThemeTests.cpp
-    tests/AudioCallbackTests.cpp tests/HdrPipelineTests.cpp tests/MonitorMoveTests.cpp
-    tests/SharedReplayTests.cpp tests/VsrExperimentTests.cpp APPEND PROPERTY OBJECT_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsView.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsTheme.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsFonts.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/OverlayStyle.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/WindowCorners.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsModeCache.h")
-set_property(SOURCE tests/SettingsModeCacheTests.cpp APPEND PROPERTY OBJECT_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/SettingsModeCache.h")
 set_property(SOURCE tests/VsrExperimentTests.cpp APPEND PROPERTY OBJECT_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/VsrTimingValidation.inl")
 
@@ -152,6 +133,45 @@ if (MSVC)
 endif()
 
 include(CTest)
+if(BUILD_TESTING)
+    add_executable(PlaybackPowerRequestTests tests/PlaybackPowerRequestTests.cpp)
+    target_include_directories(PlaybackPowerRequestTests PRIVATE src)
+    target_compile_definitions(PlaybackPowerRequestTests PRIVATE
+        UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)
+    set_target_properties(PlaybackPowerRequestTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    if(MSVC)
+        target_compile_options(PlaybackPowerRequestTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+    endif()
+    add_test(NAME PlaybackPowerRequestTests COMMAND PlaybackPowerRequestTests)
+    add_test(NAME PlaybackPowerNativeTests COMMAND PlaybackPowerRequestTests --native)
+    set_tests_properties(PlaybackPowerRequestTests PlaybackPowerNativeTests PROPERTIES TIMEOUT 15)
+    set_tests_properties(PlaybackPowerNativeTests PROPERTIES SKIP_RETURN_CODE 77)
+    add_executable(PlaybackPowerEventsTests tests/PlaybackPowerEventsTests.cpp)
+    set_target_properties(PlaybackPowerEventsTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    target_include_directories(PlaybackPowerEventsTests PRIVATE src)
+    target_compile_definitions(PlaybackPowerEventsTests PRIVATE
+        UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)
+    target_link_libraries(PlaybackPowerEventsTests PRIVATE strmiids ole32 oleaut32)
+    if(MSVC)
+        target_compile_options(PlaybackPowerEventsTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+    endif()
+    add_test(NAME PlaybackPowerEventsTests COMMAND PlaybackPowerEventsTests)
+    set_tests_properties(PlaybackPowerEventsTests PROPERTIES TIMEOUT 15)
+    add_executable(SuspendResumeNotificationTests tests/SuspendResumeNotificationTests.cpp)
+    set_target_properties(SuspendResumeNotificationTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    target_include_directories(SuspendResumeNotificationTests PRIVATE src)
+    target_compile_definitions(SuspendResumeNotificationTests PRIVATE
+        UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)
+    target_link_libraries(SuspendResumeNotificationTests PRIVATE user32)
+    if(MSVC)
+        target_compile_options(SuspendResumeNotificationTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+    endif()
+    add_test(NAME SuspendResumeNotificationTests COMMAND SuspendResumeNotificationTests)
+    add_test(NAME SuspendResumeNotificationNativeTests COMMAND SuspendResumeNotificationTests --native)
+    set_tests_properties(SuspendResumeNotificationTests SuspendResumeNotificationNativeTests
+        PROPERTIES TIMEOUT 15)
+    set_tests_properties(SuspendResumeNotificationNativeTests PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 if (BUILD_TESTING)
     add_executable(ViewerHelpTests tests/ViewerHelpTests.cpp src/ui/ViewerHelpWindow.cpp)
     set_property(SOURCE tests/ViewerHelpTests.cpp APPEND PROPERTY OBJECT_DEPENDS
@@ -166,7 +186,9 @@ if (BUILD_TESTING)
     endif()
     add_test(NAME ViewerHelpTests COMMAND ViewerHelpTests)
     add_test(NAME ViewerHelpImeTests COMMAND ViewerHelpTests --with-ime)
-    set_tests_properties(ViewerHelpTests ViewerHelpImeTests PROPERTIES TIMEOUT 45)
+    # Each stress test opens/closes 320 native help windows. Preserve the full
+    # coverage while allowing headroom alongside CPU-heavy parallel replays.
+    set_tests_properties(ViewerHelpTests ViewerHelpImeTests PROPERTIES TIMEOUT 120)
     add_executable(ScreenshotTests tests/ScreenshotTests.cpp tests/HdrScreenshotReference.cpp
         src/screenshot/ScreenshotPixels.cpp src/screenshot/ScreenshotService.cpp)
     target_include_directories(ScreenshotTests PRIVATE src)
@@ -349,7 +371,11 @@ if (BUILD_TESTING)
         add_test(NAME VsrExperimentTests COMMAND VsrExperimentTests)
         set_tests_properties(VsrExperimentTests PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77 LABELS GPU)
         add_test(NAME SettingsControllerTests COMMAND VsrExperimentTests --settings-controller)
-        set_tests_properties(SettingsControllerTests PROPERTIES TIMEOUT 30)
+        add_test(NAME ViewerLifecycleTests COMMAND VsrExperimentTests --viewer-lifecycle)
+        set_tests_properties(ViewerLifecycleTests PROPERTIES TIMEOUT 30)
+        # Hidden-window interaction and worker handover timings are distorted
+        # by concurrent UI/GPU replay suites. Keep the deadline, but isolate it.
+        set_tests_properties(SettingsControllerTests PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE)
     endif()
     add_executable(AudioCallbackTests tests/AudioCallbackTests.cpp ${audio_callback_sources})
     target_include_directories(AudioCallbackTests PRIVATE
@@ -582,6 +608,10 @@ if (BUILD_TESTING)
             /W4 /EHsc /permissive- /utf-8)
     endif()
     add_test(NAME SettingsStoreTests COMMAND SettingsStoreTests)
+    add_test(NAME SettingsStoreSaveFailureTests COMMAND SettingsStoreTests --save-failure-probe)
+    add_test(NAME SettingsStoreEmptyCacheTests COMMAND SettingsStoreTests --empty-cache-probe)
+    set_tests_properties(SettingsStoreSaveFailureTests SettingsStoreEmptyCacheTests
+        PROPERTIES WILL_FAIL TRUE TIMEOUT 15)
 
     add_executable(UpdateCheckerTests
         tests/UpdateCheckerTests.cpp
@@ -653,8 +683,6 @@ if (BUILD_TESTING)
         VideoMailboxStress VideoTransitionStress PROPERTIES TIMEOUT 30)
 endif()
 
-# AppSettings is shared across translation units. Localized MSVC include scans
-# must not leave stale objects with an older struct layout after adding a field.
 get_property(llcv_build_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 foreach(llcv_target IN LISTS llcv_build_targets)
     get_target_property(llcv_sources ${llcv_target} SOURCES)
@@ -666,18 +694,75 @@ foreach(llcv_target IN LISTS llcv_build_targets)
     if("src/ui/SettingsTheme.cpp" IN_LIST llcv_sources)
         target_link_libraries(${llcv_target} PRIVATE uxtheme)
     endif()
-    foreach(llcv_source IN LISTS llcv_sources)
-        if(llcv_source MATCHES "\\.cpp$")
-            set_property(SOURCE ${llcv_source} APPEND PROPERTY OBJECT_DEPENDS
-                "${CMAKE_CURRENT_SOURCE_DIR}/src/settings/AppSettings.h")
-        endif()
-    endforeach()
+    if("src/ui/SettingsView.cpp" IN_LIST llcv_sources AND
+       NOT "src/ui/SettingsCompactLayout.cpp" IN_LIST llcv_sources)
+        target_sources(${llcv_target} PRIVATE src/ui/SettingsCompactLayout.cpp)
+    endif()
 endforeach()
 
+if(BUILD_TESTING)
+    add_test(NAME RendererResizeTests COMMAND HdrPipelineTests --resize)
+    set_tests_properties(RendererResizeTests PROPERTIES LABELS GPU SKIP_RETURN_CODE 77 TIMEOUT 120)
+    find_program(LLCV_POWERSHELL NAMES pwsh powershell)
+    if(LLCV_POWERSHELL)
+        add_test(NAME PackageDocsTests COMMAND "${LLCV_POWERSHELL}"
+            -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/PackageDocsTests.ps1")
+        set_tests_properties(PackageDocsTests PROPERTIES TIMEOUT 60)
+    endif()
+endif()
+
+if(BUILD_TESTING AND MSVC AND CMAKE_GENERATOR MATCHES "Ninja")
+    add_test(NAME BuildDependencyTests COMMAND ${CMAKE_COMMAND}
+        "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+        "-DTEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/dependency-test"
+        "-DCOMPILER=${CMAKE_CXX_COMPILER}"
+        "-DMAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/BuildDependencyTests.cmake")
+    set_tests_properties(BuildDependencyTests PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+endif()
+
+if(BUILD_TESTING AND MSVC)
+    # The private branches live in main.cpp and are invisible to normal tests.
+    # Compile that translation unit in each supported mode without linking or
+    # opening hardware. Keep the extra objects out of ordinary application builds.
+    set(llcv_optional_build_targets)
+    foreach(llcv_optional_mode VSR_EXPERIMENT HDR_FRAME_AUDIT HDR_SCRGB_PROTOTYPE)
+        set(llcv_optional_target "OptionalBuild_${llcv_optional_mode}")
+        add_library(${llcv_optional_target} OBJECT EXCLUDE_FROM_ALL src/main.cpp)
+        target_include_directories(${llcv_optional_target} PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,INCLUDE_DIRECTORIES>)
+        target_compile_options(${llcv_optional_target} PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,COMPILE_OPTIONS>)
+        target_compile_features(${llcv_optional_target} PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,COMPILE_FEATURES>)
+        # An experimental parent build must not leak its mode into other variants.
+        target_compile_definitions(${llcv_optional_target} PRIVATE
+            "$<FILTER:$<TARGET_PROPERTY:LowLatencyCaptureViewer,COMPILE_DEFINITIONS>,EXCLUDE,^LLCV_(VSR_EXPERIMENT|HDR_FRAME_AUDIT|HDR_SCRGB_PROTOTYPE)(=.*)?$>"
+            "LLCV_${llcv_optional_mode}")
+        if(llcv_optional_mode STREQUAL "HDR_SCRGB_PROTOTYPE")
+            target_compile_definitions(${llcv_optional_target} PRIVATE LLCV_HDR_FRAME_AUDIT)
+        endif()
+        list(APPEND llcv_optional_build_targets ${llcv_optional_target})
+    endforeach()
+    add_custom_target(OptionalBuildSyntaxTests DEPENDS ${llcv_optional_build_targets})
+    add_test(NAME OptionalBuildSyntaxTests COMMAND "${CMAKE_COMMAND}"
+        --build "${CMAKE_CURRENT_BINARY_DIR}" --config "$<CONFIG>"
+        --target OptionalBuildSyntaxTests --parallel 3)
+    set_tests_properties(OptionalBuildSyntaxTests PROPERTIES
+        TIMEOUT 180 RUN_SERIAL TRUE LABELS Build)
+endif()
+
 install(TARGETS LowLatencyCaptureViewer RUNTIME DESTINATION .)
-install(FILES LICENSE README.md README.ko.md DESIGN.txt BUILD_INFO.txt DEPENDENCIES.txt
-        "실행안내.txt" GITHUB_PREP.md DESTINATION .)
+install(FILES LICENSE README.md README.ko.md DEPENDENCIES.txt
+        "실행안내.txt" DESTINATION .)
 install(FILES third_party/asio/LICENSE.txt DESTINATION . RENAME ASIO-SDK-LICENSE.txt)
 install(FILES third_party/asio/HOST-LICENSE.txt DESTINATION . RENAME ASIO-HOST-LICENSE.txt)
 install(FILES third_party/pretendard/LICENSE.txt DESTINATION . RENAME PRETENDARD-LICENSE.txt)
-install(DIRECTORY docs DESTINATION .)
+# Keep exclusions in sync with Copy-PackageDocs.ps1 and the installer.
+install(DIRECTORY docs DESTINATION .
+        PATTERN "viewer.png" EXCLUDE
+        PATTERN "rounded-corners-validation.md" EXCLUDE
+        PATTERN "TEST-BLT.ko.md" EXCLUDE
+        PATTERN "vsr-all-formats-validation.md" EXCLUDE
+        PATTERN "vsr-experiment.md" EXCLUDE
+        PATTERN "vsr-hdr-validation.md" EXCLUDE)

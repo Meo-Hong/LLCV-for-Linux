@@ -77,6 +77,108 @@ void TestAsioIntegerPacking() {
 }
 void SaveMessage(const wchar_t* message) { savedMessage = message; }
 
+void TestAsioInitialMixAndRuntimeMode() {
+    const auto settings = g_settings;
+    const auto runtimeMode = ActiveAudioMode();
+    const int master = g_volumePercent.load();
+    const int left = g_leftVolumePercent.load(), right = g_rightVolumePercent.load();
+    const bool muted = g_backgroundAudioMuted.load();
+    const auto tracking = g_audioTrackingStartMs.load();
+    const auto target = g_audioQueueTargetFrames.load();
+    g_settings.driftCorrection = DriftCorrectionMode::Off;
+    g_audioTrackingStartMs.store(UINT64_MAX);
+    g_audioQueueTargetFrames.store(480);
+    struct Case { int master, left, right; bool background; int expectedLeft, expectedRight; };
+    for (const auto test : {
+             Case{0, 100, 100, false, 0, 0},
+             Case{100, 100, 100, true, 0, 0},
+             Case{100, 0, 100, false, 0, 12000},
+             Case{50, 100, 100, false, 6000, 6000}}) {
+        g_volumePercent.store(test.master);
+        g_leftVolumePercent.store(test.left);
+        g_rightVolumePercent.store(test.right);
+        g_backgroundAudioMuted.store(test.background);
+        AsioRenderState state;
+        // Recreate the slow-driver case: captured PCM exists BEFORE the first
+        // callback, so there is no empty block to accidentally seed the gain.
+        for (bool restarting : {false, true}) {
+            if (restarting) {
+                state.currentMix = {1, 1};
+                PrepareAsioMix(&state);
+            }
+            g_ring.Clear();
+            const std::vector<int16_t> input(480 * 2, 12000);
+            g_ring.Push(input.data(), 480);
+            std::array<int16_t, 480 * 2> output{};
+            Require(FillAsioPcm(&state, output.data(), 480) == 480,
+                    "ASIO first callback consumes preloaded capture");
+            for (size_t frame = 0; frame < 480; ++frame) {
+                Require(output[frame * 2] == test.expectedLeft &&
+                        output[frame * 2 + 1] == test.expectedRight,
+                        "ASIO initial/restarted block respects mute and saved gains from its first sample");
+            }
+        }
+    }
+    g_settings.audioMode = AudioMode::Asio;
+    g_settings.asioDriverName = L"Saved ASIO selection";
+    g_activeAudioMode.store(AudioMode::WasapiShared);
+    Require(BuildRuntimeOsdText(1920, 1080).find(L"WASAPI Shared") != std::wstring::npos &&
+            g_settings.audioMode == AudioMode::Asio &&
+            g_settings.asioDriverName == L"Saved ASIO selection",
+            "runtime fallback reports the effective backend without changing saved preferences");
+    g_ring.Clear();
+    g_settings = settings;
+    g_activeAudioMode.store(runtimeMode);
+    g_volumePercent.store(master);
+    g_leftVolumePercent.store(left); g_rightVolumePercent.store(right);
+    g_backgroundAudioMuted.store(muted);
+    g_audioTrackingStartMs.store(tracking);
+    g_audioQueueTargetFrames.store(target);
+}
+
+void TestRealtimeDiagnosticQueue() {
+    llcv::audio::RealtimeLogQueue queue;
+    llcv::audio::RealtimeLogQueue::Message message;
+    Require(!queue.Pop(message), "diagnostic queue starts empty");
+    for (size_t index = 0; index < llcv::audio::RealtimeLogQueue::kCapacity; ++index)
+        Require(queue.Push(std::to_wstring(index).c_str()), "bounded log queue accepts its capacity");
+    Require(!queue.Push(L"overflow") && queue.TakeDropped() == 1 && queue.TakeDropped() == 0,
+            "busy UI drops a diagnostic without blocking audio and reports it once");
+    for (size_t index = 0; index < llcv::audio::RealtimeLogQueue::kCapacity; ++index)
+        Require(queue.Pop(message) && message.data() == std::to_wstring(index),
+                "deferred messages preserve FIFO order");
+    std::wstring longMessage(llcv::audio::RealtimeLogQueue::kMessageCharacters * 2, L'x');
+    Require(queue.Push(longMessage.c_str()) && queue.Pop(message) && message.back() == L'\0' &&
+            std::wcslen(message.data()) == message.size() - 1,
+            "oversized diagnostics are bounded and terminated");
+
+    constexpr unsigned count = 100000;
+    std::atomic<bool> finished{false};
+    std::thread producer([&] {
+        for (unsigned index = 1; index <= count; ++index) {
+            wchar_t number[32]; swprintf_s(number, L"%u", index);
+            queue.Push(number);
+        }
+        finished.store(true, std::memory_order_release);
+    });
+    unsigned received = 0, previous = 0;
+    while (true) {
+        if (queue.Pop(message)) {
+            const unsigned value = static_cast<unsigned>(std::wcstoul(message.data(), nullptr, 10));
+            Require(value > previous && value <= count, "concurrent diagnostic messages are complete and ordered");
+            previous = value; ++received;
+        } else if (finished.load(std::memory_order_acquire)) {
+            // Recheck after synchronizing with the producer's final publish.
+            if (!queue.Pop(message)) break;
+            const unsigned value = static_cast<unsigned>(std::wcstoul(message.data(), nullptr, 10));
+            Require(value > previous && value <= count, "final deferred diagnostic is intact");
+            previous = value; ++received;
+        } else std::this_thread::yield();
+    }
+    producer.join();
+    Require(received + queue.TakeDropped() == count, "concurrent queue accounts for every diagnostic");
+}
+
 DWORD settingsProbeThread = 0;
 std::atomic<int> settingsProbeCalls{0};
 std::atomic<bool> settingsProbeFails{false};
@@ -169,9 +271,14 @@ void TestSettingsCapabilityRefresh() {
             settingsProbeFails = failure;
             ResetEvent(settingsProbeGate);
             const int before = settingsProbeCalls.load();
-            if (refresh) SendMessageW(parent, WM_COMMAND,
-                MAKEWPARAM(IDC_SETTINGS_VIDEO_REFRESH, BN_CLICKED), 0);
-            else PopulatePixelFormatCombo(&state);
+            // Inventory refresh has its own multi-device controller test.
+            // Isolate its per-device capability invalidation here so this
+            // driver replay never enumerates the host's real devices.
+            if (refresh) {
+                state.videoModeCache->InvalidateDevice(SelectedCaptureDeviceId(&state));
+                state.appliedVideoModeKey.reset();
+            }
+            PopulatePixelFormatCombo(&state);
             Require(state.videoModesPending && !IsWindowEnabled(state.startButton) &&
                     !IsWindowEnabled(state.frameRateCombo),
                     "pending query prevents starting with stale capabilities");
@@ -717,6 +824,8 @@ int main(int argc, char** argv) {
     }
     TestPresentationPolicy();
     TestAsioIntegerPacking();
+    TestAsioInitialMixAndRuntimeMode();
+    TestRealtimeDiagnosticQueue();
     TestStartupWaitBoundary();
     TestSettingsCapabilityRefresh();
     TestExclusiveScanResultLifetime();

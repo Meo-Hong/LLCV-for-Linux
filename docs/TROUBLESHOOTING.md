@@ -4,7 +4,7 @@
 
 [README](../README.md) · [Documentation](INDEX.md) · [한국어](TROUBLESHOOTING.ko.md)
 
-[Capture initialization fails](#capture-initialization-fails) · [Video works but audio does not](#video-works-but-audio-does-not) · [The picture is soft](#the-picture-is-soft) · [MJPEG color differs from another application](#mjpeg-color-differs-from-another-application) · [Frame drops or stutter](#frame-drops-or-stutter) · [Settings window is skipped](#settings-window-is-skipped) · [Collecting a useful report](#collecting-a-useful-report)
+[Capture initialization fails](#capture-initialization-fails) · [Playback stops or input disappears](#playback-stops-or-input-disappears) · [Devices or supported modes look out of date](#devices-or-supported-modes-look-out-of-date) · [Video works but audio does not](#video-works-but-audio-does-not) · [The picture is soft](#the-picture-is-soft) · [MJPEG color differs from another application](#mjpeg-color-differs-from-another-application) · [Frame drops or stutter](#frame-drops-or-stutter) · [Settings window is skipped](#settings-window-is-skipped) · [Settings could not be saved](#settings-could-not-be-saved) · [Sleep or screen-off behavior](#sleep-or-screen-off-behavior) · [Collecting a useful report](#collecting-a-useful-report)
 
 <br>
 
@@ -32,6 +32,40 @@ already owns the device, or when a driver rejects the requested allocation.
 unavailable requested mode, a missing compatible capture pin, or no compatible
 48 kHz mono/stereo uncompressed PCM or 32-bit float audio path. The stage and
 pin diagnostics in the log are more useful than the code by itself.
+
+<br>
+
+## Playback stops or input disappears
+
+If the capture device reports a disconnect or input-path error, playback stops
+and the app shows restart guidance before returning to settings. Reconnect the
+device, close other capture applications if needed, then select **Start** again.
+The app does not repeatedly rescan devices or automatically restart capture.
+
+If the source explicitly completes all capture streams, playback ends normally,
+sleep-prevention requests are released, and settings reopen. This is distinct
+from temporary no-signal or a pause in new frames, which alone does not end
+playback. Check the source and HDMI connection; if input does not recover, use
+`F2` to return to settings, verify the mode, and start again manually.
+
+A reported video/audio format change can also stop playback to avoid incorrect
+output. Check the source's HDR, resolution, and audio settings before restarting.
+Attach a diagnostic log if any of these stops repeat unexpectedly.
+
+<br>
+
+## Devices or supported modes look out of date
+
+Video, capture-audio, and WASAPI Shared capability queries run in the background
+and reuse results while settings remain open. After reconnecting a device or
+changing its driver/settings, select **Refresh** and wait for queries to finish.
+Start remains unavailable while required video capabilities are pending or failed;
+Refresh also retries a failed query. This is a manual settings action, not a
+playback-time rescan loop.
+
+Refreshing while ASIO is selected also invalidates the retained WASAPI device's
+Shared capability results for the next switch back. It does not repeat completed
+Exclusive endpoint tests.
 
 <br>
 
@@ -89,6 +123,31 @@ pacing. Compare Low latency and VSync on the monitor where the viewer will stay.
 
 If **Start directly next time** is enabled, hold Shift while launching. You can
 also press `F2` from the viewer to close it safely and return to settings.
+
+<br>
+
+## Settings could not be saved
+
+On a settings-save failure, the previous settings file is preserved; unsaved
+changes apply only to the current session. Check available disk space and write
+permissions for `%LOCALAPPDATA%\LowLatencyCaptureViewer` and its `settings.ini`,
+then save your choices again. Include the displayed error code and diagnostic
+log if the warning persists.
+
+<br>
+
+## Sleep or screen-off behavior
+
+**App → Prevent sleep during playback** is on by default. Video playback requests
+that both the screen and system stay awake; audio-only requests that the system
+stay awake but allows the screen to turn off. Requests end when playback ends,
+fails, or closes; the settings dialog alone does not keep the PC awake.
+
+Explicit sleep, lid-close actions, and Windows power policies take precedence.
+If the user returns from sleep and playback continues, requests are restored;
+an unattended automatic wake does not rearm them. The option does not change
+Windows power settings or disable screen savers or security locks. Turn it off
+if you want normal idle sleep during playback.
 
 <br>
 

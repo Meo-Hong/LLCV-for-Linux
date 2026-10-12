@@ -15,6 +15,10 @@ selected video capture filter. If a USB device exposes audio as a separate
 DirectShow input, the viewer tries to match it by name. Select the corresponding
 audio input manually when automatic matching is not correct.
 
+Capture-audio capability checks run in the background. While Settings is open,
+results are reused when changing options; use **Refresh** to query the selected
+device again after a device or driver change.
+
 Video and audio from separate filters can use slightly different hardware
 clocks. Over a long session this can move the PCM queue away from its target.
 Clock-drift correction is normally unnecessary for a device with a shared
@@ -72,6 +76,11 @@ remaining draggable.
 The minimum window size follows Windows display scaling to keep text and controls readable in a compact window.
 The chosen size is saved independently of video-mode sizing and restored on the next launch.
 
+**Prevent sleep during playback** is enabled by default. In audio-only mode it
+requests that the system stay awake but allows the screen to turn off. The
+request is released when playback ends or fails; Windows power settings are
+not changed.
+
 <br>
 
 ## WASAPI Shared and Exclusive
@@ -83,6 +92,11 @@ When the endpoint supports `IAudioClient3`, the viewer reads its valid shared
 engine periods and starts an event-driven stream with the closest supported
 low-latency period through `InitializeSharedAudioStream`. The settings window
 shows the supported range and the Tab overlay reports the active period.
+
+Shared capability checks run in the background and are cached per endpoint
+while Settings is open. **Refresh** updates the selected device's information;
+if used in ASIO mode, returning to Shared queries the retained WASAPI device.
+Changing options alone does not repeatedly probe an already checked endpoint.
 
 If `IAudioClient3` is unavailable for the endpoint or format, the viewer falls
 back automatically to classic WASAPI Shared. This is a compatibility fallback,
@@ -120,9 +134,20 @@ clock-drift correction choices as WASAPI. When enabled, the resampler adjusts
 the capture PCM rate without adding a separate queue. Use WASAPI Shared when
 Windows APO/DSP effects are required.
 
+At playback start and output restart, saved volume and mute apply from the
+first ASIO audio buffer. If ASIO cannot open and output falls back to Shared,
+the selected ASIO mode and driver are retained for the next attempt. Tab
+diagnostics show the actual active output mode and device, not just the saved
+selection.
+
 <br>
 
 ## Output-device switching
+
+Switching between WASAPI and ASIO in Settings retains the WASAPI endpoint and
+ASIO driver choices separately, along with valid WASAPI buffer choices. ASIO
+continues to use its driver's buffer setting; returning to WASAPI restores its
+previous supported buffer selection.
 
 With **Follow the Windows default output device**, changing the Windows default
 while the viewer is running reopens only WASAPI output. Video capture remains

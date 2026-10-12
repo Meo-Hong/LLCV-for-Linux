@@ -43,6 +43,8 @@ int main() {
         Check(cache.Request(c) == 3840, "second device cached");
     }
     Check(calls == 2, "cached option changes never rescan");
+    cache.InvalidateDevice(a.device);
+    Check(cache.Request(c) == 3840, "device refresh retains unrelated device cache");
     cache.Invalidate();
     Check(!cache.Request(c), "manual refresh invalidates cached result");
     wait([&] { return completed == 3; });

@@ -25,7 +25,9 @@ bool ParseLatestReleaseResponse(const std::string& json,
 
 // Queries the official GitHub latest-release endpoint and accepts installer
 // assets only from this project's releases/download path.
-// Cancellation is checked between bounded synchronous WinHTTP operations.
+// Network operations are asynchronous. Cancellation closes the request after
+// at most one short completion-wait poll, without waiting for a network timeout.
+// Late WinHTTP callbacks own their isolated buffers until HANDLE_CLOSING.
 // The caller must keep stop alive until this function returns.
 bool FetchLatestRelease(const wchar_t* currentVersion, CheckResult& result,
                         const std::atomic<bool>* stop = nullptr);

@@ -1,18 +1,49 @@
 #include "settings/SettingsStore.h"
 
 #include <windows.h>
+#include <sddl.h>
 
 #include <cstdio>
+#include <cstring>
 #include <string>
+#include <vector>
 
 namespace {
 
 int failures = 0;
 
-void Check(bool condition, const char* message) {
-    if (condition) return;
+bool Check(bool condition, const char* message) {
+    if (condition) return true;
     std::fprintf(stderr, "FAILED: %s\n", message);
     ++failures;
+    return false;
+}
+
+bool CheckWin32(BOOL condition, const char* message) {
+    if (condition) return true;
+    std::fprintf(stderr, "FAILED: %s (Win32=%lu)\n", message, GetLastError());
+    ++failures;
+    return false;
+}
+
+bool CheckSaved(const std::wstring& path, const llcv::settings::AppSettings& settings,
+                const char* message) {
+    unsigned long error = ERROR_SUCCESS;
+    if (llcv::settings::SaveToIni(path, settings, &error) && error == ERROR_SUCCESS)
+        return true;
+    std::fprintf(stderr, "FAILED: %s (save error=%lu)\n", message, error);
+    ++failures;
+    return false;
+}
+
+void CheckExclusiveCacheRoundTrip(const llcv::settings::AppSettings& loaded) {
+    // A failed save/load must report an assertion, never dereference an empty
+    // vector. Keep the count check separate so the failure stays diagnostic.
+    if (!Check(loaded.exclusiveEndpointCache.size() == 3,
+               "exclusive cache count round trip")) return;
+    Check(loaded.exclusiveEndpointCache.back().inconclusive &&
+          !loaded.exclusiveEndpointCache.back().supported,
+          "temporary failure persists as explicit retry, not unsupported");
 }
 
 std::wstring TemporaryIniPath() {
@@ -47,9 +78,129 @@ void TestDefaults(const std::wstring& path) {
           "default resolution");
     Check(loaded.settings.checkForUpdates,
           "automatic update check defaults on");
+    Check(loaded.settings.preventSleep, "sleep prevention defaults on for old/new profiles");
     Check(loaded.settings.roundedCorners, "rounded corners default on for old/new profiles");
     Check(loaded.settings.hdrChromaLocation == llcv::hdr::ChromaLocation::Auto,
           "old and fresh profiles keep automatic HDR chroma");
+    WritePrivateProfileStringW(L"General", L"CheckForUpdates", L"0", path.c_str());
+    Check(llcv::settings::LoadFromIni(path).settings.preventSleep,
+          "legacy profile without the new key defaults to sleep prevention");
+    DeleteFileW(path.c_str()); // Preserve the following new-profile test's precondition.
+}
+
+void TestNewUnicodeProfile(const std::wstring& path) {
+    using namespace llcv::settings;
+    // TestDefaults removed only this test's unique GetTempFileName result.
+    // Exercise a genuinely new profile, not an existing empty ANSI file.
+    const bool missing = GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES &&
+        GetLastError() == ERROR_FILE_NOT_FOUND;
+    Check(missing, "Unicode test starts with a nonexistent temporary profile");
+    if (!missing) return;
+    AppSettings settings;
+    settings.asioDriverName = L"ASIO 한글 드라이버 Ω";
+    settings.captureDeviceId = L"캡처 장치 日本語";
+    settings.captureAudioDeviceId = L"캡처 오디오 장치 Ω";
+    settings.audioOutputDeviceId = L"출력 장치 日本語";
+    unsigned long error = 0;
+    const bool saved = SaveToIni(path, settings, &error);
+    Check(saved && error == ERROR_SUCCESS, "new Unicode profile saves successfully");
+    if (!saved) return;
+    const HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (CheckWin32(file != INVALID_HANDLE_VALUE, "open newly saved profile for BOM check")) {
+        BYTE bom[2]{};
+        DWORD bytes = 0;
+        if (CheckWin32(ReadFile(file, bom, sizeof(bom), &bytes, nullptr), "read profile BOM"))
+            Check(bytes == sizeof(bom) && bom[0] == 0xff && bom[1] == 0xfe,
+                  "a new profile is UTF-16 little endian");
+        CloseHandle(file);
+    }
+    for (int pass = 0; pass < 2; ++pass) {
+        const auto loaded = LoadFromIni(path).settings;
+        Check(loaded.asioDriverName == settings.asioDriverName &&
+              loaded.captureDeviceId == settings.captureDeviceId &&
+              loaded.captureAudioDeviceId == settings.captureAudioDeviceId &&
+              loaded.audioOutputDeviceId == settings.audioOutputDeviceId,
+              "non-ASCII driver and device names survive initial save and replacement");
+        if (pass == 0) {
+            settings.volumePercent = 90;
+            if (!CheckSaved(path, settings, "existing Unicode profile can be replaced")) return;
+        }
+    }
+}
+
+std::wstring CurrentUserSid() {
+    HANDLE token = nullptr;
+    if (!CheckWin32(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token),
+                    "query current user token for temporary-file DACL")) return {};
+    DWORD bytes = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &bytes);
+    if (!bytes) {
+        CheckWin32(FALSE, "size current user SID");
+        CloseHandle(token);
+        return {};
+    }
+    std::vector<BYTE> storage(bytes);
+    const BOOL queried = GetTokenInformation(token, TokenUser, storage.data(), bytes, &bytes);
+    if (!CheckWin32(queried, "read current user SID")) {
+        CloseHandle(token);
+        return {};
+    }
+    CloseHandle(token);
+    LPWSTR text = nullptr;
+    if (!CheckWin32(ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(storage.data())->User.Sid,
+                                         &text), "format current user SID")) return {};
+    const std::wstring sid(text);
+    LocalFree(text);
+    return sid;
+}
+
+std::wstring ReadDacl(const std::wstring& path) {
+    DWORD bytes = 0;
+    GetFileSecurityW(path.c_str(), DACL_SECURITY_INFORMATION, nullptr, 0, &bytes);
+    if (!bytes) {
+        CheckWin32(FALSE, "size temporary-profile DACL");
+        return {};
+    }
+    std::vector<BYTE> storage(bytes);
+    if (!CheckWin32(GetFileSecurityW(path.c_str(), DACL_SECURITY_INFORMATION,
+        storage.data(), bytes, &bytes), "read temporary-profile DACL")) return {};
+    LPWSTR text = nullptr;
+    if (!CheckWin32(ConvertSecurityDescriptorToStringSecurityDescriptorW(storage.data(),
+        SDDL_REVISION_1, DACL_SECURITY_INFORMATION, &text, nullptr),
+        "format temporary-profile DACL")) return {};
+    const std::wstring dacl(text);
+    LocalFree(text);
+    return dacl;
+}
+
+void TestDaclPreservation(const std::wstring& path) {
+    const auto sid = CurrentUserSid();
+    if (sid.empty()) return;
+    // Only the unique temporary INI is changed. Keep full access for its current
+    // user, SYSTEM, and administrators; explicit protection makes ACL loss visible.
+    const std::wstring policy = L"D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;" + sid + L")";
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    if (!CheckWin32(ConvertStringSecurityDescriptorToSecurityDescriptorW(policy.c_str(),
+        SDDL_REVISION_1, &descriptor, nullptr), "create custom temporary-file DACL")) return;
+    const BOOL applied = SetFileSecurityW(path.c_str(),
+        DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, descriptor);
+    const bool ok = CheckWin32(applied, "apply custom DACL only to the temporary profile");
+    LocalFree(descriptor);
+    if (!ok) return;
+    const auto before = ReadDacl(path);
+    if (before.empty()) return;
+    Check(before.find(L"D:P") == 0, "test DACL has inheritance disabled");
+    auto settings = llcv::settings::LoadFromIni(path).settings;
+    settings.volumePercent = 65;
+    if (!CheckSaved(path, settings, "save with a custom DACL succeeds")) return;
+    const auto after = ReadDacl(path);
+    Check(after == before, "replacement preserves explicit ACEs and DACL protection");
+    if (after != before) {
+        std::fwprintf(stderr, L"DACL before: %ls\nDACL after: %ls\n", before.c_str(), after.c_str());
+    }
+    Check(llcv::settings::LoadFromIni(path).settings.volumePercent == 65,
+          "DACL-preserving save also updates settings");
 }
 
 void TestResolutionRoundTrips(const std::wstring& path) {
@@ -67,7 +218,7 @@ void TestResolutionRoundTrips(const std::wstring& path) {
             saved.vsrCapturePreset = item.preset;
             saved.videoFrameRate = fps;
             saved.pixelFormat = VideoPixelFormat::Nv12;
-            SaveToIni(path, saved);
+            if (!CheckSaved(path, saved, "save resolution fixture")) return;
             wchar_t value[32]{};
             GetPrivateProfileStringW(L"Video", L"Resolution", L"", value,
                                      ARRAYSIZE(value), path.c_str());
@@ -139,11 +290,12 @@ void TestRoundTrip(const std::wstring& path) {
     saved.showDiagnosticConsole = true;
     saved.skipStartupSettings = true;
     saved.checkForUpdates = false;
+    saved.preventSleep = false;
     saved.audioOnly = true;
     saved.audioOnlyWidth = 640;
     saved.audioOnlyHeight = 360;
 
-    SaveToIni(path, saved);
+    if (!CheckSaved(path, saved, "save complete round-trip fixture")) return;
     const LoadResult result = LoadFromIni(path);
     Check(result.settings.consoleSurround51, "surround preference round trip");
     const AppSettings& loaded = result.settings;
@@ -170,11 +322,7 @@ void TestRoundTrip(const std::wstring& path) {
           "channel volume round trip");
     Check(loaded.volumeHudPosition == saved.volumeHudPosition,
           "HUD position round trip");
-    Check(loaded.exclusiveEndpointCache.size() == 3,
-          "exclusive cache count round trip");
-    Check(loaded.exclusiveEndpointCache.back().inconclusive &&
-          !loaded.exclusiveEndpointCache.back().supported,
-          "temporary failure persists as explicit retry, not unsupported");
+    CheckExclusiveCacheRoundTrip(loaded);
     Check(loaded.asioDriverName == saved.asioDriverName,
           "ASIO driver round trip");
     Check(loaded.vsrEnabled == saved.vsrEnabled, "VSR preference saved/restored");
@@ -199,7 +347,7 @@ void TestRoundTrip(const std::wstring& path) {
           "diagnostics round trip");
     Check(loaded.screenshotClipboard, "screenshot clipboard round trip");
     Check(loaded.skipStartupSettings && !loaded.checkForUpdates &&
-              loaded.audioOnly,
+              loaded.audioOnly && !loaded.preventSleep,
           "general settings round trip");
 }
 
@@ -210,9 +358,10 @@ void TestPresentationModes(const std::wstring& path) {
                             PresentationMode::Compatibility}) {
         AppSettings settings{};
         settings.presentationMode = mode;
-        SaveToIni(path, settings);
+        if (!CheckSaved(path, settings, "save presentation-mode fixture")) return;
         Check(LoadFromIni(path).settings.presentationMode == mode,
               "all presentation modes round trip");
+        Check(LoadFromIni(path).settings.preventSleep, "enabled sleep preference round trips");
     }
     WritePrivateProfileStringW(L"Video", L"Presentation", L"unknown", path.c_str());
     Check(LoadFromIni(path).settings.presentationMode == PresentationMode::AllowTearing,
@@ -228,7 +377,7 @@ void TestPcmDefaultAndPreservation(const std::wstring& path) {
     for (int value : {10, 15, 20, 25, 30}) {
         AppSettings saved{};
         saved.pcmQueueTargetMs = value;
-        SaveToIni(path, saved);
+        if (!CheckSaved(path, saved, "save PCM default fixture")) return;
         Check(LoadFromIni(path).settings.pcmQueueTargetMs == value,
               "existing saved PCM values must not migrate to the new default");
     }
@@ -249,7 +398,7 @@ void TestLegacyPcmMigration(const std::wstring& path) {
         saved.pcmQueueTargetMs = value;
         saved.skipStartupSettings = true;
         saved.volumePercent = 75;
-        SaveToIni(path, saved);
+        if (!CheckSaved(path, saved, "save legacy PCM migration fixture")) return;
         Check(WritePrivateProfileStringW(L"Audio", L"PcmQueueDefaultsVersion", nullptr, path.c_str()) != 0,
               "create legacy unversioned PCM settings");
         Check(WritePrivateProfileStringW(L"Custom", L"Untouched", L"73", path.c_str()) != 0,
@@ -270,7 +419,7 @@ void TestLegacyPcmMigration(const std::wstring& path) {
     }
     AppSettings chosen{};
     chosen.pcmQueueTargetMs = 20;
-    SaveToIni(path, chosen);
+    if (!CheckSaved(path, chosen, "save user-selected PCM value")) return;
     Check(MigrateLegacyPcmQueueTarget(path) && LoadFromIni(path).settings.pcmQueueTargetMs == 20,
           "user may select 20ms again after migration");
     Check(WritePrivateProfileStringW(L"Audio", L"PcmQueueDefaultsVersion", L"2", path.c_str()) != 0,
@@ -288,7 +437,7 @@ void TestHdrChroma(const std::wstring& path) {
         settings::AppSettings saved{};
         saved.pixelFormat = settings::VideoPixelFormat::P010;
         saved.hdrChromaLocation = mode;
-        settings::SaveToIni(path, saved);
+        if (!CheckSaved(path, saved, "save HDR placement fixture")) return;
         Check(settings::LoadFromIni(path).settings.hdrChromaLocation == mode,
               "each HDR placement survives save/load");
     }
@@ -305,15 +454,75 @@ void TestHdrChroma(const std::wstring& path) {
           "missing placement from legacy profile stays Auto");
 }
 
+void TestSaveFailures(const std::wstring& path) {
+    using namespace llcv::settings;
+    AppSettings original;
+    original.volumePercent = 35;
+    original.exclusiveEndpointCache = {{L"keep-verified", true, 10, false}};
+    unsigned long error = 99;
+    if (!CheckSaved(path, original, "checked save succeeds")) return;
+    if (!CheckWin32(WritePrivateProfileStringW(L"Future", L"PreservedKey", L"keep", path.c_str()),
+                    "prepare unknown setting")) return;
+    auto changed = original;
+    changed.volumePercent = 90;
+    changed.exclusiveEndpointCache.clear();
+    if (!CheckWin32(SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_READONLY),
+                    "make profile read-only")) return;
+    Check(!SaveToIni(path, changed, &error) && error == ERROR_ACCESS_DENIED,
+          "read-only save reports failure");
+    Check(LoadFromIni(path).settings.volumePercent == 35 &&
+          LoadFromIni(path).settings.exclusiveEndpointCache.size() == 1,
+          "failed save preserves volume and verification cache");
+    if (!CheckWin32(SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL),
+                    "restore writable temporary profile")) return;
+    const HANDLE held = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (!CheckWin32(held != INVALID_HANDLE_VALUE,
+                    "hold original profile without delete sharing")) return;
+    Check(!SaveToIni(path, changed, &error) && error != ERROR_SUCCESS,
+          "locked destination reports atomic replacement failure");
+    CloseHandle(held);
+    Check(LoadFromIni(path).settings.volumePercent == 35,
+          "replacement failure never partially updates original");
+    WIN32_FIND_DATAW entry{};
+    const HANDLE remaining = FindFirstFileW((path + L".tmp-*").c_str(), &entry);
+    Check(remaining == INVALID_HANDLE_VALUE, "failed save cleans only its owned temporary file");
+    if (remaining != INVALID_HANDLE_VALUE) FindClose(remaining);
+    if (!CheckSaved(path, changed, "save recovers once file lock is released")) return;
+    wchar_t unknown[32]{};
+    GetPrivateProfileStringW(L"Future", L"PreservedKey", L"", unknown, 32, path.c_str());
+    Check(std::wstring(unknown) == L"keep", "atomic save preserves unknown settings");
+    Check(!SaveToIni(path + L"\\missing\\settings.ini", changed, &error) && error != 0,
+          "missing directory is a visible save failure");
+    Check(!SaveToIni(L"", changed, &error) && error == ERROR_INVALID_NAME,
+          "empty profile path is rejected");
+}
+
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    // CTest runs these in isolation with WILL_FAIL: exactly one recorded
+    // assertion must produce exit 1. A crash still fails CTest, and any missing
+    // or cascading assertion returns 0 so WILL_FAIL rejects that regression.
+    if (argc == 2 && std::strcmp(argv[1], "--save-failure-probe") == 0) {
+        TestRoundTrip(L""); // Deterministic ERROR_INVALID_NAME, no filesystem writes.
+        return failures == 1 ? 1 : 0;
+    }
+    if (argc == 2 && std::strcmp(argv[1], "--empty-cache-probe") == 0) {
+        CheckExclusiveCacheRoundTrip(llcv::settings::AppSettings{});
+        return failures == 1 ? 1 : 0;
+    }
+    if (argc != 1) {
+        std::fprintf(stderr, "Unknown SettingsStoreTests argument.\n");
+        return 2;
+    }
     const std::wstring path = TemporaryIniPath();
     if (path.empty()) {
         std::fprintf(stderr, "FAILED: could not create temporary INI path\n");
         return 1;
     }
     TestDefaults(path);
+    TestNewUnicodeProfile(path);
     TestResolutionRoundTrips(path);
     TestRoundTrip(path);
     for (const wchar_t* version : {L"1", L"0"}) {
@@ -323,7 +532,7 @@ int main() {
               migrated.exclusiveVerifiedEndpointId.empty() && migrated.exclusiveVerifiedBufferMs == 0,
               "old probe and legacy verification invalidated together");
         migrated.exclusiveEndpointCache = {{L"checked-once", false, 0, true}};
-        llcv::settings::SaveToIni(path, migrated);
+        if (!CheckSaved(path, migrated, "save migrated endpoint cache")) continue;
         const auto reopened = llcv::settings::LoadFromIni(path).settings;
         Check(reopened.exclusiveEndpointCache.size() == 1 &&
               reopened.exclusiveEndpointCache.front().inconclusive,
@@ -332,8 +541,8 @@ int main() {
     {
         auto settings = llcv::settings::LoadFromIni(path).settings;
         settings.roundedCorners = true;
-        llcv::settings::SaveToIni(path, settings);
-        Check(llcv::settings::LoadFromIni(path).settings.roundedCorners, "rounded corners ON persists");
+        if (CheckSaved(path, settings, "save enabled rounded corners"))
+            Check(llcv::settings::LoadFromIni(path).settings.roundedCorners, "rounded corners ON persists");
     }
     for (const wchar_t* value : {L"Dark", L"invalid", L"LIGHT"}) {
         WritePrivateProfileStringW(L"General", L"SettingsTheme", value, path.c_str());
@@ -349,6 +558,8 @@ int main() {
     TestPresentationModes(path);
     TestPcmDefaultAndPreservation(path);
     TestLegacyPcmMigration(path);
+    TestSaveFailures(path);
+    TestDaclPreservation(path);
     DeleteFileW(path.c_str());
     if (failures != 0) {
         std::fprintf(stderr, "%d test(s) failed.\n", failures);

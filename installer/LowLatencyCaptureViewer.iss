@@ -1,13 +1,13 @@
-; LLCV v2.0.2
+; LLCV v2.0.3
 ; Build this script with Inno Setup 7 from the installer directory.
 
 #define MyAppName "LLCV"
-#define MyAppVersion "2.0.2"
+#define MyAppVersion "2.0.3"
 #define MyAppPublisher "seria-aa"
 #define MyAppURL "https://github.com/seria-aa/LowLatencyCaptureViewer"
 #define MyAppExeName "LowLatencyCaptureViewer.exe"
 #ifndef BuildDir
-#define BuildDir "..\build-v2020-release"
+#define BuildDir "..\build-v2030-release"
 #endif
 
 [Setup]
@@ -25,9 +25,9 @@ DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
-OutputDir=..\outputs\v2.0.2
-OutputBaseFilename=LowLatencyCaptureViewer_v2.0.2_Setup
-OutputManifestFile=LowLatencyCaptureViewer_v2.0.2_Setup-manifest.txt
+OutputDir=..\outputs\v2.0.3
+OutputBaseFilename=LowLatencyCaptureViewer_v2.0.3_Setup
+OutputManifestFile=LowLatencyCaptureViewer_v2.0.3_Setup-manifest.txt
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -35,7 +35,7 @@ CloseApplications=yes
 SetupIconFile=..\assets\LowLatencyCaptureViewer.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Uninstallable=yes
-VersionInfoVersion=2.0.2.0
+VersionInfoVersion=2.0.3.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName}
 VersionInfoCopyright=Copyright (C) 2026 seria-aa
@@ -47,15 +47,12 @@ Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 [CustomMessages]
 english.ShortcutTasksGroup=Shortcuts:
 korean.ShortcutTasksGroup=바로가기:
-english.StartMenuShortcut=Create a Start Menu shortcut
-korean.StartMenuShortcut=시작 메뉴 바로가기 만들기
 english.DesktopShortcut=Create a desktop shortcut
 korean.DesktopShortcut=바탕화면 바로가기 만들기
 english.DeleteUserDataPrompt=Do you also want to delete your settings and diagnostic logs?%n%nChoose No to keep them for a future reinstall, or Yes to remove them permanently.
 korean.DeleteUserDataPrompt=사용자 설정과 진단 로그도 삭제하시겠습니까?%n%n아니오를 선택하면 다음 설치를 위해 보존하고, 예를 선택하면 영구적으로 삭제합니다.
 
 [Tasks]
-Name: "startmenuicon"; Description: "{cm:StartMenuShortcut}"; GroupDescription: "{cm:ShortcutTasksGroup}"; Flags: unchecked
 Name: "desktopicon"; Description: "{cm:DesktopShortcut}"; GroupDescription: "{cm:ShortcutTasksGroup}"; Flags: unchecked
 
 [InstallDelete]
@@ -63,8 +60,6 @@ Name: "desktopicon"; Description: "{cm:DesktopShortcut}"; GroupDescription: "{cm
 Type: files; Name: "{autoprograms}\Low Latency Capture Viewer\Low Latency Capture Viewer.lnk"
 Type: files; Name: "{autodesktop}\Low Latency Capture Viewer.lnk"
 Type: files; Name: "{group}\Low Latency Capture Viewer.lnk"
-; Respect an explicit opt-out on upgrades too; remove only our own shortcut.
-Type: files; Name: "{group}\{#MyAppName}.lnk"; Check: not WizardIsTaskSelected('startmenuicon')
 
 [Files]
 Source: "{#BuildDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
@@ -76,10 +71,12 @@ Source: "..\third_party\asio\HOST-LICENSE.txt"; DestDir: "{app}"; DestName: "ASI
 Source: "..\third_party\pretendard\LICENSE.txt"; DestDir: "{app}"; DestName: "PRETENDARD-LICENSE.txt"; Flags: ignoreversion
 Source: "..\실행안내.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\DEPENDENCIES.txt"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Keep exclusions in sync with Copy-PackageDocs.ps1 and CMake install rules.
+Source: "..\docs\*"; DestDir: "{app}\docs"; Excludes: "rounded-corners-validation.md,TEST-BLT.ko.md,vsr-all-formats-validation.md,vsr-experiment.md,vsr-hdr-validation.md,images\viewer.png"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon
+; Always create the Start Menu shortcut, including upgrades from an opt-out.
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
@@ -88,8 +85,10 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: no
 [Code]
 var
   DeleteUserData: Boolean;
+  UserDataDirectory: String;
 
 #include "WizardLayout.iss"
+#include "UserDataCleanup.iss"
 
 function InitializeUninstall(): Boolean;
 begin
@@ -98,8 +97,12 @@ begin
   if UninstallSilent then
     Exit;
 
-  if not DirExists(ExpandConstant('{localappdata}\LowLatencyCaptureViewer')) then
+  UserDataDirectory := ExpandConstant('{localappdata}\LowLatencyCaptureViewer');
+  if not CanRemoveUserData(UserDataDirectory) then
+  begin
+    Log('User data retained: owner/path could not be safely verified, or no data exists.');
     Exit;
+  end;
 
   DeleteUserData := MsgBox(
     ExpandConstant('{cm:DeleteUserDataPrompt}'), mbConfirmation,
@@ -109,6 +112,14 @@ end;
 procedure CurUninstallStepChanged(UninstallStep: TUninstallStep);
 begin
   if (UninstallStep = usPostUninstall) and DeleteUserData then
-    DelTree(ExpandConstant('{localappdata}\LowLatencyCaptureViewer'),
-      True, True, True);
+  begin
+    // Recheck ownership and the exact target immediately before deletion.
+    if CanRemoveUserData(UserDataDirectory) then
+    begin
+      if not DelTree(UserDataDirectory, True, True, True) then
+        Log('Some user data could not be removed; remaining files were retained.');
+    end
+    else
+      Log('User data retained: ownership or target changed during uninstall.');
+  end;
 end;

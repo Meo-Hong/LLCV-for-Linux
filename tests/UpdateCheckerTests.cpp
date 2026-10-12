@@ -1,10 +1,15 @@
 #include "update/UpdateChecker.h"
 #include "update/UpdateCheckTask.h"
+#include "update/UpdateTransport.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
+#include <cstdint>
 #include <future>
 #include <stdexcept>
+#include <vector>
 
 namespace {
 
@@ -160,6 +165,8 @@ void TestFetchException() {
            "fetch exceptions become retryable failures");
 }
 
+#include "UpdateTransportTests.inl"
+
 }  // namespace
 
 int main() {
@@ -182,6 +189,7 @@ int main() {
     TestTaskLifecycle();
     TestInFlightCancellation();
     TestFetchException();
+    TestAsyncTransport();
 
     if (failures == 0) {
         std::puts("UpdateCheckerTests passed");

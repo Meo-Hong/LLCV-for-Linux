@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cwchar>
+#include <vector>
 
 namespace llcv::settings {
 namespace {
@@ -42,14 +44,24 @@ bool ReadBool(
     return ReadInt(path, section, key, defaultValue ? 1 : 0) != 0;
 }
 
+struct IniWriter {
+    const std::wstring& file;
+    DWORD error = ERROR_SUCCESS;
+};
+
 void WriteString(
-    const std::wstring& path, const wchar_t* section, const wchar_t* key,
+    IniWriter& path, const wchar_t* section, const wchar_t* key,
     const wchar_t* value) {
-    WritePrivateProfileStringW(section, key, value, path.c_str());
+    if (path.error) return;
+    SetLastError(ERROR_SUCCESS);
+    if (!WritePrivateProfileStringW(section, key, value, path.file.c_str())) {
+        path.error = GetLastError();
+        if (!path.error) path.error = ERROR_WRITE_FAULT;
+    }
 }
 
 void WriteInt(
-    const std::wstring& path, const wchar_t* section, const wchar_t* key,
+    IniWriter& path, const wchar_t* section, const wchar_t* key,
     int value) {
     wchar_t text[32]{};
     swprintf_s(text, L"%d", value);
@@ -149,6 +161,7 @@ LoadResult LoadFromIni(const std::wstring& path) {
         ReadBool(path, L"General", L"SkipStartupSettings");
     settings.checkForUpdates =
         ReadBool(path, L"General", L"CheckForUpdates", true);
+    settings.preventSleep = ReadBool(path, L"General", L"PreventSleep", true);
     settings.audioOnly = ReadBool(path, L"General", L"AudioOnly");
     settings.audioOnlyWidth = std::clamp(
         ReadInt(path, L"Window", L"AudioOnlyWidth", 380), 380, 16384);
@@ -355,7 +368,8 @@ LoadResult LoadFromIni(const std::wstring& path) {
     return result;
 }
 
-void SaveToIni(const std::wstring& path, const AppSettings& settings) {
+static DWORD WriteSettings(const std::wstring& file, const AppSettings& settings) {
+    IniWriter path{file};
     const wchar_t* language = L"Auto";
     if (settings.uiLanguage == UiLanguage::Korean) language = L"Korean";
     if (settings.uiLanguage == UiLanguage::English) language = L"English";
@@ -365,6 +379,7 @@ void SaveToIni(const std::wstring& path, const AppSettings& settings) {
              settings.skipStartupSettings ? 1 : 0);
     WriteInt(path, L"General", L"CheckForUpdates",
              settings.checkForUpdates ? 1 : 0);
+    WriteInt(path, L"General", L"PreventSleep", settings.preventSleep ? 1 : 0);
     WriteInt(path, L"General", L"AudioOnly", settings.audioOnly ? 1 : 0);
     WriteInt(path, L"Window", L"AudioOnlyWidth", settings.audioOnlyWidth);
     WriteInt(path, L"Window", L"AudioOnlyHeight", settings.audioOnlyHeight);
@@ -412,8 +427,7 @@ void SaveToIni(const std::wstring& path, const AppSettings& settings) {
     WriteInt(path, L"Audio", L"ExclusiveVerifiedBufferMs",
              settings.exclusiveVerifiedBufferMs);
 
-    WritePrivateProfileStringW(
-        L"ExclusiveEndpointCache", nullptr, nullptr, path.c_str());
+    WriteString(path, L"ExclusiveEndpointCache", nullptr, nullptr);
     WriteInt(path, L"ExclusiveEndpointCache", L"ProbeVersion", kExclusiveProbeVersion);
     const size_t cacheCount = (std::min)(
         settings.exclusiveEndpointCache.size(),
@@ -489,6 +503,88 @@ void SaveToIni(const std::wstring& path, const AppSettings& settings) {
     WriteInt(path, L"Video", L"VsrEnabled", settings.vsrEnabled ? 1 : 0);
     WriteInt(path, L"Diagnostics", L"ShowConsole",
              settings.showDiagnosticConsole ? 1 : 0);
+    return path.error;
+}
+
+bool SaveToIni(const std::wstring& path, const AppSettings& settings,
+               unsigned long* error) {
+    const auto fail = [error](DWORD code) {
+        if (error) *error = code ? code : ERROR_WRITE_FAULT;
+        return false;
+    };
+    if (error) *error = ERROR_SUCCESS;
+    if (path.empty()) return fail(ERROR_INVALID_NAME);
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    const bool existing = attributes != INVALID_FILE_ATTRIBUTES;
+    if (existing && (attributes & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_DIRECTORY)))
+        return fail(ERROR_ACCESS_DENIED);
+    if (!existing && GetLastError() != ERROR_FILE_NOT_FOUND)
+        return fail(GetLastError());
+
+    // Keep explicitly restricted profiles restricted, including during staging.
+    // A rename would otherwise inherit the temporary file's directory ACL.
+    std::vector<BYTE> security;
+    SECURITY_ATTRIBUTES securityAttributes{sizeof(SECURITY_ATTRIBUTES), nullptr, FALSE};
+    SECURITY_INFORMATION securityFlags = DACL_SECURITY_INFORMATION;
+    if (existing) {
+        DWORD bytes = 0;
+        GetFileSecurityW(path.c_str(), DACL_SECURITY_INFORMATION, nullptr, 0, &bytes);
+        if (!bytes || GetLastError() != ERROR_INSUFFICIENT_BUFFER) return fail(GetLastError());
+        security.resize(bytes);
+        if (!GetFileSecurityW(path.c_str(), DACL_SECURITY_INFORMATION,
+                             security.data(), bytes, &bytes)) return fail(GetLastError());
+        SECURITY_DESCRIPTOR_CONTROL control{};
+        DWORD revision = 0;
+        if (!GetSecurityDescriptorControl(security.data(), &control, &revision))
+            return fail(GetLastError());
+        securityFlags |= (control & SE_DACL_PROTECTED)
+            ? PROTECTED_DACL_SECURITY_INFORMATION : UNPROTECTED_DACL_SECURITY_INFORMATION;
+        securityAttributes.lpSecurityDescriptor = security.data();
+    }
+
+    static std::atomic<unsigned long> sequence{0};
+    wchar_t suffix[96]{};
+    swprintf_s(suffix, L".tmp-%lu-%llu-%lu", GetCurrentProcessId(),
+               GetTickCount64(), sequence.fetch_add(1, std::memory_order_relaxed));
+    const std::wstring temporary = path + suffix;
+    const HANDLE reservation = CreateFileW(temporary.c_str(), GENERIC_WRITE, 0,
+        existing ? &securityAttributes : nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (reservation == INVALID_HANDLE_VALUE) return fail(GetLastError());
+    // New profiles are UTF-16 so device names round-trip in every UI locale.
+    const WORD bom = 0xfeff;
+    DWORD written = 0;
+    const BOOL initialized = WriteFile(reservation, &bom, sizeof(bom), &written, nullptr);
+    const DWORD initializeError = GetLastError();
+    CloseHandle(reservation);
+    struct TemporaryFile {
+        const std::wstring& name;
+        ~TemporaryFile() { DeleteFileW(name.c_str()); }
+    } cleanup{temporary};
+    if (!initialized || written != sizeof(bom)) return fail(initializeError);
+    // Preserve unknown keys and old profile encoding. Never partially overwrite
+    // the live file (including Exclusive verification data) on a failed write.
+    if (existing && !CopyFileW(path.c_str(), temporary.c_str(), FALSE))
+        return fail(GetLastError());
+    if (existing && !SetFileSecurityW(temporary.c_str(), securityFlags, security.data()))
+        return fail(GetLastError());
+    const DWORD writeError = WriteSettings(temporary, settings);
+    if (writeError) return fail(writeError);
+    // Flush the profile API's cache before file-level replacement.
+    WritePrivateProfileStringW(nullptr, nullptr, nullptr, temporary.c_str());
+    const HANDLE completed = CreateFileW(temporary.c_str(), GENERIC_WRITE,
+        FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (completed == INVALID_HANDLE_VALUE) return fail(GetLastError());
+    const BOOL flushed = FlushFileBuffers(completed);
+    const DWORD flushError = GetLastError();
+    CloseHandle(completed);
+    if (!flushed) return fail(flushError);
+    // A sibling rename has no cross-volume copy/delete fallback. ReplaceFile
+    // without a backup can remove the original before reporting error 1176.
+    const BOOL replaced = MoveFileExW(temporary.c_str(), path.c_str(),
+        MOVEFILE_WRITE_THROUGH | (existing ? MOVEFILE_REPLACE_EXISTING : 0));
+    if (!replaced) return fail(GetLastError());
+    WritePrivateProfileStringW(nullptr, nullptr, nullptr, path.c_str());
+    return true;
 }
 
 }  // namespace llcv::settings

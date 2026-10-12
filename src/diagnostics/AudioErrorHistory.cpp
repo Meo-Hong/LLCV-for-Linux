@@ -5,13 +5,14 @@
 namespace llcv::diagnostics {
 
 AudioErrorHistory::AudioErrorHistory(size_t capacity) noexcept
-    : capacity_((std::max)(size_t{1}, capacity)) {}
+    : capacity_(std::clamp(capacity, size_t{1}, kMaximumCapacity)) {}
 
 void AudioErrorHistory::Record(const AudioErrorEvent& event) {
     if (event.timestampMs == 0) return;
     std::lock_guard<std::mutex> lock(mutex_);
-    if (events_.size() >= capacity_) events_.pop_front();
-    events_.push_back(event);
+    events_[next_] = event;
+    next_ = (next_ + 1) % capacity_;
+    size_ = (std::min)(size_ + 1, capacity_);
 }
 
 AudioPatternStats AudioErrorHistory::Analyze(
@@ -25,11 +26,23 @@ AudioPatternStats AudioErrorHistory::Analyze(
     // display classification only; it does not change underrun accounting.
     const uint64_t burstGapMs = (std::max)(20ull, packetPeriodMs * 2);
 
+    // Copy only the bounded history while holding the producer's lock. All
+    // filtering and burst classification happens after the snapshot is taken.
+    std::array<AudioErrorEvent, kMaximumCapacity> snapshot;
+    size_t count = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        count = size_;
+        const size_t first = (next_ + capacity_ - size_) % capacity_;
+        for (size_t index = 0; index < count; ++index) {
+            snapshot[index] = events_[(first + index) % capacity_];
+        }
+    }
     AudioPatternStats stats{};
     size_t currentBurst = 0;
     uint64_t previousUnderrunMs = 0;
-    std::lock_guard<std::mutex> lock(mutex_);
-    for (const AudioErrorEvent& event : events_) {
+    for (size_t index = 0; index < count; ++index) {
+        const AudioErrorEvent& event = snapshot[index];
         if (event.timestampMs < windowStartMs) continue;
         ++stats.recentEvents;
         stats.lastEventMs = (std::max)(stats.lastEventMs, event.timestampMs);
@@ -55,7 +68,7 @@ AudioPatternStats AudioErrorHistory::Analyze(
 
 size_t AudioErrorHistory::Size() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    return events_.size();
+    return size_;
 }
 
 }  // namespace llcv::diagnostics
