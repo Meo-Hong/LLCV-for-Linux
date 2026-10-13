@@ -12,6 +12,9 @@ llcv (2.0.4) resolute; urgency=medium
     screen saver is no longer blocked on the settings screen.
   * A failed settings save keeps the previous settings file, removes the
     temporary file and shows a notice.
+  * The APT source lists only the package architecture, so systems with
+    i386 multiarch (for example for Steam) no longer show "doesn't support
+    architecture 'i386'" on apt update.
 
  -- Meohong <busimh001@gmail.com>  Wed, 14 Oct 2026 12:00:00 +0900
 

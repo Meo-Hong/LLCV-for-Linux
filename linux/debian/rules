@@ -3,6 +3,7 @@
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
 include /usr/share/dpkg/pkg-info.mk
+include /usr/share/dpkg/architecture.mk
 
 ifneq (,$(filter pkg.llcv.bundled-sdl3,$(DEB_BUILD_PROFILES)))
 LLCV_SDL3 := BUNDLED
@@ -28,6 +29,7 @@ ifneq (,$(and $(LLCV_APT_URL),$(LLCV_APT_KEY),$(LLCV_SUITE)))
 	install -Dm644 $(LLCV_APT_KEY) debian/llcv/etc/apt/keyrings/llcv-archive-keyring.asc
 	mkdir -p debian/llcv/etc/apt/sources.list.d
 	sed -e 's|@URL@|$(LLCV_APT_URL)|' -e 's|@SUITE@|$(LLCV_SUITE)|' -e 's|@COMPONENT@|$(LLCV_APT_COMPONENT)|' \
+		-e 's|@ARCH@|$(DEB_HOST_ARCH)|' \
 		$(LLCV_APT_DIR)/llcv.sources.in > debian/llcv/etc/apt/sources.list.d/llcv.sources
 	chmod 644 debian/llcv/etc/apt/sources.list.d/llcv.sources
 else

@@ -16,7 +16,7 @@ steps below are already done; for a new version see
 | File | Role |
 | --- | --- |
 | `apt/repository.conf` | Repository URL (`https://meo-hong.github.io/LLCV-for-Linux/`), suite (`stable`), Origin, Label, Component |
-| `apt/llcv.sources.in` | APT source template installed by the package (deb822) |
+| `apt/llcv.sources.in` | APT source template installed by the package (deb822); `Architectures` is set to the package architecture so multiarch systems do not ask for i386 |
 | `../debian/rules` | Adds `/etc/apt/sources.list.d/llcv.sources` and `/etc/apt/keyrings/llcv-archive-keyring.asc` only when the URL and public key exist |
 | `../tools/install-build-deps.sh` | Detects the distribution and installs the build dependencies (apt, dnf or pacman) |
 | `../tools/build-package.sh` | Builds the package for the running distribution and prints the install command |

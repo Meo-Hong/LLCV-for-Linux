@@ -14,7 +14,7 @@
 | 파일 | 역할 |
 | --- | --- |
 | `apt/repository.conf` | 저장소 주소(`https://meo-hong.github.io/LLCV-for-Linux/`), 스위트(`stable`), Origin, Label, Component |
-| `apt/llcv.sources.in` | 패키지가 설치할 APT 소스 템플릿 (deb822 형식) |
+| `apt/llcv.sources.in` | 패키지가 설치할 APT 소스 템플릿 (deb822 형식). `Architectures`를 패키지 아키텍처로 고정해 멀티아키 시스템이 i386을 찾지 않게 함 |
 | `../debian/rules` | 주소와 공개 키가 있을 때만 `/etc/apt/sources.list.d/llcv.sources`와 `/etc/apt/keyrings/llcv-archive-keyring.asc`를 패키지에 넣음 |
 | `../tools/install-build-deps.sh` | 배포판을 알아내 빌드 의존성 설치 (apt, dnf, pacman) |
 | `../tools/build-package.sh` | 지금 배포판용 패키지를 만들고 설치 명령 표시 |
