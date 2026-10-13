@@ -16,9 +16,25 @@ namespace {
 void Check(bool ok,const char* what) {
     if (!ok) { std::fprintf(stderr,"FAIL: %s\n",what); std::exit(1); }
 }
-MSG Key(HWND target,UINT key,bool repeat=false) {
-    MSG message{}; message.hwnd=target; message.message=WM_KEYDOWN;
+// Synthetic messages carry their own modifiers: real desktop key events can
+// update GetKeyState even after SetKeyboardState during native window tests.
+struct TestMessage : MSG { unsigned modifiers=0; };
+TestMessage Key(HWND target,UINT key,bool repeat=false,unsigned modifiers=0) {
+    TestMessage message{}; message.modifiers=modifiers;
+    message.hwnd=target; message.message=WM_KEYDOWN;
     message.wParam=key; message.lParam=repeat ? (LPARAM{1}<<30) : 0; return message;
+}
+class TestWindow : public Window {
+public:
+    using Window::ProcessMessage;
+    bool ProcessMessage(TestMessage& message,HWND owner,bool english,const wchar_t* version,bool light=false,
+                        MessageContext context=MessageContext::Viewer) {
+        return Window::ProcessMessage(message,owner,english,version,light,message.modifiers,context);
+    }
+};
+bool IsScreenshotRequest(const TestMessage& message,bool audioOnly,
+                         const llcv::shortcuts::Bindings& bindings=llcv::shortcuts::Defaults) {
+    return llcv::viewer_help::IsScreenshotRequest(message,audioOnly,bindings,message.modifiers);
 }
 std::wstring Text(HWND window) {
     wchar_t text[4096]{}; GetWindowTextW(window,text,4096); return text;
@@ -117,6 +133,9 @@ void CheckFields(HWND body) {
         RECT needed{0,0,r.right-r.left,0};
         const auto text=Text(child);
         DrawTextW(dc,text.c_str(),-1,&needed,DT_CALCRECT|DT_WORDBREAK|DT_NOPREFIX);
+        if(needed.right>r.right-r.left)
+            std::fwprintf(stderr,L"Clipped help field: %ls needs %ld px, has %ld px\n",text.c_str(),needed.right,r.right-r.left);
+        Check(needed.right<=r.right-r.left,"all help text fits control width");
         Check(needed.bottom<=r.bottom-r.top,"all wrapped text fits control height");
         SelectObject(dc,old);
     }
@@ -147,6 +166,63 @@ void Snapshot(HWND window,const std::filesystem::path& path) {
     Check(saved,"rendered help preview saved");
     DeleteObject(bitmap); DeleteDC(memory); ReleaseDC(window,dc);
 }
+void CheckFooter(HWND window) {
+    HWND footer=nullptr;
+    for(HWND child=GetWindow(window,GW_CHILD);child;child=GetWindow(child,GW_HWNDNEXT)) {
+        wchar_t name[32]{}; GetClassNameW(child,name,32);
+        if(!_wcsicmp(name,L"STATIC")) footer=child;
+    }
+    Check(footer!=nullptr,"help footer exists");
+    RECT bounds{},root{},body{},button{};
+    GetClientRect(footer,&bounds); GetClientRect(window,&root);
+    HDC dc=GetDC(footer);
+    const auto old=SelectObject(dc,reinterpret_cast<HFONT>(SendMessageW(footer,WM_GETFONT,0,0)));
+    RECT needed{0,0,bounds.right,0}; const auto text=Text(footer);
+    DrawTextW(dc,text.c_str(),-1,&needed,DT_CALCRECT|DT_WORDBREAK|DT_NOPREFIX);
+    SelectObject(dc,old); ReleaseDC(footer,dc);
+    Check(needed.right<=bounds.right && needed.bottom<=bounds.bottom,"entire footer fits after remapping/resizing");
+    GetWindowRect(footer,&bounds); MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&bounds),2);
+    GetWindowRect(GetDlgItem(window,100),&body); MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&body),2);
+    GetWindowRect(GetDlgItem(window,IDCANCEL),&button); MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&button),2);
+    Check(bounds.top>=body.bottom && bounds.bottom<=root.bottom && bounds.right<button.left &&
+          button.top>=body.bottom && button.bottom<=root.bottom,"footer, close button and body never overlap");
+}
+void TestSettingsKeyRouting(TestWindow& help,HWND owner) {
+    namespace keys=llcv::shortcuts;
+    HWND combo=CreateWindowW(L"COMBOBOX",L"",WS_CHILD|CBS_DROPDOWNLIST,0,0,100,100,owner,nullptr,nullptr,nullptr);
+    HWND button=CreateWindowW(L"BUTTON",L"",WS_CHILD|BS_PUSHBUTTON,0,0,100,30,owner,nullptr,nullptr,nullptr);
+    Check(combo && button,"native settings input fixtures");
+    for(unsigned binding:{unsigned(VK_TAB),keys::Shift|VK_TAB,unsigned(VK_RETURN),unsigned(VK_SPACE),
+            unsigned(VK_ESCAPE),unsigned(VK_LEFT),unsigned(VK_HOME),unsigned(VK_BACK),unsigned(VK_DELETE),
+            unsigned('A'),keys::Ctrl|'A',keys::Ctrl|'V',keys::Alt|'A',unsigned(VK_NUMPAD2),unsigned(VK_F4)}) {
+        auto custom=keys::Defaults;
+        for(size_t i=1;i<custom.size();++i) if(custom[i]==binding) custom[i]=VK_F24;
+        custom[0]=binding;
+        Check(keys::Valid(custom),"routing case uses assignable unique bindings");
+        help.SetBindings(custom);
+        for(HWND target:{combo,button,owner}) {
+            auto key=Key(target,binding&0xff,false,binding&0x700);
+            if(binding&keys::Alt) key.message=WM_SYSKEYDOWN;
+            Check(!help.ProcessMessage(key,owner,false,L"v-test",false,MessageContext::Settings) && !help.Handle(),
+                  "settings retains native navigation, editing and combo input");
+        }
+        help.Toggle(owner,false,L"v-test",SW_HIDE);
+        auto key=Key(GetDlgItem(help.Handle(),100),binding&0xff,false,binding&0x700);
+        Check(help.ProcessMessage(key,owner,false,L"v-test",false,MessageContext::Settings) && !help.Handle(),
+              "configured key still closes focused guide from settings");
+        help.Toggle(owner,false,L"v-test",SW_HIDE);
+        key=Key(owner,binding&0xff,false,binding&0x700);
+        Check(help.ProcessMessage(key,owner,false,L"v-test") && !help.Handle(),"viewer retains every custom help binding");
+    }
+    for(unsigned binding:{unsigned(VK_F1),keys::Ctrl|VK_F9}) {
+        auto custom=keys::Defaults; custom[0]=binding; help.SetBindings(custom);
+        help.Toggle(owner,false,L"v-test",SW_HIDE);
+        auto key=Key(combo,binding&0xff,false,binding&0x700);
+        Check(help.ProcessMessage(key,owner,false,L"v-test",false,MessageContext::Settings) && !help.Handle(),
+              "function-key help remains available in settings");
+    }
+    DestroyWindow(combo); DestroyWindow(button); help.SetBindings(keys::Defaults);
+}
 }
 int main(int argc,char** argv) {
     // Diagnostic mode records a complete resource trajectory without changing
@@ -174,7 +250,7 @@ int main(int argc,char** argv) {
     // Do not start it in lifecycle tests that never save a preview image.
     if (saveSnapshots)
         Check(Gdiplus::GdiplusStartup(&token,&startup,nullptr)==Gdiplus::Ok,"preview encoder");
-    Window help;
+    TestWindow help;
     HWND owner=CreateWindowW(L"STATIC",L"Hidden help-test owner",WS_POPUP,
         0,0,640,480,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
     Check(owner!=nullptr,"owner");
@@ -228,7 +304,9 @@ int main(int argc,char** argv) {
             GetScrollInfo(edit,SB_VERT,&scroll);
             Check(scroll.nPos<=std::max(0,scroll.nMax-int(scroll.nPage)+1),"resize clamps scroll offset");
             auto shot=Key(edit,VK_F12);
-            Check(!help.ProcessMessage(shot,owner,english,L"v-test",light) && IsScreenshotRequest(shot,false),"F12 reaches source screenshot handler");
+            const bool consumed=help.ProcessMessage(shot,owner,english,L"v-test",light);
+            const bool requested=IsScreenshotRequest(shot,false);
+            Check(!consumed && requested,"F12 reaches source screenshot handler");
             Check(!IsScreenshotRequest(shot,true),"audio-only screenshot ignored");
             shot=Key(edit,VK_F12,true); Check(!IsScreenshotRequest(shot,false),"held F12 ignored");
             shot=Key(edit,VK_F8); Check(!IsScreenshotRequest(shot,false),"old public F8 no longer captures");
@@ -301,6 +379,77 @@ int main(int argc,char** argv) {
             lastUserDiagnostic=user;
         }
     }
+    for (bool english:{false,true}) {
+        auto custom=llcv::shortcuts::Defaults;
+        custom[0]=VK_F9;
+        custom[4]=llcv::shortcuts::Ctrl|llcv::shortcuts::Alt|llcv::shortcuts::Shift|VK_SPACE;
+        custom[6]=VK_F10;
+        custom[static_cast<size_t>(llcv::shortcuts::Action::Exit)]=llcv::shortcuts::Ctrl|'Q';
+        help.SetBindings(custom);
+        help.Toggle(owner,english,L"v-test",SW_HIDE);
+        HWND dialog=help.Handle(), body=GetDlgItem(dialog,100);
+        Check(Text(GetDlgItem(body,205))==L"F9","help shows reassigned help key");
+        std::wstring content;
+        for (HWND field=GetWindow(body,GW_CHILD);field;field=GetWindow(field,GW_HWNDNEXT))
+            content+=Text(field)+L"\n";
+        Check(content.find(L"F12")==std::wstring::npos && content.find(L"F10")!=std::wstring::npos &&
+              content.find(L"Ctrl+Alt+Shift+Space")!=std::wstring::npos && content.find(L"Ctrl+Q")!=std::wstring::npos,
+              "help rows, video-only hint and screenshot instructions use current bindings");
+        CheckFields(body);
+        auto old=Key(owner,VK_F1);
+        Check(!help.ProcessMessage(old,owner,english,L"v-test") && help.Handle()==dialog,
+              "old help binding no longer toggles");
+        auto shot=Key(body,VK_F10);
+        Check(!help.ProcessMessage(shot,owner,english,L"v-test") &&
+              IsScreenshotRequest(shot,false,custom) && !IsScreenshotRequest(shot,true,custom),
+              "custom screenshot key passes through help and preserves audio-only gate");
+        auto toggle=Key(owner,VK_F9,true);
+        Check(help.ProcessMessage(toggle,owner,english,L"v-test") && help.Handle()==dialog,
+              "custom help key repeat does not toggle");
+        auto escape=Key(body,VK_ESCAPE);
+        Check(help.ProcessMessage(escape,owner,english,L"v-test") && help.Handle()==dialog,
+              "old Esc does not bypass a remapped exit through native dialog handling");
+        escape=Key(body,'Q',false,llcv::shortcuts::Ctrl);
+        Check(help.ProcessMessage(escape,owner,english,L"v-test") && !help.Handle(),
+              "configured exit closes only the guide");
+        escape=Key(owner,'Q',true,llcv::shortcuts::Ctrl);
+        Check(help.ProcessMessage(escape,owner,english,L"v-test"),"custom exit repeat cannot also close the viewer");
+        escape.message=WM_KEYUP; help.ProcessMessage(escape,owner,english,L"v-test");
+        escape=Key(owner,'Q',false,llcv::shortcuts::Ctrl);
+        Check(!help.ProcessMessage(escape,owner,english,L"v-test"),"next custom exit press reaches viewer routing");
+        help.Toggle(owner,english,L"v-test",SW_HIDE);
+        toggle=Key(owner,VK_F9);
+        Check(help.ProcessMessage(toggle,owner,english,L"v-test") && !help.Handle(),
+              "custom help key closes help");
+    }
+    auto altHelp=llcv::shortcuts::Defaults;
+    altHelp[0]=llcv::shortcuts::Alt|VK_F9;
+    help.SetBindings(altHelp); help.Toggle(owner,false,L"v-test",SW_HIDE);
+    auto altKey=Key(owner,VK_F9,false,llcv::shortcuts::Alt); altKey.message=WM_SYSKEYDOWN;
+    Check(help.ProcessMessage(altKey,owner,false,L"v-test") && !help.Handle(),
+          "Alt combination reaches custom help through WM_SYSKEYDOWN");
+    help.SetBindings(llcv::shortcuts::Defaults);
+    TestSettingsKeyRouting(help,owner);
+    for(bool english:{false,true}) for(bool light:{false,true}) for(bool remapped:{false,true}) {
+        auto custom=llcv::shortcuts::Defaults;
+        if(remapped) {
+            custom[0]=llcv::shortcuts::Ctrl|llcv::shortcuts::Alt|llcv::shortcuts::Shift|VK_RIGHT;
+            custom[8]=llcv::shortcuts::Ctrl|llcv::shortcuts::Alt|llcv::shortcuts::Shift|VK_HOME;
+        }
+        Check(llcv::shortcuts::Valid(custom),"footer uses valid longest bindings");
+        help.SetBindings(custom); help.Toggle(owner,english,L"v-test",SW_HIDE,light);
+        const UINT dpi=GetDpiForWindow(help.Handle());
+        for(int height:{500,300}) for(int width:{820,600,380,820}) {
+            SetWindowPos(help.Handle(),nullptr,0,0,MulDiv(width,dpi,96),MulDiv(height,dpi,96),
+                SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+            CheckFooter(help.Handle()); CheckFields(GetDlgItem(help.Handle(),100));
+            if(saveSnapshots && remapped && width==380 && height==500)
+                Snapshot(help.Handle(),std::filesystem::path(argv[1])/(std::string("help-long-")+
+                    (english?"en":"ko")+(light?"-light.png":"-dark.png")));
+        }
+        help.Close();
+    }
+    help.SetBindings(llcv::shortcuts::Defaults);
     help.Toggle(owner,false,L"v-test",SW_HIDE);
     const auto owned=CaptureHelpResources(help.Handle());
     HWND child=help.Handle(); DestroyWindow(owner);

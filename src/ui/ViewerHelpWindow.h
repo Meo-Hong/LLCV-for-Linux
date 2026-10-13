@@ -6,6 +6,7 @@
 #include <vector>
 
 namespace llcv::viewer_help {
+enum class MessageContext { Viewer, Settings };
 // UI-thread-only modeless owned window. No renderer/capture/settings ownership.
 class Window {
 public:
@@ -17,8 +18,14 @@ public:
                 bool lightTheme = false);
     // Call before viewer shortcut/wheel routing. Dismissal consumes key repeat.
     bool ProcessMessage(MSG& message, HWND owner, bool english, const wchar_t* version,
-                        bool lightTheme = false);
+                        bool lightTheme = false, MessageContext context = MessageContext::Viewer) {
+        return ProcessMessage(message, owner, english, version, lightTheme,
+            shortcuts::KeyDown(message.message) ? shortcuts::Modifiers() : 0, context);
+    }
+    bool ProcessMessage(MSG& message, HWND owner, bool english, const wchar_t* version,
+                        bool lightTheme, unsigned modifiers, MessageContext context = MessageContext::Viewer);
     void SetLightTheme(bool lightTheme);
+    void SetBindings(const shortcuts::Bindings& bindings);
     HWND Handle() const { return window_; }
     void Close();
 private:
@@ -40,9 +47,11 @@ private:
     std::array<RECT, 3> cards_{};
     std::vector<RECT> keys_;
     std::wstring version_;
+    shortcuts::Bindings bindings_=shortcuts::Defaults;
     int scroll_ = 0, contentHeight_ = 0, wheelRemainder_ = 0;
     bool layingOut_ = false, highContrast_ = false;
-    bool english_ = false, dismissEscape_ = false;
+    bool english_ = false;
+    UINT dismissKey_ = 0;
     bool lightTheme_ = false;
     ui::Palette palette_;
 };

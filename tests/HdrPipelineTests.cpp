@@ -563,6 +563,12 @@ static int TestOverlayUi(const char* directory) {
         fits(L"100%", r.audioValueFormat, 88, 33);
         fits(L"200%", r.audioValueFormat, 88, 29);
         fits(L"-96.0 dBFS", r.audioSmallFormat, 120, 22);
+        for (unsigned key : {unsigned(VK_SPACE),unsigned(VK_SEPARATOR),unsigned(VK_F24),unsigned(VK_RIGHT)}) {
+            auto custom=keys::Defaults;
+            custom[2]=keys::Ctrl|keys::Alt|keys::Shift|key;
+            const auto hint=keys::Expand(english ? L"MAX 200% · F3" : L"최대 200% · F3",custom);
+            fits(hint.c_str(),r.audioSmallFormat,234,26);
+        }
         fits(english ? L"Wheel · Double-click reset" : L"휠 조절 · 두 번 클릭 초기화",
             r.audioSmallFormat, 208, 22);
         const auto hasColor = [&](ID3D11Texture2D* texture, RECT rect, COLORREF expected) {
@@ -626,6 +632,15 @@ static int TestOverlayUi(const char* directory) {
             }
         }
         g_settings.allowVolumeBoost = true; g_volumePercent = 200;
+        for (bool custom:{false,true}) {
+        g_settings.shortcuts=keys::Defaults;
+        if (custom) {
+            g_settings.shortcuts[4]=keys::Ctrl|keys::Alt|keys::Shift|VK_SPACE;
+            g_settings.shortcuts[7]=keys::Ctrl|'D';
+            const auto diagnostic=BuildRuntimeOsdText(1280,720);
+            Require(diagnostic.find(L"[Ctrl+D")!=std::wstring::npos &&
+                diagnostic.find(L"[Tab")==std::wstring::npos,"diagnostic OSD shows configured close shortcut");
+        }
         for (const auto position : {VolumeHudPosition::TopLeft, VolumeHudPosition::TopRight,
                 VolumeHudPosition::BottomLeft, VolumeHudPosition::BottomRight}) {
         g_settings.volumeHudPosition = position;
@@ -650,7 +665,7 @@ static int TestOverlayUi(const char* directory) {
                 for (int x = 0; x < 260; ++x)
                     Require(notification.bytes[(y * 260 + x) * 4 + 3] == 0,
                         "no stale panel pixels outside fitted notification");
-            if (!root.empty() && position == VolumeHudPosition::TopLeft &&
+            if (!custom && !root.empty() && position == VolumeHudPosition::TopLeft &&
                 (message == static_cast<int>(TransientHudContent::VsrOn) ||
                  message == static_cast<int>(TransientHudContent::ScreenshotSaved)))
                 SaveOverlayPreview(r, r.volumeOverlayTexture, root / (std::string(english ? "en-" : "ko-") +
@@ -660,6 +675,8 @@ static int TestOverlayUi(const char* directory) {
                     llcv::overlay_ui::kPalette.kWarning), "boost color does not leak to screenshot/VSR messages");
         }
         }
+        }
+        g_settings.shortcuts=keys::Defaults;
         g_settings.volumeHudPosition = VolumeHudPosition::TopLeft;
         r.reset();
         Require(!r.overlayFonts.Available() && !r.audioValueFormat && !r.audioSmallFormat &&
@@ -752,7 +769,7 @@ static int TestHdrVsr(bool paced = false) {
                 std::array<unsigned,3> baseline{};
                 for (int stage=0; stage<3; ++stage) {
                     if (stage == 0) g_vsrMode.store(Mode::Off);
-                    else Require(HandleVsrTestKey(VK_F6, 0), "HDR F6 handled");
+                    else Require(HandleVsrTestKey(VK_F6, 0, 0), "HDR F6 handled");
                     Check(r.applyVsrMode(), "HDR F6 apply");
                     r.upload(reinterpret_cast<const BYTE*>(frame.data()), width*2);
                     D3D11_VIDEO_PROCESSOR_STREAM stream{};

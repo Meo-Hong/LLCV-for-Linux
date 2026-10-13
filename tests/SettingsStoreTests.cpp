@@ -558,6 +558,24 @@ int main(int argc, char** argv) {
     Check(bounded.audioOnlyWidth == 380 && bounded.audioOnlyHeight == 16384,
           "invalid audio-only dimensions are bounded");
     TestHdrChroma(path);
+    {
+        auto settings=llcv::settings::LoadFromIni(path).settings;
+        Check(settings.shortcuts==llcv::shortcuts::Defaults,"legacy profiles keep default shortcuts");
+        settings.shortcuts[0]=llcv::shortcuts::Ctrl|'H';
+        settings.shortcuts[4]=llcv::shortcuts::Alt|llcv::shortcuts::Shift|'V';
+        settings.shortcuts[static_cast<size_t>(llcv::shortcuts::Action::Exit)]=llcv::shortcuts::Ctrl|'Q';
+        const auto custom=settings.shortcuts;
+        if (CheckSaved(path,settings,"custom shortcuts saved"))
+            Check(llcv::settings::LoadFromIni(path).settings.shortcuts==custom,"all modifier bits and actions round-trip");
+        WritePrivateProfileStringW(L"Shortcuts",L"Exit",L"0",path.c_str());
+        Check(llcv::settings::LoadFromIni(path).settings.shortcuts==llcv::shortcuts::Defaults,"empty exit recovers to usable defaults");
+        CheckSaved(path,settings,"restore custom shortcuts");
+        WritePrivateProfileStringW(L"Shortcuts",L"Help",L"113",path.c_str());
+        Check(llcv::settings::LoadFromIni(path).settings.shortcuts==llcv::shortcuts::Defaults,"duplicate bindings recover to defaults");
+        settings.shortcuts=llcv::shortcuts::Defaults;
+        CheckSaved(path,settings,"restore default shortcuts");
+        Check(llcv::settings::LoadFromIni(path).settings.shortcuts==llcv::shortcuts::Defaults,"default reset persists");
+    }
     TestPresentationModes(path);
     TestPcmDefaultAndPreservation(path);
     TestLegacyPcmMigration(path);

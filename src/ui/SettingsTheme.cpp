@@ -181,7 +181,8 @@ bool SettingsTheme::IsCardControl(HWND hwnd) const {
         hwnd == c.vsrCaptureLabel || hwnd == c.vsrCaptureCombo ||
         hwnd == c.screenshotTitle || hwnd == c.screenshotClipboardCheck ||
         hwnd == c.screenshotFolderButton || hwnd == c.screenshotHelp ||
-        hwnd == c.guideShortcutsTitle || hwnd == c.guideVideoHint ||
+        hwnd == c.guideShortcutsTitle || hwnd == c.shortcutResetButton || hwnd == c.guideVideoHint ||
+        std::find(c.guideKeys.begin(), c.guideKeys.end(), hwnd) != c.guideKeys.end() ||
         std::find(c.guideDescriptions.begin(), c.guideDescriptions.end(), hwnd) != c.guideDescriptions.end());
 }
 void SettingsTheme::PaintCards(HDC dc) {
@@ -206,19 +207,11 @@ void SettingsTheme::PaintCards(HDC dc) {
     paintGroup({c.vsrCheck, c.vsrGuideButton, c.vsrCaptureLabel, c.vsrCaptureCombo, c.vsrStatus});
     paintGroup({c.screenshotTitle, c.screenshotClipboardCheck, c.screenshotFolderButton, c.screenshotHelp});
     if (SettingsCompactLayout(&c)) {
-        std::vector<HWND> shortcuts{c.guideVideoHint};
+        std::vector<HWND> shortcuts{c.guideVideoHint,c.shortcutResetButton};
         shortcuts.insert(shortcuts.end(),c.guideKeys.begin(),c.guideKeys.end());
         shortcuts.insert(shortcuts.end(),c.guideDescriptions.begin(),c.guideDescriptions.end());
         paintGroup(shortcuts);
     } else paintGroup({c.guideShortcutsTitle, c.guideVideoHint}, 20);
-    // Read-only keycaps: decoration is not a button or a keyboard-focus target.
-    for (HWND key : c.guideKeys) {
-        if (!key || !(GetWindowLongPtrW(key, GWL_STYLE) & WS_VISIBLE)) continue;
-        RECT bounds{}; GetWindowRect(key, &bounds);
-        MapWindowPoints(HWND_DESKTOP, owner_, reinterpret_cast<POINT*>(&bounds), 2);
-        InflateRect(&bounds, Pixels(10), Pixels(3));
-        Rounded(dc, bounds, palette_.kControl, palette_.kCardEdge, Pixels(6));
-    }
 }
 void SettingsTheme::PaintBackground(HDC dc) {
     RECT client{}; GetClientRect(owner_, &client);
@@ -302,7 +295,11 @@ void SettingsTheme::PaintControl(HWND hwnd, HDC dc, bool combo, bool hover) {
             if (enabled && primary) textColor = palette_.kBackground;
             label.left += Pixels(7); label.right -= Pixels(7);
             if (pressed) OffsetRect(&label, 0, Pixels(1));
-            flags |= DT_CENTER;
+            const bool shortcut=std::find(controls_->guideKeys.begin(),controls_->guideKeys.end(),hwnd)!=controls_->guideKeys.end();
+            if (shortcut) {
+                label.left+=Pixels(3); flags|=DT_LEFT;
+            }
+            else flags |= DT_CENTER;
         }
     }
     SetTextColor(dc, textColor);
@@ -376,7 +373,7 @@ void SettingsTheme::PaintBrand(HWND hwnd, HDC dc) {
     if (wordmark) DeleteObject(wordmark);
 }
 
-void SettingsTheme::PaintDisabledLabel(HWND hwnd, HDC dc) {
+void SettingsTheme::PaintLabel(HWND hwnd, HDC dc) {
     const int saved = SaveDC(dc);
     RECT rect{}; GetClientRect(hwnd, &rect);
     LRESULT brush = 0;
@@ -408,6 +405,12 @@ void SettingsTheme::PaintDisabledLabel(HWND hwnd, HDC dc) {
     // Descriptions can be longer than ordinary labels; keep their full text.
     std::wstring text(static_cast<size_t>(GetWindowTextLengthW(hwnd)) + 1, L'\0');
     GetWindowTextW(hwnd, text.data(), static_cast<int>(text.size()));
+    if (std::find(controls_->guideDescriptions.begin(),controls_->guideDescriptions.end(),hwnd)!=
+            controls_->guideDescriptions.end()) {
+        RECT measured=rect;
+        DrawTextW(dc,text.c_str(),-1,&measured,flags|DT_CALCRECT);
+        rect.top+=std::max(0L,((rect.bottom-rect.top)-(measured.bottom-measured.top))/2);
+    }
     DrawTextW(dc, text.c_str(), -1, &rect, flags);
     RestoreDC(dc, saved);
 }
@@ -571,15 +574,17 @@ LRESULT CALLBACK SettingsTheme::ChildProc(HWND hwnd, UINT message, WPARAM wParam
         }
     }
     if (found->label) {
-        if (!IsWindowEnabled(hwnd)) {
+        if (!IsWindowEnabled(hwnd) ||
+            std::find(theme.controls_->guideDescriptions.begin(),theme.controls_->guideDescriptions.end(),hwnd)!=
+                theme.controls_->guideDescriptions.end()) {
             if (message == WM_ERASEBKGND) return 1;
             if (message == WM_PAINT) {
                 BufferedWindowPaint(hwnd, theme.bufferedPaintInitialized_,
-                    [&](HDC dc) { theme.PaintDisabledLabel(hwnd, dc); });
+                    [&](HDC dc) { theme.PaintLabel(hwnd, dc); });
                 return 0;
             }
             if (message == WM_PRINTCLIENT) {
-                theme.PaintDisabledLabel(hwnd, reinterpret_cast<HDC>(wParam));
+                theme.PaintLabel(hwnd, reinterpret_cast<HDC>(wParam));
                 return 0;
             }
         }

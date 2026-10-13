@@ -4,7 +4,7 @@
 
 [README](../README.md) · [Documentation](INDEX.md) · [한국어](USAGE.ko.md)
 
-[Download](#download) · [First use](#first-use) · [Finding your settings](#finding-your-settings) · [What should I choose?](#what-should-i-choose) · [Everyday controls](#everyday-controls) · [NVIDIA VSR (experimental)](#nvidia-vsr-experimental) · [Screenshots](#screenshots) · [Troubleshooting](#troubleshooting) · [Compatibility and feature requirements](#compatibility-and-feature-requirements)
+[Download](#download) · [First use](#first-use) · [Finding your settings](#finding-your-settings) · [What should I choose?](#what-should-i-choose) · [Changing shortcuts](#changing-shortcuts) · [Everyday controls](#everyday-controls) · [NVIDIA VSR (experimental)](#nvidia-vsr-experimental) · [Screenshots](#screenshots) · [Troubleshooting](#troubleshooting) · [Compatibility and feature requirements](#compatibility-and-feature-requirements)
 
 <br>
 
@@ -16,9 +16,11 @@ Get one of the files from the [latest release](https://github.com/seria-aa/LowLa
   shortcut is created automatically; the desktop shortcut is optional.
 - **x64.zip — portable:** extract it, then run `LowLatencyCaptureViewer.exe`.
 
-**Updating to 2.0.4:** existing settings and installation paths are retained.
-The new **40 fps capture** option is off by default; enable it under **Video**
-only when needed. See the [2.0.4 release notes](release-notes-v2.0.4.md).
+**Updating to 2.0.5:** existing settings, installation paths, and default shortcuts
+are retained. Change shortcuts under **Guide & logs**; see
+[Changing shortcuts](#changing-shortcuts) and the [2.0.5 release notes](release-notes-v2.0.5.md).
+The optional **40 fps capture** setting introduced in [2.0.4](release-notes-v2.0.4.md)
+remains off by default; enable it under **Video** only when needed.
 Sleep prevention and earlier settings improvements are covered in the
 [2.0.3 release notes](release-notes-v2.0.3.md).
 The earlier installer-only refresh is recorded in the [2.0.2 release notes](release-notes-v2.0.2.md).
@@ -49,16 +51,16 @@ automatically,” no separate selection is needed.
 
 ## Finding your settings
 
-*The following settings examples are rendered directly from the 2.0.4 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
+*The following settings examples are rendered directly from the 2.0.5 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
 
 | <a id="video-settings"></a>Video settings | <a id="audio-settings"></a>Audio settings |
 | --- | --- |
 | [![Video settings: capture format, presentation, VSR, and screenshots](images/settings-video-en.png)](images/settings-video-en.png) | [![Audio settings: output device, buffers, volume, and clock correction](images/settings-audio-en.png)](images/settings-audio-en.png) |
 
-### F1 app information and shortcuts
+### App information and shortcuts (default: F1)
 
 <details>
-<summary>View the F1 window</summary>
+<summary>View the app information window</summary>
 
 [![App information, keyboard shortcuts, mouse controls, and screenshot help](images/help-en.png)](images/help-en.png)
 
@@ -68,7 +70,7 @@ The sidebar separates **Video**, **Audio**, **Window**, **Guide & logs**, and **
 Video contains capture/display settings, VSR, and 40 fps capture/screenshot options at the bottom.
 Audio contains output devices, buffers, volume options, audio-only mode, and LPCM 5.1.
 Window controls placement, resizing, borders, and cursor behavior.
-Guide & logs groups keyboard shortcuts, 40 fps capture guidance, and diagnostic logging; App contains language,
+Guide & logs groups shortcut editing and reset, 40 fps capture guidance, and diagnostic logging; App contains language,
 theme, startup, sleep prevention, and update preferences.
 
 On small screens or at high display scales, settings fit within the desktop work
@@ -191,17 +193,45 @@ See the [audio-only guide](AUDIO.md) for details.
 
 ## Everyday controls
 
-| Control | Action |
+Keyboard shortcuts below and elsewhere in the guides use the **default bindings**.
+If you change one, use your assigned key instead.
+
+### Changing shortcuts
+
+1. Open **Settings → Guide & logs**, then click the key button beside an action.
+2. Press a key, optionally with **Ctrl**, **Alt**, or **Shift**. Click the same
+   button again to cancel key entry.
+3. Choose **Start** to apply the changes. **Cancel** discards unapplied changes.
+
+All nine shortcuts can be changed, including **Leave fullscreen / Exit** (Esc).
+None can be left empty. Duplicate bindings, modifier-only keys, Windows-key
+combinations, and some reserved combinations such as Alt+F4 cannot be assigned.
+**Reset defaults** restores all nine; choose **Start** to apply the reset.
+
+Help, settings, and OSD labels show the assigned keys, and longer combinations
+expand the key column. Shortcuts act within LLCV, not globally in other apps.
+Settings controls retain their normal navigation and editing keys.
+
+<details>
+<summary>View shortcut settings</summary>
+
+[![Keyboard shortcut editing and reset](images/settings-shortcuts-en.png)](images/settings-shortcuts-en.png)
+
+</details>
+
+### Default controls
+
+| Default key / control | Action |
 | --- | --- |
 | `F2` | Reopen settings |
 | `Tab` | Show/hide live diagnostics |
 | `F3` | Show/hide the audio meter over video (audio-only has its own view) |
 | `F5` | Restore source-resolution 1:1 size (video mode) |
 | `F6` | Toggle NVIDIA VSR request (video mode) |
-| `F1` | App information and shortcuts (F1/Esc closes only the help window) |
+| `F1` | App information and shortcuts (Help/Exit keys close only the help window while it is active) |
 | `F12` | Save a source-resolution screenshot (video mode) |
 | `F11` | Toggle borderless fullscreen |
-| `Esc` | Leave F11 fullscreen; close the app in windowed or automatic-fullscreen mode |
+| `Esc` | Leave shortcut-enabled fullscreen; close the app in windowed or automatic-fullscreen mode |
 | Mouse wheel over viewer | Change app volume in 5% steps |
 | Mouse wheel over an L/R card | Change that channel only (show the meter with `F3` in video mode) |
 | Double-click a master/L/R area in the audio-only view | Reset that volume to 100% |
@@ -316,7 +346,8 @@ The bottom of the **Video** page has **Open screenshot folder** and an opt-in
 
 **F1** opens a modeless guide with the app version, keyboard shortcuts, mouse controls,
 and screenshot information without stopping playback.
-Use F1, Esc, or its Close button to dismiss it; Esc here does not exit the viewer.
+Use the configured Help or Exit key (defaults: F1/Esc), or its Close button, to
+dismiss it. The Exit key here closes only the help window, not the viewer.
 
 - NV12/YUY2 and decoded MJPEG retain the capture resolution and selected SDR color interpretation.
 - P010 HDR10 is converted to **SDR sRGB**, both in the PNG and clipboard image.

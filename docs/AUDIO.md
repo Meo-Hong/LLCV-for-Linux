@@ -6,6 +6,9 @@
 
 [Capture audio selection](#capture-audio-selection) · [Console LPCM 5.1 (since v1.2.10)](#console-lpcm-51-since-v1210) · [Audio-only mode](#audio-only-mode) · [WASAPI Shared and Exclusive](#wasapi-shared-and-exclusive) · [ASIO](#asio) · [Output-device switching](#output-device-switching) · [WASAPI buffer and PCM target](#wasapi-buffer-and-pcm-target) · [Clock-drift correction](#clock-drift-correction) · [Volume and background mute](#volume-and-background-mute)
 
+Keys in this guide are defaults. If you [change a shortcut](USAGE.md#changing-shortcuts),
+use its assigned key instead.
+
 <br>
 
 ## Capture audio selection

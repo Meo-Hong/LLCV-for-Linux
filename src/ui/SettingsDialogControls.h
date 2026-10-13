@@ -68,6 +68,8 @@ inline constexpr int IDC_SETTINGS_PREVENT_SLEEP = 2056;
 inline constexpr int IDC_SETTINGS_CAPTURE_40 = 2057;
 inline constexpr int IDC_SETTINGS_CAPTURE_40_HELP = 2058;
 inline constexpr int IDC_SETTINGS_LS_GUIDE = 2059;
+inline constexpr int IDC_SETTINGS_SHORTCUT_RESET = 2060;
+inline constexpr int IDC_SETTINGS_SHORTCUT_FIRST = 2100;
 } // namespace control_id
 
 // Borrowed for the duration of creation only; no settings/device list copies.

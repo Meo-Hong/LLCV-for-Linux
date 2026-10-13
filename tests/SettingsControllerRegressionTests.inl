@@ -1,4 +1,60 @@
 // Included by VsrExperimentTests: hidden HWNDs and injected workers only.
+static void TestSettingsShortcutStatusRefresh() {
+    const auto saved=g_settings;
+    const bool savedSuppress=g_suppressSettingsSave;
+    g_suppressSettingsSave=true;
+    WNDCLASSW wc{}; wc.hInstance=GetModuleHandleW(nullptr);
+    wc.lpfnWndProc=SettingsControllerTestProc; wc.lpszClassName=L"LLCV_SHORTCUT_STATUS_TEST";
+    Require(RegisterClassW(&wc)!=0,"register shortcut status fixture");
+    SettingsDialogState state; state.asioAvailable=true;
+    HWND hwnd=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,wc.lpszClassName,L"Shortcut status fixture",
+        WS_POPUP|WS_VISIBLE,-32000,-32000,800,600,nullptr,nullptr,wc.hInstance,&state);
+    Require(hwnd!=nullptr,"shortcut status owner");
+    const auto child=[&](const wchar_t* name,DWORD style) {
+        HWND value=CreateWindowW(name,L"",WS_CHILD|WS_VISIBLE|style,0,0,350,40,hwnd,nullptr,wc.hInstance,nullptr);
+        Require(value!=nullptr,"shortcut status control"); return value;
+    };
+    state.audioCombo=child(L"COMBOBOX",CBS_DROPDOWNLIST);
+    for(const auto* mode:{L"Shared",L"Exclusive",L"ASIO"}) SendMessageW(state.audioCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(mode));
+    SendMessageW(state.audioCombo,CB_SETCURSEL,0,0);
+    state.surround51Check=child(L"BUTTON",BS_AUTOCHECKBOX);
+    SendMessageW(state.surround51Check,BM_SETCHECK,BST_CHECKED,0);
+    state.audioStatus=child(L"STATIC",SS_LEFT);
+    state.guideVideoHint=child(L"STATIC",SS_LEFT);
+    for(auto& key:state.guideKeys) key=child(L"BUTTON",BS_PUSHBUTTON);
+    const auto text=[&] { wchar_t value[512]{}; GetWindowTextW(state.audioStatus,value,512); return std::wstring(value); };
+    const auto edit=[&](UINT key) {
+        llcv::settings_ui::BeginShortcutEdit(&state,static_cast<size_t>(keys::Action::Diagnostics));
+        MSG input{}; input.hwnd=GetFocus(); input.message=WM_KEYDOWN; input.wParam=key;
+        Require(ProcessSettingsShortcutEdit(&state,input,keys::Ctrl),"controller consumes shortcut assignment");
+        input.message=WM_KEYUP;
+        Require(ProcessSettingsShortcutEdit(&state,input,0),"controller consumes assignment key release");
+    };
+    UpdateAudioClient3Status(&state);
+    Require(text().find(L"Tab")!=std::wstring::npos,"5.1 starts with default diagnostic key");
+    edit('D');
+    Require(text().find(L"Ctrl+D")!=std::wstring::npos && text().find(L"Tab")==std::wstring::npos,
+        "5.1 diagnostic hint updates immediately on assignment");
+    SendMessageW(hwnd,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_SHORTCUT_RESET,BN_CLICKED),0);
+    Require(state.shortcutBindings==keys::Defaults && text().find(L"Tab")!=std::wstring::npos &&
+        text().find(L"Ctrl+D")==std::wstring::npos,"reset updates both binding and 5.1 hint");
+    for(int mode:{1,2,0}) {
+        SendMessageW(state.audioCombo,CB_SETCURSEL,mode,0);
+        SendMessageW(state.surround51Check,BM_SETCHECK,BST_UNCHECKED,0);
+        SetWindowTextW(state.audioStatus,L"Exclusive result must survive");
+        UpdateAudioClient3Status(&state);
+        const auto previous=text();
+        edit('K');
+        Require(text()==previous,"shortcut update preserves non-5.1 and Exclusive status");
+        SendMessageW(hwnd,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_SHORTCUT_RESET,BN_CLICKED),0);
+        Require(text()==previous,"shortcut reset preserves non-5.1 and Exclusive status");
+    }
+    Require(!state.sharedProbeCache && !state.exclusiveScanRunning,"editing never starts hardware probes");
+    DestroyWindow(hwnd); UnregisterClassW(wc.lpszClassName,wc.hInstance);
+    g_settings=saved; g_suppressSettingsSave=savedSuppress;
+    std::puts("Shortcut status: immediate edit/reset refresh and preserved audio modes passed.");
+}
+
 static void TestSettingsBufferModeTransitions() {
     const auto saved = g_settings;
     const bool savedSuppress = g_suppressSettingsSave;

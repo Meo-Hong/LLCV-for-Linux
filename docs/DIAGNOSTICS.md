@@ -8,6 +8,9 @@
 
 Press `Tab` in the viewer to show or hide the diagnostics overlay.
 
+Keys in this guide are defaults. If you [change a shortcut](USAGE.md#changing-shortcuts),
+use its assigned key instead.
+
 In video mode, press `F3` to show or hide the audio meter OSD. Audio-only mode
 uses a separate, always-visible view for master volume, L/R peak levels and
 channel volume, and clipping status. Use the wheel over an L/R card to adjust that
