@@ -45,6 +45,7 @@ static constexpr Member kMembers[] = {
     {&SettingsControls::tabControl, "tabControl"},
     {&SettingsControls::guideVideoHint, "guideVideoHint"},
     {&SettingsControls::guideShortcutsTitle, "guideShortcutsTitle"},
+    {&SettingsControls::shortcutResetButton, "shortcutResetButton"},
     {&SettingsControls::guideDiagnosticsTitle, "guideDiagnosticsTitle"},
     {&SettingsControls::guideDiagnosticsText, "guideDiagnosticsText"},
     {&SettingsControls::guideLogFolderButton, "guideLogFolderButton"},
@@ -402,6 +403,17 @@ static void CheckCaptionFits(HWND control, const char* name, UINT dpi,
     }
 }
 
+static void CheckShortcutCaptionFits(SettingsControls&,HWND control,UINT dpi) {
+    wchar_t caption[256]{}; GetWindowTextW(control,caption,256);
+    RECT box{}; GetClientRect(control,&box);
+    const int width=box.right-SettingsPixels(17,dpi);
+    HDC dc=GetDC(control);
+    const auto old=SelectObject(dc,reinterpret_cast<HFONT>(SendMessageW(control,WM_GETFONT,0,0)));
+    RECT measured{0,0,width,0}; DrawTextW(dc,caption,-1,&measured,DT_CALCRECT|DT_NOPREFIX|DT_SINGLELINE);
+    Check(measured.right<=width && measured.bottom<=box.bottom,"full shortcut fits growing keycap on one line");
+    SelectObject(dc,old); ReleaseDC(control,dc);
+}
+
 static void CheckHdrChromaChoicesFit(SettingsControls& state, UINT dpi, bool english) {
     const HWND combo = state.hdrChromaCombo;
     const LRESULT selected = SendMessageW(combo, CB_GETCURSEL, 0, 0);
@@ -458,29 +470,31 @@ static void CheckAllCaptionsFit(SettingsControls& state, UINT dpi, bool english)
         // ellipsis intentionally; expanded device lists retain wider fields.
     }
     wchar_t guide[2048]{}; GetWindowTextW(state.guideVideoHint, guide, ARRAYSIZE(guide));
-    Check(std::wcscmp(guide, llcv::viewer_help::VideoOnlyHint(english)) == 0,
-          "settings and F1 share one video-only footer");
+    Check(std::wcsstr(guide,english ? L"Click" : L"키 버튼") && std::wcsstr(guide,L"F3"),
+          "shortcut editor explains editing and video-only keys");
     const HWND parent = GetParent(state.guideVideoHint);
     for (size_t i = 0; i < llcv::viewer_help::kShortcuts.size(); ++i) {
         const auto& shortcut = llcv::viewer_help::kShortcuts[i];
         for (HWND control : {state.guideKeys[i], state.guideDescriptions[i]}) {
             Check(IsWindow(control) != FALSE, "shortcut native text exists");
-            Check(!(GetWindowLongPtrW(control, GWL_STYLE) & (WS_TABSTOP | SS_NOTIFY)),
-                  "read-only shortcuts do not capture focus or clicks");
-            CheckCaptionFits(control, "shortcut row", dpi, english, 0, false, true);
+            Check(bool(GetWindowLongPtrW(control, GWL_STYLE) & WS_TABSTOP)==
+                  (control==state.guideKeys[i] && i<llcv::shortcuts::Count),
+                  "all keys are keyboard accessible; descriptions are read-only");
+            if (control==state.guideKeys[i]) CheckShortcutCaptionFits(state,control,dpi);
+            else CheckCaptionFits(control,"shortcut row",dpi,english,0,true,false);
         }
         GetWindowTextW(state.guideKeys[i], guide, ARRAYSIZE(guide));
         Check(std::wcscmp(guide, shortcut.key) == 0, "every key matches F1");
         GetWindowTextW(state.guideDescriptions[i], guide, ARRAYSIZE(guide));
-        Check(std::wcscmp(guide, english ? shortcut.english : shortcut.korean) == 0,
+        Check(std::wstring(guide)==std::wstring(english ? shortcut.english : shortcut.korean),
               "every action matches F1 without repeated video-mode suffixes");
         const auto action = ClientRectOf(parent, state.guideDescriptions[i]);
         const auto key = ClientRectOf(parent, state.guideKeys[i]);
-        Check(action.left == SettingsPixels(276, dpi) &&
-              action.top == SettingsPixels(168 + static_cast<int>(i) * 36, dpi),
+        Check(action.left == SettingsPixels(296, dpi) &&
+              action.top == SettingsPixels(165 + static_cast<int>(i) * 36, dpi),
               "shortcut rows maintain aligned columns and generous rhythm");
-        Check(std::abs((key.top + key.bottom) - (action.top + action.bottom)) <= 2,
-              "key text and action are vertically centered together at fractional DPI");
+        Check(key.top>=action.top && key.bottom<=action.bottom+1 && key.right<action.left,
+              "editable key and wrapping action occupy separate aligned columns");
     }
     Check(ClientRectOf(parent, state.guideShortcutsTitle).top == ClientRectOf(parent, state.guideDiagnosticsTitle).top,
           "guide section titles align");
@@ -651,6 +665,90 @@ struct PopulationProbe {
         SendMessageW(probe.controls->frameRateCombo, CB_SETCURSEL, 0, 0);
     }
 };
+
+static void TestShortcutEditing() {
+    namespace keys=llcv::shortcuts;
+    Check(keys::Valid(keys::Defaults),"legacy keys are valid defaults");
+    Check(keys::Valid(VK_ESCAPE),"Esc can be assigned like other keys");
+    for (unsigned invalid : {0u,keys::Ctrl,keys::Alt|VK_ESCAPE,keys::Ctrl|VK_ESCAPE,keys::Alt|VK_F4,
+             keys::Alt|VK_TAB,keys::Alt|VK_RETURN,keys::Ctrl|keys::Alt|VK_DELETE,0xffffffffu})
+        Check(!keys::Valid(invalid),"reserved and malformed bindings rejected");
+    auto swapped=keys::Defaults;
+    std::swap(swapped[0],swapped[6]);
+    Check(keys::Expand(L"F1 / F12 / F11 / Tab / F123",swapped)==L"F12 / F1 / F11 / Tab / F123",
+          "labels expand once, without cascading swapped keys or partial tokens");
+    for (size_t i=0;i<keys::Count;++i) {
+        auto map=keys::Defaults;
+        map[i]=keys::Ctrl|keys::Shift|'A';
+        Check(keys::Match(map,static_cast<keys::Action>(i),'A',keys::Ctrl|keys::Shift) &&
+              !keys::Match(map,static_cast<keys::Action>(i),'A',keys::Ctrl) &&
+              !keys::Match(map,static_cast<keys::Action>(i),keys::Defaults[i],0),
+              "each action matches only the exact configured key and modifiers");
+    }
+    HWND parent=CreateWindowW(L"STATIC",L"Shortcut input test",WS_POPUP,
+        -10000,-10000,640,480,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    Check(parent!=nullptr,"shortcut test owner");
+    SettingsControls state;
+    state.english=true;
+    for (auto& key:state.guideKeys)
+        key=CreateWindowW(L"BUTTON",L"",WS_CHILD|WS_VISIBLE|WS_TABSTOP,
+            0,0,148,32,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+    state.guideVideoHint=CreateWindowW(L"STATIC",L"",WS_CHILD,0,0,336,36,
+        parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+    const auto press=[&](UINT key,unsigned mods=0,bool repeat=false,UINT message=WM_KEYDOWN) {
+        MSG input{}; input.hwnd=state.guideKeys[0]; input.message=message; input.wParam=key;
+        input.lParam=repeat ? (LPARAM{1}<<30) : 0;
+        return ProcessShortcutEdit(&state,input,mods);
+    };
+    BeginShortcutEdit(&state,keys::Count);
+    Check(state.editingShortcut==-1,"out-of-range action cannot enter edit mode");
+    BeginShortcutEdit(&state,0);
+    Check(GetFocus()==state.guideKeys[0],"input focus belongs to edited key");
+    Check(press(VK_CONTROL) && state.editingShortcut==0,"modifier-only input waits for a key");
+    Check(press(VK_F2) && state.shortcutBindings==keys::Defaults && state.editingShortcut==0,
+          "duplicate binding rejected without losing edit mode");
+    Check(press(VK_F4,keys::Alt) && state.editingShortcut==0,"OS combination rejected");
+    Check(press('H',keys::Ctrl,true) && state.editingShortcut==0,"held key cannot complete edit");
+    Check(press('H',keys::Ctrl) && state.editingShortcut==-1 &&
+          state.shortcutBindings[0]==(keys::Ctrl|'H'),"combination accepted");
+    Check(press('H',keys::Ctrl,true) && press('H',keys::Ctrl,false,WM_KEYUP),
+          "assignment repeat and key-up cannot trigger action");
+    Check(!press('H',keys::Ctrl),"next deliberate press is no longer suppressed");
+    const auto edited=state.shortcutBindings;
+    BeginShortcutEdit(&state,0);
+    Check(press(VK_ESCAPE) && state.shortcutBindings==edited && state.editingShortcut==0,
+          "Esc already assigned to exit is rejected as a duplicate");
+    BeginShortcutEdit(&state,0);
+    Check(state.editingShortcut==-1 && state.shortcutBindings==edited,
+          "clicking the same key again cancels without clearing it");
+    const size_t exit=static_cast<size_t>(keys::Action::Exit);
+    BeginShortcutEdit(&state,exit);
+    Check(press(0) && press(VK_CONTROL) && state.shortcutBindings==edited &&
+          state.editingShortcut==static_cast<int>(exit),"exit cannot be left blank or modifier-only");
+    Check(press('Q',keys::Ctrl) && state.shortcutBindings[exit]==(keys::Ctrl|'Q'),
+          "exit can be reassigned from Esc to a combination");
+    press('Q',keys::Ctrl,false,WM_KEYUP);
+    BeginShortcutEdit(&state,0);
+    Check(press(VK_ESCAPE) && state.shortcutBindings[0]==VK_ESCAPE && keys::Valid(state.shortcutBindings),
+          "freed Esc can be assigned to another action");
+    Check(press(VK_ESCAPE,0,true) && press(VK_ESCAPE,0,false,WM_KEYUP),
+          "assigned Esc repeat and release do not close settings");
+    state.shortcutBindings=edited;
+    BeginShortcutEdit(&state,0);
+    SetFocus(state.guideKeys[1]);
+    Check(!press('J') && state.editingShortcut==-1 && state.shortcutBindings==edited,
+          "focus loss cancels editing without consuming another control's input");
+    state.shortcutCaptionTemplates.emplace_back(state.guideVideoHint,L"F1 / F12");
+    state.shortcutBindings=swapped;
+    RefreshShortcutCaptions(&state);
+    wchar_t caption[256]{}; GetWindowTextW(state.guideVideoHint,caption,256);
+    Check(!wcscmp(caption,L"F12 / F1"),"settings captions use binding snapshot");
+    state.shortcutBindings=keys::Defaults;
+    RefreshShortcutCaptions(&state);
+    GetWindowTextW(state.guideVideoHint,caption,256);
+    Check(!wcscmp(caption,L"F1 / F12"),"reset captions restore from original templates");
+    DestroyWindow(parent);
+}
 
 static void TestActualControlCreation() {
     using namespace llcv::settings;
@@ -914,6 +1012,47 @@ static void TestActualControlCreation() {
                 RefreshSettingsPageHeader(&state);
                 CheckAllCaptionsFit(state, textDpi, english);
             }
+            const auto baseKey=ClientRectOf(parent,state.guideKeys[0]);
+            Check(baseKey.right-baseKey.left==SettingsPixels(80,textDpi),"default key column stays compact");
+            state.shortcutBindings[0]=llcv::shortcuts::Ctrl|VK_F1;
+            RefreshShortcutCaptions(&state);
+            Check(ClientRectOf(parent,state.guideKeys[0]).right==baseKey.right,
+                  "two-key combination fits without expanding the base column");
+            CheckShortcutCaptionFits(state,state.guideKeys[0],textDpi);
+            state.shortcutBindings=llcv::shortcuts::Defaults;
+            for (size_t action=0;action<llcv::shortcuts::Count;++action) {
+                state.shortcutBindings[action]=llcv::shortcuts::Ctrl|llcv::shortcuts::Alt|
+                    llcv::shortcuts::Shift|VK_SPACE;
+                RefreshShortcutCaptions(&state);
+                CheckShortcutCaptionFits(state,state.guideKeys[action],textDpi);
+                const auto grownKey=ClientRectOf(parent,state.guideKeys[action]);
+                Check(grownKey.right>baseKey.right,"long combinations grow the key column");
+                for (size_t row=0;row<state.guideKeys.size();++row) {
+                    Check(ClientRectOf(parent,state.guideKeys[row]).right==grownKey.right,
+                          "all keycaps stay aligned after expansion");
+                    CheckCaptionFits(state.guideDescriptions[row],"expanded key action",textDpi,english,0,true,false);
+                }
+                for (const auto& [control,source]:state.shortcutCaptionTemplates) {
+                    wchar_t customCaption[2048]{}; GetWindowTextW(control,customCaption,2048);
+                    Check(std::wstring(customCaption)==llcv::shortcuts::Expand(source.c_str(),state.shortcutBindings),
+                          "settings labels follow edited bindings");
+                    const bool checkbox=control==state.vsrCheck;
+                    CheckCaptionFits(control,"custom shortcut caption",textDpi,english,checkbox ? 27 : 0,
+                        !checkbox,false);
+                }
+                state.shortcutBindings=llcv::shortcuts::Defaults;
+            }
+            RefreshShortcutCaptions(&state);
+            for (size_t action=0;action<llcv::shortcuts::Count;++action)
+                state.shortcutBindings[action]=llcv::shortcuts::Ctrl|llcv::shortcuts::Alt|
+                    llcv::shortcuts::Shift|(VK_F13+static_cast<unsigned>(action));
+            RefreshShortcutCaptions(&state);
+            CheckCaptionFits(state.guideVideoHint,"long custom key footer",textDpi,english,0,true,false);
+            Check(ClientRectOf(parent,state.guideVideoHint).bottom+SettingsPixels(20,textDpi)<
+                  SettingsPixels(590,textDpi),"expanded hint stays above footer");
+            state.shortcutBindings=llcv::shortcuts::Defaults;
+            RefreshShortcutCaptions(&state);
+            Check(ClientRectOf(parent,state.guideKeys[0]).right==baseKey.right,"reset restores compact key width");
         }
         state.activeTab = initialTab;
         RefreshSettingsPageHeader(&state);
@@ -1149,6 +1288,7 @@ int main(int argc, char** argv) {
           SettingsTabFromNavigationIndex(kSettingsNavigationCount) == SettingsTab::VideoWindow,
           "invalid navigation safely selects video");
     TestTranslationBoundary();
+    TestShortcutEditing();
     TestActualControlCreation();
     TestCompactWorkAreas();
     HWND parent = CreateWindowExW(0, L"STATIC", L"Hidden settings view regression",
@@ -1164,6 +1304,11 @@ int main(int argc, char** argv) {
             L"", WS_CHILD | (combo ? CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS : check ? BS_AUTOCHECKBOX : 0),
             0, 0, 100, 100, parent, nullptr, GetModuleHandleW(nullptr), nullptr);
         Check(state.*entry.handle != nullptr, entry.name);
+    }
+    for (size_t i=0;i<state.guideKeys.size();++i) {
+        state.guideKeys[i]=CreateWindowW(L"BUTTON",llcv::viewer_help::kShortcuts[i].key,
+            WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON,0,0,80,29,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+        Check(state.guideKeys[i]!=nullptr,"create shortcut visibility fixture");
     }
     unsigned cases = 0;
     for (UINT dpi : {96u, 120u, 144u, 192u}) for (bool english : {false, true}) {
@@ -1248,6 +1393,8 @@ int main(int argc, char** argv) {
             ExpectVisible(state.windowSnapCheck, tab == SettingsTab::Window);
             ExpectVisible(state.roundedCornersCheck, tab == SettingsTab::Window);
             ExpectVisible(state.guideLogFolderButton, tab == SettingsTab::GuideDiagnostics);
+            Check((IsWindowEnabled(state.guideKeys.back())!=FALSE)==(tab==SettingsTab::GuideDiagnostics),
+                  "exit remains editable on the guide page");
             ExpectVisible(state.screenshotTitle, tab == SettingsTab::VideoWindow);
             ExpectVisible(state.capture40Check, tab == SettingsTab::VideoWindow);
             ExpectVisible(state.capture40Help, tab == SettingsTab::VideoWindow);

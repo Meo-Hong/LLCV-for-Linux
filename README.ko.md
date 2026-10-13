@@ -5,7 +5,7 @@
 HDMI 캡처보드로 들어오는 영상과 소리를 재생하는 Windows용 저지연 뷰어입니다.
 OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리만 들을 수 있습니다.
 
-**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.0.4.md) · [English](README.md)
+**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.0.5.md) · [English](README.md)
 
 <br>
 
@@ -13,17 +13,16 @@ OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리�
 | --- | --- |
 | [![영상 설정](docs/images/settings-video.png)](docs/images/settings-video.png) | [![오디오 설정](docs/images/settings-audio.png)](docs/images/settings-audio.png) |
 
-<sub>2.0.4 UI 코드로 렌더링한 설정 예시입니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
+<sub>2.0.5 UI 코드로 렌더링한 설정 예시입니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
 
 <br>
 
-## 2.0.4 업데이트
+## 2.0.5 업데이트
 
-영상 설정에 **40fps 캡처** 옵션을 추가했습니다. 체크하면 드라이버에 40fps를
-요청하고, 해제하면 기존 프레임 설정으로 돌아갑니다. 기본값은 꺼짐이며, 지원
-여부는 시작할 때 확인합니다. 필요한 경우에만 켜는 선택 옵션이며, 일반적인
-시청에는 기존 프레임 설정을 그대로 사용하면 됩니다. 기존 설정과 설치 경로는 유지합니다.
-[40fps 캡처 안내](docs/VIDEO.ko.md#40fps-캡처) · [전체 변경 내역](docs/release-notes-v2.0.4.md)
+**도움말·진단**에서 Esc를 포함한 단축키 9개를 바꾸거나 기본값으로 복원할 수 있습니다.
+Ctrl·Alt·Shift 조합을 지원하며, 안내창·설정·OSD에도 변경한 키를 표시합니다.
+기존 단축키 기본값과 설정은 유지합니다.
+[단축키 변경 방법](docs/USAGE.ko.md#단축키-변경) · [전체 변경 내역](docs/release-notes-v2.0.5.md)
 
 <br>
 
@@ -40,6 +39,8 @@ Windows 10/11 x64와 캡처보드 드라이버가 필요합니다.
 3. 소리가 나오지 않으면 **캡처 오디오 장치**를 확인하세요.
 
 <kbd>F1</kbd> 도움말 · <kbd>F2</kbd> 설정 · <kbd>F6</kbd> VSR · <kbd>F11</kbd> 전체화면 · <kbd>F12</kbd> 스크린샷 · <kbd>Tab</kbd> 진단
+
+위 키는 기본값이며, **도움말·진단**에서 변경할 수 있습니다.
 
 <br>
 

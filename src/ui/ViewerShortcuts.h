@@ -2,13 +2,21 @@
 #include <windows.h>
 #include <array>
 #include <string>
+#include "input/Shortcuts.h"
 
 namespace llcv::viewer_help {
 inline constexpr UINT kHelpKey = VK_F1;
 inline constexpr UINT kScreenshotKey = VK_F12;
-inline bool IsScreenshotRequest(const MSG& message, bool audioOnly) {
-    return message.message==WM_KEYDOWN && message.wParam==kScreenshotKey &&
+inline bool IsScreenshotRequest(const MSG& message, bool audioOnly,
+                                const shortcuts::Bindings& bindings, unsigned modifiers) {
+    return shortcuts::KeyDown(message.message) &&
+        shortcuts::Match(bindings,shortcuts::Action::Screenshot,static_cast<UINT>(message.wParam),modifiers) &&
         !(message.lParam & (LPARAM{1}<<30)) && !audioOnly;
+}
+inline bool IsScreenshotRequest(const MSG& message, bool audioOnly,
+                                const shortcuts::Bindings& bindings=shortcuts::Defaults) {
+    return IsScreenshotRequest(message, audioOnly, bindings,
+        shortcuts::KeyDown(message.message) ? shortcuts::Modifiers() : 0);
 }
 struct Shortcut { const wchar_t* key; const wchar_t* korean; const wchar_t* english; bool videoOnly; };
 inline constexpr std::array<Shortcut,9> kShortcuts{{
@@ -38,5 +46,8 @@ inline const wchar_t* Shortcuts(bool english, bool alignedColumns = false) {
         return result;
     }();
     return text[(alignedColumns ? 2 : 0)+(english ? 1 : 0)].c_str();
+}
+inline std::wstring KeyLabel(size_t index,const shortcuts::Bindings& bindings) {
+    return index<shortcuts::Count ? shortcuts::Label(bindings[index]) : L"Esc";
 }
 } // namespace llcv::viewer_help

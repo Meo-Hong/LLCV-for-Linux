@@ -520,6 +520,37 @@ void TestExclusiveScanResultLifetime() {
             "dialog state must own results that will never receive a UI notification");
 }
 
+void TestShortcutRouting() {
+    const auto savedSettings=g_settings;
+    const auto savedGeneration=g_outputConfigurationGeneration.load();
+    const auto savedOverlay=g_overlayGeneration.load();
+    const bool savedDiagnostic=g_osdVisible.load(), savedAudio=g_audioOsdVisible.load();
+    const int savedHover=g_audioOsdHoverTarget.load();
+    g_settings.shortcuts=keys::Defaults;
+    g_settings.shortcuts[static_cast<size_t>(keys::Action::Diagnostics)]=keys::Ctrl|'D';
+    g_settings.shortcuts[static_cast<size_t>(keys::Action::AudioOsd)]='A';
+    g_settings.audioOnly=false;
+    g_osdVisible=false; g_audioOsdVisible=false;
+    HandleViewerShortcut(nullptr,VK_TAB,0,0);
+    HandleViewerShortcut(nullptr,'D',0,0);
+    Require(!g_osdVisible.load(),"old key and missing modifier do not toggle diagnostics");
+    HandleViewerShortcut(nullptr,'D',0,keys::Ctrl);
+    Require(g_osdVisible.load(),"configured Ctrl+D toggles diagnostics");
+    for (int i=0;i<10;++i) HandleViewerShortcut(nullptr,'D',LPARAM{1}<<30,keys::Ctrl);
+    Require(g_osdVisible.load(),"held diagnostic key toggles only once");
+    HandleViewerShortcut(nullptr,'A',0,0);
+    Require(g_audioOsdVisible.load(),"custom audio OSD key routes in video mode");
+    HandleViewerShortcut(nullptr,'A',LPARAM{1}<<30,0);
+    Require(g_audioOsdVisible.load(),"held audio OSD key does not toggle back");
+    g_settings.audioOnly=true;
+    HandleViewerShortcut(nullptr,'A',0,0);
+    Require(g_audioOsdVisible.load(),"audio-only retains its OSD mode gate");
+    Require(g_outputConfigurationGeneration.load()==savedGeneration,
+            "shortcut dispatch does not rebuild capture or renderer output");
+    g_settings=savedSettings; g_osdVisible=savedDiagnostic; g_audioOsdVisible=savedAudio;
+    g_overlayGeneration=savedOverlay; g_audioOsdHoverTarget=savedHover;
+}
+
 void TestOutputTransitions() {
     const auto savedGeneration = g_outputConfigurationGeneration.load();
     const auto savedTransition = g_outputTransition;
@@ -955,6 +986,7 @@ int main(int argc, char** argv) {
     TestVsrLiveTestRateIsolation();
     TestExclusiveScanResultLifetime();
     TestOutputTransitions();
+    TestShortcutRouting();
     TestSurroundWasapiFill();
     g_settings.driftCorrection = DriftCorrectionMode::Off;
     g_audioQueueTargetFrames.store(960);

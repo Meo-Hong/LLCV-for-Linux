@@ -53,6 +53,11 @@ struct SettingsControls {
     std::array<HWND, viewer_help::kShortcuts.size()> guideKeys{};
     std::array<HWND, viewer_help::kShortcuts.size()> guideDescriptions{};
     HWND guideShortcutsTitle = nullptr;
+    HWND shortcutResetButton = nullptr;
+    shortcuts::Bindings shortcutBindings=shortcuts::Defaults;
+    int editingShortcut=-1;
+    UINT shortcutKeyToRelease=0;
+    std::vector<std::pair<HWND,std::wstring>> shortcutCaptionTemplates;
     HWND guideDiagnosticsTitle = nullptr;
     HWND guideDiagnosticsText = nullptr;
     HWND guideLogFolderButton = nullptr;
@@ -203,6 +208,13 @@ void PlaceSettingsControl(HWND control, int x, int y, int width, int height, UIN
 void ApplySettingsFont(SettingsControls* state, HWND hwnd, UINT dpi);
 void LayoutSettingsControls(SettingsControls* state, UINT dpi);
 void RefreshSettingsPageHeader(SettingsControls* state);
+void RefreshShortcutCaptions(SettingsControls* state);
+struct ShortcutLayout { int keyWidth = 80; int hintHeight = 36; };
+ShortcutLayout MeasureShortcutLayout(const SettingsControls* state, UINT dpi);
+void BeginShortcutEdit(SettingsControls* state, size_t index);
+void CancelShortcutEdit(SettingsControls* state);
+bool ProcessShortcutEdit(SettingsControls* state, const MSG& message,
+                         unsigned modifiers=shortcuts::Modifiers());
 void SetSettingsControlVisible(HWND control, bool visible, bool enabled = true);
 void SetSettingsText(HWND control, const wchar_t* text);
 void UpdateScalingControlVisibility(SettingsControls* state);

@@ -2,6 +2,7 @@
 
 #include "video/VideoColor.h"
 #include "video/HdrChroma.h"
+#include "input/Shortcuts.h"
 
 #include <cstdint>
 #include <string>
@@ -83,6 +84,7 @@ struct ExclusiveEndpointCacheEntry {
 };
 
 struct AppSettings {
+    shortcuts::Bindings shortcuts = shortcuts::Defaults;
     UiLanguage uiLanguage = UiLanguage::Auto;
     bool settingsLightTheme = false; // App chrome; persisted key retained for compatibility.
     AudioMode audioMode = AudioMode::WasapiShared;

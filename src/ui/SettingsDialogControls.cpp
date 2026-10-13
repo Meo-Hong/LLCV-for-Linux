@@ -367,17 +367,23 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
 
     state->guideShortcutsTitle = makeLabel(
         initial.english ? L"Keyboard shortcuts" : L"키보드 단축키", 34, 62);
+    state->shortcutBindings=initial.settings.shortcuts;
+    state->shortcutResetButton=CreateWindowW(L"BUTTON",initial.english ? L"Reset defaults" : L"기본값 복원",
+        WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_PUSHBUTTON,0,0,1,1,hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SHORTCUT_RESET)),instance,nullptr);
     for (size_t i = 0; i < viewer_help::kShortcuts.size(); ++i) {
         const auto& shortcut = viewer_help::kShortcuts[i];
-        state->guideKeys[i] = CreateWindowExW(0, L"STATIC", shortcut.key,
-            WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
-            0, 0, 40, 23, hwnd, nullptr, instance, nullptr);
+        state->guideKeys[i] = CreateWindowExW(0, L"BUTTON", shortcut.key,
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
+            0, 0, 148, 29, hwnd, reinterpret_cast<HMENU>(IDC_SETTINGS_SHORTCUT_FIRST+i), instance, nullptr);
+        const std::wstring description=initial.english ? shortcut.english : shortcut.korean;
         state->guideDescriptions[i] = CreateWindowExW(0, L"STATIC",
-            initial.english ? shortcut.english : shortcut.korean,
-            WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
+            description.c_str(),
+            WS_CHILD | WS_VISIBLE | SS_LEFT,
             0, 0, 264, 29, hwnd, nullptr, instance, nullptr);
     }
-    state->guideVideoHint = makeLabel(viewer_help::VideoOnlyHint(initial.english), 34, 84);
+    state->guideVideoHint = CreateWindowW(L"STATIC",L"",WS_CHILD|WS_VISIBLE|SS_LEFT|SS_NOPREFIX,
+        0,0,336,32,hwnd,nullptr,instance,nullptr);
     state->guideDiagnosticsTitle = makeLabel(
         initial.english ? L"Diagnostics" : L"진단", 505, 62);
     state->screenshotTitle = makeLabel(text(L"스크린샷 (F12)"), 505, 470);
@@ -905,7 +911,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         // existing hint-to-front safeguard, and the actual label next to it.
         state->fullscreenCursorHint, state->fullscreenCursorLabel, state->fullscreenCursorCombo,
 
-        state->guideShortcutsTitle, state->guideVideoHint,
+        state->guideShortcutsTitle, state->shortcutResetButton, state->guideVideoHint,
         state->guideDiagnosticsTitle, state->guideDiagnosticsText,
         state->saveLogCheck, state->showConsoleCheck, state->guideLogFolderButton,
         state->guideLsButton,
@@ -922,7 +928,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     for (HWND control : readingOrder) {
         if (control) SetWindowPos(control, HWND_BOTTOM, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW);
-        if (control == state->guideShortcutsTitle) {
+        if (control == state->shortcutResetButton) {
             for (size_t i = 0; i < state->guideKeys.size(); ++i) {
                 for (HWND row : {state->guideKeys[i], state->guideDescriptions[i]})
                     SetWindowPos(row, HWND_BOTTOM, 0, 0, 0, 0,
@@ -930,6 +936,11 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
             }
         }
     }
+    for (HWND control : {state->screenshotTitle,state->vsrCheck,state->skipStartupHint,state->fullscreenCursorHint}) {
+        wchar_t caption[512]{}; GetWindowTextW(control,caption,512);
+        state->shortcutCaptionTemplates.emplace_back(control,caption);
+    }
+    RefreshShortcutCaptions(state);
 }
 
 } // namespace llcv::settings_ui

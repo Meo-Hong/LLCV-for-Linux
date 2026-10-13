@@ -147,6 +147,9 @@ bool MigrateLegacyPcmQueueTarget(const std::wstring& path) {
 LoadResult LoadFromIni(const std::wstring& path) {
     LoadResult result{};
     AppSettings& settings = result.settings;
+    for (size_t i=0;i<shortcuts::Count;++i)
+        settings.shortcuts[i]=static_cast<unsigned>(ReadInt(path,L"Shortcuts",shortcuts::Names[i],shortcuts::Defaults[i]));
+    if (!shortcuts::Valid(settings.shortcuts)) settings.shortcuts=shortcuts::Defaults;
     settings.settingsLightTheme = _wcsicmp(
         ReadString(path, L"General", L"SettingsTheme", L"Dark").c_str(), L"Light") == 0;
 
@@ -371,6 +374,9 @@ LoadResult LoadFromIni(const std::wstring& path) {
 
 static DWORD WriteSettings(const std::wstring& file, const AppSettings& settings) {
     IniWriter path{file};
+    const auto& bindings=shortcuts::Valid(settings.shortcuts) ? settings.shortcuts : shortcuts::Defaults;
+    for (size_t i=0;i<shortcuts::Count;++i)
+        WriteInt(path,L"Shortcuts",shortcuts::Names[i],static_cast<int>(bindings[i]));
     const wchar_t* language = L"Auto";
     if (settings.uiLanguage == UiLanguage::Korean) language = L"Korean";
     if (settings.uiLanguage == UiLanguage::English) language = L"English";

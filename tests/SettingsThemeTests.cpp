@@ -445,6 +445,8 @@ void CheckActualTabOrder() {
                     c.roundedCornersCheck, c.windowSnapCheck, c.fullscreenCursorCombo});
                 break;
             case SettingsTab::GuideDiagnostics:
+                expected.push_back(c.shortcutResetButton);
+                expected.insert(expected.end(), c.guideKeys.begin(), c.guideKeys.end());
                 expected.insert(expected.end(), {c.saveLogCheck, c.showConsoleCheck, c.guideLogFolderButton, c.guideLsButton});
                 break;
             case SettingsTab::Updates:
@@ -550,7 +552,7 @@ void CheckDeferredTransitions() {
                         Check(((GetWindowLongPtrW(control, GWL_STYLE) & WS_VISIBLE) != 0) == guideVisible,
                               "shortcut rows are visible only on the guide page");
                         Check((IsWindowEnabled(control) != FALSE) == guideVisible,
-                              "hidden shortcut rows are disabled consistently");
+                              "all shortcut rows follow page visibility");
                     }
                 }
             }
@@ -678,6 +680,11 @@ void CheckDisabledLabelPixels() {
                 Check(measured.bottom - measured.top >= 4 * metrics.tmHeight,
                     "surround explanation retains at least four lines");
                 Check(measured.bottom <= rect.bottom, "surround explanation fits at each language/DPI");
+            }
+            if (std::find(c.guideDescriptions.begin(),c.guideDescriptions.end(),label)!=c.guideDescriptions.end()) {
+                RECT measured=textRect;
+                DrawTextW(dc,caption.c_str(),-1,&measured,referenceFlags|DT_CALCRECT);
+                textRect.top+=std::max(0L,((textRect.bottom-textRect.top)-(measured.bottom-measured.top))/2);
             }
             DrawTextW(dc, caption.c_str(), -1, &textRect, referenceFlags);
             GdiFlush();
@@ -931,6 +938,19 @@ void ActualSnapshots(const wchar_t* directory) {
             swprintf_s(name, L"settings-%s-%s-tab%d-%udpi.bmp", light ? L"light" : L"dark",
                 english ? L"en" : L"ko", index, dpi);
             SaveSnapshot(hwnd, (std::wstring(directory) + L"/" + name).c_str());
+            if (index==3) {
+                c.shortcutBindings[0]=llcv::shortcuts::Ctrl|VK_F1;
+                c.shortcutBindings[static_cast<size_t>(llcv::shortcuts::Action::Exit)]=llcv::shortcuts::Ctrl|'Q';
+                for (bool longKey:{false,true}) {
+                    if (longKey) c.shortcutBindings[0]=llcv::shortcuts::Ctrl|llcv::shortcuts::Alt|llcv::shortcuts::Shift|VK_F12;
+                    RefreshShortcutCaptions(&c);
+                    swprintf_s(name,L"shortcuts-%s-%s-%s-%udpi.bmp",longKey ? L"expanded" : L"compact",
+                        light ? L"light" : L"dark",english ? L"en" : L"ko",dpi);
+                    SaveSnapshot(hwnd,(std::wstring(directory)+L"/"+name).c_str());
+                }
+                c.shortcutBindings=llcv::shortcuts::Defaults;
+                RefreshShortcutCaptions(&c);
+            }
             if (index == 1) {
                 for (int mode : {1, 2}) {
                     SendMessageW(c.audioCombo, CB_SETCURSEL, mode, 0);

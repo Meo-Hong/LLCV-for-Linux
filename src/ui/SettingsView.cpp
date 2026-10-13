@@ -17,6 +17,92 @@ void SetSettingsText(HWND control, const wchar_t* text) {
     if (std::wcscmp(current, text) != 0) SetWindowTextW(control, text);
 }
 
+void RefreshShortcutCaptions(SettingsControls* state) {
+    for (size_t i=0;i<state->guideKeys.size();++i)
+        SetSettingsText(state->guideKeys[i],viewer_help::KeyLabel(i,state->shortcutBindings).c_str());
+    const auto hint=shortcuts::Expand(viewer_help::VideoOnlyHint(state->english),state->shortcutBindings)+
+        (state->english ? L"\nClick a key to change" : L"\n키 버튼을 눌러 변경");
+    SetSettingsText(state->guideVideoHint,hint.c_str());
+    for (const auto& [control,source]:state->shortcutCaptionTemplates)
+        SetSettingsText(control,shortcuts::Expand(source.c_str(),state->shortcutBindings).c_str());
+    if (!state->vsrGpuUnavailable)
+        SetSettingsText(state->vsrStatus,shortcuts::Expand(state->english
+            ? L"SDR / HDR10 · Toggle with F6" : L"SDR / HDR10 · F6으로 전환",state->shortcutBindings).c_str());
+    if (!state->uiFonts.empty()) LayoutSettingsControls(state,state->layoutDpi);
+}
+ShortcutLayout MeasureShortcutLayout(const SettingsControls* state,UINT dpi) {
+    ShortcutLayout result;
+    dpi=dpi ? dpi : USER_DEFAULT_SCREEN_DPI;
+    HDC dc=GetDC(nullptr);
+    if (!dc) return result;
+    const auto old=SelectObject(dc,reinterpret_cast<HFONT>(SendMessageW(state->guideKeys[0],WM_GETFONT,0,0)));
+    for (unsigned binding:state->shortcutBindings) {
+        const auto label=shortcuts::Label(binding);
+        SIZE size{}; GetTextExtentPoint32W(dc,label.c_str(),static_cast<int>(label.size()),&size);
+        result.keyWidth=std::max(result.keyWidth,
+            static_cast<int>(((size.cx+SettingsPixels(19,dpi))*96+dpi-1)/dpi));
+    }
+    SelectObject(dc,reinterpret_cast<HFONT>(SendMessageW(state->guideVideoHint,WM_GETFONT,0,0)));
+    wchar_t hint[1024]{}; GetWindowTextW(state->guideVideoHint,hint,1024);
+    RECT measured{0,0,SettingsPixels(336,dpi),0};
+    DrawTextW(dc,hint,-1,&measured,DT_CALCRECT|DT_WORDBREAK|DT_NOPREFIX);
+    result.hintHeight=std::max(36,static_cast<int>((measured.bottom*96+dpi-1)/dpi));
+    SelectObject(dc,old); ReleaseDC(nullptr,dc);
+    return result;
+}
+void CancelShortcutEdit(SettingsControls* state) {
+    if (state->editingShortcut<0) return;
+    state->editingShortcut=-1;
+    RefreshShortcutCaptions(state);
+}
+void BeginShortcutEdit(SettingsControls* state,size_t index) {
+    const bool same=state->editingShortcut==static_cast<int>(index);
+    CancelShortcutEdit(state);
+    if (same || index>=shortcuts::Count) return;
+    state->editingShortcut=static_cast<int>(index);
+    SetFocus(state->guideKeys[index]);
+    SetSettingsText(state->guideKeys[index],L"…");
+    SetSettingsText(state->guideVideoHint,state->english
+        ? L"Press a key with Ctrl / Alt / Shift.\nClick the key button again to cancel."
+        : L"키 입력 (Ctrl / Alt / Shift 조합 가능)\n취소하려면 키 버튼을 다시 누르세요.");
+}
+bool ProcessShortcutEdit(SettingsControls* state,const MSG& message,unsigned modifiers) {
+    const bool down=shortcuts::KeyDown(message.message);
+    const bool up=message.message==WM_KEYUP || message.message==WM_SYSKEYUP;
+    if (state->shortcutKeyToRelease && (down || up) && message.wParam==state->shortcutKeyToRelease) {
+        if (up) state->shortcutKeyToRelease=0;
+        // A new physical press after focus loss must not remain suppressed.
+        else if (!(message.lParam & (LPARAM{1}<<30))) state->shortcutKeyToRelease=0;
+        else return true;
+        if (up) return true;
+    }
+    if (state->editingShortcut<0) return false;
+    const size_t index=static_cast<size_t>(state->editingShortcut);
+    if (GetFocus()!=state->guideKeys[index]) { CancelShortcutEdit(state); return false; }
+    if (up) return true;
+    if (!down) return false;
+    const UINT key=static_cast<UINT>(message.wParam);
+    if (message.lParam & (LPARAM{1}<<30)) return true;
+    if (shortcuts::Modifier(key)) return true;
+    const unsigned binding=key|modifiers;
+    if (!shortcuts::Valid(binding)) {
+        SetSettingsText(state->guideVideoHint,state->english
+            ? L"Reserved or unsupported key. Try another."
+            : L"예약되었거나 지원하지 않는 키예요.\n다른 키를 입력하세요.");
+        return true;
+    }
+    for (size_t i=0;i<shortcuts::Count;++i) if (i!=index && state->shortcutBindings[i]==binding) {
+        SetSettingsText(state->guideVideoHint,state->english
+            ? L"Already assigned. Try another key."
+            : L"이미 사용 중인 키예요. 다른 키를 입력하세요.");
+        return true;
+    }
+    state->shortcutBindings[index]=binding;
+    state->shortcutKeyToRelease=key;
+    CancelShortcutEdit(state);
+    return true;
+}
+
 int SettingsPixels(int dips, UINT dpi) {
     return MulDiv(dips, dpi ? dpi : USER_DEFAULT_SCREEN_DPI,
                   USER_DEFAULT_SCREEN_DPI);
@@ -375,13 +461,15 @@ void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
     // Window behavior has its own page, avoiding a packed video/options wall.
     LayoutWindowBehaviorControls(state);
 
-    place(state->guideShortcutsTitle, 204, 132, 336, 20);
+    place(state->guideShortcutsTitle, 204, 132, 206, 20);
+    place(state->shortcutResetButton, 432, 128, 108, 28);
+    const auto shortcutLayout=MeasureShortcutLayout(state,dpi);
     for (size_t i = 0; i < state->guideKeys.size(); ++i) {
         const int y = 168 + static_cast<int>(i) * 36;
-        place(state->guideKeys[i], 214, y + 3, 40, 23);
-        place(state->guideDescriptions[i], 276, y, 264, 29);
+        place(state->guideKeys[i], 204, y, shortcutLayout.keyWidth, 29);
+        place(state->guideDescriptions[i], 216+shortcutLayout.keyWidth, y-3, 324-shortcutLayout.keyWidth, 35);
     }
-    place(state->guideVideoHint, 204, 501, 336, 36);
+    place(state->guideVideoHint, 204, 501, 336, shortcutLayout.hintHeight);
     place(state->guideDiagnosticsTitle, 600, 132, 376, 20);
     place(state->guideDiagnosticsText, 600, 160, 376, 32);
     place(state->saveLogCheck, 600, 208, 376, 32);
@@ -542,8 +630,10 @@ void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
     SetSettingsControlVisible(state->mjpegColorCombo, video && mjpegSelected);
     SetSettingsControlVisible(state->mjpegColorHelp, video && mjpegSelected);
     SetSettingsControlVisible(state->guideShortcutsTitle, guide);
+    SetSettingsControlVisible(state->shortcutResetButton, guide);
     SetSettingsControlVisible(state->guideVideoHint, guide);
-    for (HWND key : state->guideKeys) SetSettingsControlVisible(key, guide);
+    for (HWND key : state->guideKeys)
+        SetSettingsControlVisible(key, guide);
     for (HWND description : state->guideDescriptions) SetSettingsControlVisible(description, guide);
     SetSettingsControlVisible(state->guideDiagnosticsTitle, guide);
     SetSettingsControlVisible(state->guideDiagnosticsText, guide);
@@ -564,12 +654,12 @@ void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
     SetSettingsText(state->pixelCheck, vsr
         ? (state->english ? L"Lock display size" : L"표시 크기 고정")
         : L"Pixel-perfect (1:1)");
-    SetSettingsText(state->vsrStatus, state->vsrGpuUnavailable
+    SetSettingsText(state->vsrStatus, shortcuts::Expand(state->vsrGpuUnavailable
         ? (state->vsrGpuUnknown
             ? (state->english ? L"GPU check failed · Restart to retry" : L"GPU 확인 실패 · 앱을 다시 실행하세요")
             : (state->english ? L"Unavailable · Requires an NVIDIA rendering GPU" : L"사용 불가 · NVIDIA 렌더링 GPU가 필요합니다"))
         : (state->english ? L"SDR / HDR10 · Toggle with F6"
-                          : L"SDR / HDR10 · F6으로 전환"));
+                          : L"SDR / HDR10 · F6으로 전환"), state->shortcutBindings).c_str());
     SetSettingsControlVisible(state->screenshotClipboardCheck, video);
     SetSettingsControlVisible(state->screenshotHelp, video);
     SetSettingsControlVisible(state->screenshotFolderButton, video);

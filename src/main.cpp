@@ -137,9 +137,9 @@ constexpr int kSampleRate = 48000;
 constexpr int kChannels = 2;
 constexpr int kBitsPerSample = 16;
 #ifdef LLCV_VSR_EXPERIMENT
-constexpr wchar_t kAppVersionLabel[] = L"v2.0.4-vsr-test";
+constexpr wchar_t kAppVersionLabel[] = L"v2.0.5-vsr-test";
 #else
-constexpr wchar_t kAppVersionLabel[] = L"v2.0.4";
+constexpr wchar_t kAppVersionLabel[] = L"v2.0.5";
 #endif
 
 constexpr int kRecommendedCaptureBufferMs = 20;
@@ -212,6 +212,7 @@ static constexpr VideoPresetInfo kVideoPresets[] = {
 };
 
 static AppSettings g_settings{};
+namespace keys = llcv::shortcuts;
 // User preferences remain UI-owned. A failed backend may change this session's
 // renderer without racing a settings save or erasing the selected ASIO driver.
 static std::atomic<AudioMode> g_activeAudioMode{AudioMode::WasapiShared};
@@ -324,8 +325,8 @@ enum class TransientHudContent { Volume, OneToOne, OneToOneUnavailable,
 };
 static void ShowTransientHud(TransientHudContent content);
 #ifdef LLCV_VSR_FEATURE
-static bool HandleVsrTestKey(WPARAM key, LPARAM flags) {
-    if (key != VK_F6) return false;
+static bool HandleVsrTestKey(WPARAM key, LPARAM flags, unsigned modifiers=keys::Modifiers()) {
+    if (!keys::Match(g_settings.shortcuts,keys::Action::Vsr,static_cast<UINT>(key),modifiers)) return false;
     if ((flags & (LPARAM{1} << 30)) != 0 || g_settings.audioOnly) return true;
     if (!llcv::vsr::NvidiaAdapter(g_vsrGpuVendor.load(std::memory_order_acquire))) {
         ShowTransientHud(TransientHudContent::VsrUnavailable);
@@ -1753,7 +1754,7 @@ static void AudioRenderThread() {
         if (!g_running.load(std::memory_order_acquire) ||
             result == llcv::wasapi::RunResult::Stopped) break;
         if (result == llcv::wasapi::RunResult::Failed) {
-            SetActiveAudioOutputName(UI_TEXT(L"WASAPI: 출력 사용 불가 · F2로 설정 확인"));
+            SetActiveAudioOutputName(keys::Expand(UI_TEXT(L"WASAPI: 출력 사용 불가 · F2로 설정 확인"),g_settings.shortcuts));
             g_audioActualBufferFrames.store(0, std::memory_order_release);
             break;
         }
@@ -1765,7 +1766,7 @@ static void AudioRenderThread() {
         const unsigned delay = recovery.NextDelay();
         if (!delay) {
             fwprintf(stderr, L"[audio] WASAPI recovery limit reached; reopen settings with F2.\n");
-            SetActiveAudioOutputName(UI_TEXT(L"WASAPI: 출력 복구 실패 · F2로 설정 확인"));
+            SetActiveAudioOutputName(keys::Expand(UI_TEXT(L"WASAPI: 출력 복구 실패 · F2로 설정 확인"),g_settings.shortcuts));
             g_audioActualBufferFrames.store(0, std::memory_order_release);
             break;
         }
@@ -3091,7 +3092,7 @@ struct DirectD3D11Renderer {
                 case TransientHudContent::VsrFailed: ko=L"VSR 전환 실패\n진단 로그 확인"; en=L"VSR switch failed\nSee diagnostic log"; break;
                 default: break;
                 }
-                wcscpy_s(volumeText, IsEnglishUi() ? en : ko);
+                wcscpy_s(volumeText, keys::Expand(IsEnglishUi() ? en : ko,g_settings.shortcuts).c_str());
             } else
 #endif
             if (hudContent >= TransientHudContent::ScreenshotPending) {
@@ -3129,6 +3130,12 @@ struct DirectD3D11Renderer {
             if (hudContent != TransientHudContent::Volume)
                 volumeTextLayout->SetFontSize(20.0f,
                     DWRITE_TEXT_RANGE{0, static_cast<UINT32>(wcslen(volumeText))});
+#ifdef LLCV_VSR_FEATURE
+            if ((hudContent==TransientHudContent::VsrOn || hudContent==TransientHudContent::VsrOff) &&
+                keys::Label(g_settings.shortcuts[static_cast<size_t>(keys::Action::Vsr)]).size()>12)
+                volumeTextLayout->SetFontSize(16.0f,
+                    DWRITE_TEXT_RANGE{0,static_cast<UINT32>(wcslen(volumeText))});
+#endif
             // Keep the existing GPU texture/quad; only the painted panel follows
             // the cached text height. Volume retains space for its gain bar.
             DWRITE_TEXT_METRICS hudMetrics{};
@@ -3214,11 +3221,12 @@ struct DirectD3D11Renderer {
                         audioCacheBarBrush);
             };
             text(IsEnglishUi() ? L"Audio" : L"오디오", audioTextFormat,
-                D2D1::RectF(16, 4, 130, 30), audioCacheTextBrush);
+                D2D1::RectF(16, 4, 80, 30), audioCacheTextBrush);
             // Setting-dependent limit is visible without consuming another row.
             audioSmallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-            text(maximum > 100 ? (IsEnglishUi() ? L"MAX 200% · F3" : L"최대 200% · F3") : L"F3",
-                audioSmallFormat, D2D1::RectF(164, 4, 320, 30), audioCacheSecondaryBrush);
+            const auto audioShortcut=keys::Expand(maximum > 100 ? (IsEnglishUi() ? L"MAX 200% · F3" : L"최대 200% · F3") : L"F3",g_settings.shortcuts);
+            text(audioShortcut.c_str(),
+                audioSmallFormat, D2D1::RectF(86, 4, 320, 30), audioCacheSecondaryBrush);
             audioSmallFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             const auto masterCard = D2D1::RoundedRect(D2D1::RectF(16, 32, 320, 72), 8, 8);
             audioCacheTarget->FillRoundedRectangle(masterCard,
@@ -4628,8 +4636,8 @@ static void StartSettingsUpdateCheck(SettingsDialogState* state, HWND hwnd) {
     EnableWindow(state->updateNowButton, FALSE);
 }
 
-static const wchar_t* SettingsHelpText(SettingsHelpTopic topic) {
-    return llcv::settings_ui::SettingsHelpText(topic, IsEnglishUi());
+static std::wstring SettingsHelpText(SettingsHelpTopic topic, const SettingsDialogState* state) {
+    return keys::Expand(llcv::settings_ui::SettingsHelpText(topic, IsEnglishUi()),state->shortcutBindings);
 }
 
 static bool SettingsUsesSharedMode(const SettingsDialogState* state) {
@@ -4886,9 +4894,9 @@ static void UpdateAudioClient3Status(SettingsDialogState* state) {
     }
     if (state->surround51Check && SendMessageW(state->surround51Check,
             BM_GETCHECK, 0, 0) == BST_CHECKED) {
-        SetSettingsText(state->audioStatus, IsEnglishUi()
+        SetSettingsText(state->audioStatus, keys::Expand(IsEnglishUi()
             ? L"Console 5.1: output period is negotiated on start; actual value in Tab diagnostics."
-            : L"콘솔 5.1: 출력 주기는 시작 시 협상 · 실제 값은 Tab 진단에서 확인");
+            : L"콘솔 5.1: 출력 주기는 시작 시 협상 · 실제 값은 Tab 진단에서 확인",state->shortcutBindings).c_str());
         return;
     }
     if (!state->probeReady) {
@@ -4910,6 +4918,14 @@ static void UpdateAudioClient3Status(SettingsDialogState* state) {
             L"Shared 기본 모드 · 저지연 API 미지원"));
     }
     SetSettingsText(state->audioStatus, status);
+}
+
+static bool ProcessSettingsShortcutEdit(SettingsDialogState* state, const MSG& message,
+                                        unsigned modifiers=keys::Modifiers()) {
+    const auto previous=state->shortcutBindings;
+    const bool consumed=llcv::settings_ui::ProcessShortcutEdit(state,message,modifiers);
+    if (previous!=state->shortcutBindings) UpdateAudioClient3Status(state);
+    return consumed;
 }
 
 static void RequestSettingsSharedProbe(SettingsDialogState* state, HWND hwnd) {
@@ -5725,6 +5741,7 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
             UpdateExclusiveVerificationUi(state);
             return;
         }
+        g_settings.shortcuts=state->shortcutBindings;
         if (languageIndex >= 0 && languageIndex <= 2) {
             g_settings.uiLanguage = static_cast<UiLanguage>(languageIndex);
         }
@@ -6053,6 +6070,7 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
         break;
 
     case WM_ACTIVATE:
+        if (LOWORD(wParam)==WA_INACTIVE && state) llcv::settings_ui::CancelShortcutEdit(state);
         if (LOWORD(wParam) != WA_INACTIVE) {
             InvalidateRect(hwnd, nullptr, FALSE);
         }
@@ -6181,6 +6199,18 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
     }
 
     case WM_COMMAND:
+        if (state && HIWORD(wParam)==BN_CLICKED && LOWORD(wParam)>=IDC_SETTINGS_SHORTCUT_FIRST &&
+            LOWORD(wParam)<IDC_SETTINGS_SHORTCUT_FIRST+keys::Count) {
+            llcv::settings_ui::BeginShortcutEdit(state,LOWORD(wParam)-IDC_SETTINGS_SHORTCUT_FIRST);
+            return 0;
+        }
+        if (state && LOWORD(wParam)==IDC_SETTINGS_SHORTCUT_RESET && HIWORD(wParam)==BN_CLICKED) {
+            llcv::settings_ui::CancelShortcutEdit(state);
+            state->shortcutBindings=keys::Defaults;
+            llcv::settings_ui::RefreshShortcutCaptions(state);
+            UpdateAudioClient3Status(state);
+            return 0;
+        }
         if (state && LOWORD(wParam) == IDC_SETTINGS_SECTION && HIWORD(wParam) == CBN_SELCHANGE) {
             const LRESULT page = SendMessageW(state->sectionNavigation, CB_GETCURSEL, 0, 0);
             if (page != CB_ERR) {
@@ -6229,7 +6259,7 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
         if (LOWORD(wParam) == IDC_SETTINGS_VSR_GUIDE && HIWORD(wParam) == BN_CLICKED && state) {
             // This is guidance, not a hardware capability/activation check.
             // Request acceptance alone cannot establish NVIDIA's active state.
-            MessageBoxW(hwnd, llcv::ui_text::VsrSetupGuide(IsEnglishUi()),
+            MessageBoxW(hwnd, keys::Expand(llcv::ui_text::VsrSetupGuide(IsEnglishUi()),state->shortcutBindings).c_str(),
                 IsEnglishUi() ? L"NVIDIA VSR — Setup guide" : L"NVIDIA VSR — 설정 안내",
                 MB_OK | MB_ICONINFORMATION);
             return 0;
@@ -6365,7 +6395,7 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
             HIWORD(wParam) == BN_CLICKED) {
             MessageBoxW(
                 hwnd,
-                SettingsHelpText(SettingsHelpTopic::Presentation),
+                SettingsHelpText(SettingsHelpTopic::Presentation,state).c_str(),
                 UI_TEXT(L"화면 표시 방식"), MB_OK | MB_ICONINFORMATION);
             return 0;
         }
@@ -6375,7 +6405,7 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
         }
         if ((LOWORD(wParam) == IDC_SETTINGS_CAPTURE_40_HELP ||
              LOWORD(wParam) == IDC_SETTINGS_LS_GUIDE) && HIWORD(wParam) == BN_CLICKED) {
-            MessageBoxW(hwnd, SettingsHelpText(SettingsHelpTopic::Capture40),
+            MessageBoxW(hwnd, SettingsHelpText(SettingsHelpTopic::Capture40,state).c_str(),
                 IsEnglishUi() ? L"40 fps capture guide" : L"40fps 캡처 안내", MB_OK | MB_ICONINFORMATION);
             return 0;
         }
@@ -6383,7 +6413,7 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
             HIWORD(wParam) == BN_CLICKED) {
             MessageBoxW(
                 hwnd,
-                SettingsHelpText(SettingsHelpTopic::VolumeBoost),
+                SettingsHelpText(SettingsHelpTopic::VolumeBoost,state).c_str(),
                 UI_TEXT(L"100% 이상 볼륨 증폭"), MB_OK | MB_ICONINFORMATION);
             return 0;
         }
@@ -6391,7 +6421,7 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
             HIWORD(wParam) == BN_CLICKED) {
             MessageBoxW(
                 hwnd,
-                SettingsHelpText(SettingsHelpTopic::ForceHdr10),
+                SettingsHelpText(SettingsHelpTopic::ForceHdr10,state).c_str(),
                 UI_TEXT(L"HDR10 강제 출력"), MB_OK | MB_ICONINFORMATION);
             return 0;
         }
@@ -6399,13 +6429,13 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
             HIWORD(wParam) == BN_CLICKED) {
             MessageBoxW(
                 hwnd,
-                SettingsHelpText(SettingsHelpTopic::MjpegColor),
+                SettingsHelpText(SettingsHelpTopic::MjpegColor,state).c_str(),
                 UI_TEXT(L"MJPEG 색상 해석"), MB_OK | MB_ICONINFORMATION);
             return 0;
         }
         if (LOWORD(wParam) == IDC_SETTINGS_HDR_CHROMA_HELP &&
             HIWORD(wParam) == BN_CLICKED) {
-            MessageBoxW(hwnd, SettingsHelpText(SettingsHelpTopic::HdrChroma),
+            MessageBoxW(hwnd, SettingsHelpText(SettingsHelpTopic::HdrChroma,state).c_str(),
                 UI_TEXT(L"HDR 색차 배치"), MB_OK | MB_ICONINFORMATION);
             return 0;
         }
@@ -6413,7 +6443,7 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
             HIWORD(wParam) == BN_CLICKED) {
             MessageBoxW(
                 hwnd,
-                SettingsHelpText(SettingsHelpTopic::PcmQueue),
+                SettingsHelpText(SettingsHelpTopic::PcmQueue,state).c_str(),
                 UI_TEXT(L"PCM 버퍼 목표"), MB_OK | MB_ICONINFORMATION);
             return 0;
         }
@@ -6421,7 +6451,7 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
             HIWORD(wParam) == BN_CLICKED) {
             MessageBoxW(
                 hwnd,
-                SettingsHelpText(SettingsHelpTopic::Drift),
+                SettingsHelpText(SettingsHelpTopic::Drift,state).c_str(),
                 UI_TEXT(L"클록 드리프트 보정"), MB_OK | MB_ICONINFORMATION);
             return 0;
         }
@@ -6558,8 +6588,11 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
     while (IsWindow(hwnd)) {
         const BOOL result = GetMessageW(&msg, nullptr, 0, 0);
         if (result <= 0) break;
+        if (ProcessSettingsShortcutEdit(&state,msg)) continue;
+        g_viewerHelp.SetBindings(state.shortcutBindings);
         if (g_viewerHelp.ProcessMessage(msg, hwnd, IsEnglishUi(), kAppVersionLabel,
-                SendMessageW(state.themeCombo, CB_GETCURSEL, 0, 0) == 1)) continue;
+                SendMessageW(state.themeCombo, CB_GETCURSEL, 0, 0) == 1,
+                llcv::viewer_help::MessageContext::Settings)) continue;
         if (msg.message == WM_MOUSEMOVE && state.tooltipWindow) {
             const HWND target = IsSettingsHelpControl(&state, msg.hwnd)
                 ? msg.hwnd : state.activeTooltipTarget;
@@ -7699,7 +7732,7 @@ static std::wstring BuildRuntimeOsdText(int outputWidth, int outputHeight) {
           L"오류 추세     %.1f회/h · PCM 불균형 %+.0f ppm(추정) · 최근 %s";
     wchar_t text[2300]{};
     swprintf_s(
-        text, osdFormat,
+        text, keys::Expand(osdFormat,g_settings.shortcuts).c_str(),
         captureName.c_str(), videoPath, preset.width, preset.height, configuredFps,
         PixelFormatName(activeFormat), bitDepthText, chromaText, qualityText,
         outputWidth,
@@ -7942,6 +7975,41 @@ struct AudioOnlyPaintBuffer {
 };
 
 static AudioOnlyPaintBuffer g_audioOnlyPaintBuffer;
+
+static void HandleViewerExit(HWND hwnd) {
+    if (g_fullscreen && !g_autoFullscreen) {
+        ToggleFullscreen(hwnd);
+    } else {
+        if (g_fullscreen) EndFullscreenCursorTracking(hwnd);
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+    }
+}
+
+// Shared by the viewer window and child-focus message loop. Resolve modifiers
+// once per key event; no allocations or work on the capture/render threads.
+static bool HandleViewerShortcut(HWND hwnd, WPARAM key, LPARAM flags, unsigned modifiers) {
+    if (key>=256) return false;
+    const auto found=std::find(g_settings.shortcuts.begin(),g_settings.shortcuts.end(),
+        static_cast<unsigned>(key)|modifiers);
+    if (found==g_settings.shortcuts.end()) return false;
+    const auto action=static_cast<keys::Action>(found-g_settings.shortcuts.begin());
+    // These two have their own modeless-help / source-frame routing below.
+    if (action==keys::Action::Help || action==keys::Action::Screenshot) return false;
+    if (flags & (LPARAM{1}<<30)) return true;
+    switch (action) {
+    case keys::Action::Settings: SendMessageW(hwnd,WM_OPEN_SETTINGS,0,0); break;
+    case keys::Action::AudioOsd: ToggleAudioOsd(); break;
+    case keys::Action::PixelPerfect: SendMessageW(hwnd,WM_RESTORE_ONE_TO_ONE,0,0); break;
+#ifdef LLCV_VSR_FEATURE
+    case keys::Action::Vsr: return HandleVsrTestKey(key,flags,modifiers);
+#endif
+    case keys::Action::Fullscreen: ToggleFullscreen(hwnd); break;
+    case keys::Action::Diagnostics: ToggleRuntimeOsd(); break;
+    case keys::Action::Exit: HandleViewerExit(hwnd); break;
+    default: return false;
+    }
+    return true;
+}
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -8389,42 +8457,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         break;
 
     case WM_KEYDOWN:
-#ifdef LLCV_VSR_FEATURE
-        if (HandleVsrTestKey(wParam, lParam)) return 0;
-#endif
-        if (wParam == VK_F2) {
-            SendMessageW(hwnd, WM_OPEN_SETTINGS, 0, 0);
-            return 0;
-        }
-        if (wParam == VK_F5) {
-            SendMessageW(hwnd, WM_RESTORE_ONE_TO_ONE, 0, 0);
-            return 0;
-        }
-        if (wParam == VK_TAB) {
-            ToggleRuntimeOsd();
-            return 0;
-        }
-        if (wParam == VK_F3) {
-            ToggleAudioOsd();
-            return 0;
-        }
-        if (wParam == VK_F11) {
-            // Holding F11 generates repeated WM_KEYDOWN messages. Only the
-            // first press should change window style and rebuild the output.
-            if ((lParam & (LPARAM{1} << 30)) == 0) {
-                ToggleFullscreen(hwnd);
-            }
-            return 0;
-        }
-        if (wParam == VK_ESCAPE) {
-            if (g_fullscreen && !g_autoFullscreen) {
-                ToggleFullscreen(hwnd);
-            } else {
-                if (g_fullscreen) EndFullscreenCursorTracking(hwnd);
-                PostMessageW(hwnd, WM_CLOSE, 0, 0);
-            }
-            return 0;
-        }
+    case WM_SYSKEYDOWN:
+        if (HandleViewerShortcut(hwnd,wParam,lParam,keys::Modifiers())) return 0;
         break;
 
     case WM_MOUSEWHEEL:
@@ -8530,6 +8564,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 }
 
 static void RunViewerMessageLoop(HWND hwnd) {
+    g_viewerHelp.SetBindings(g_settings.shortcuts);
     MSG m{};
     while (g_running.load() && GetMessageW(&m, nullptr, 0, 0) > 0) {
         if (g_viewerHelp.ProcessMessage(m, hwnd, IsEnglishUi(), kAppVersionLabel,
@@ -8551,26 +8586,7 @@ static void RunViewerMessageLoop(HWND hwnd) {
         // Keyboard focus can belong to the video-host child. Key messages do
         // not bubble to its parent, so route viewer shortcuts at the thread
         // message-loop level.
-#ifdef LLCV_VSR_FEATURE
-        if (m.message == WM_KEYDOWN && HandleVsrTestKey(m.wParam, m.lParam)) continue;
-#endif
-        if (m.message == WM_KEYDOWN && m.wParam == VK_TAB &&
-            GetKeyState(VK_CONTROL) >= 0) {
-            SendMessageW(hwnd, WM_TOGGLE_RUNTIME_OSD, 0, 0);
-            continue;
-        }
-        if (m.message == WM_KEYDOWN && m.wParam == VK_F2) {
-            SendMessageW(hwnd, WM_OPEN_SETTINGS, 0, 0);
-            continue;
-        }
-        if (m.message == WM_KEYDOWN && m.wParam == VK_F3) {
-            ToggleAudioOsd();
-            continue;
-        }
-        if (m.message == WM_KEYDOWN && m.wParam == VK_F5) {
-            SendMessageW(hwnd, WM_RESTORE_ONE_TO_ONE, 0, 0);
-            continue;
-        }
+        if (keys::KeyDown(m.message) && HandleViewerShortcut(hwnd,m.wParam,m.lParam,keys::Modifiers())) continue;
 #ifdef LLCV_HDR_FRAME_AUDIT
         if (m.message == WM_KEYDOWN && m.wParam == VK_F8) {
             if (!(m.lParam & (1LL << 30))) {
@@ -8580,8 +8596,8 @@ static void RunViewerMessageLoop(HWND hwnd) {
             continue;
         }
 #endif
-        if (m.message == WM_KEYDOWN && m.wParam == llcv::viewer_help::kScreenshotKey) {
-            if (llcv::viewer_help::IsScreenshotRequest(m, g_settings.audioOnly))
+        if (keys::Match(g_settings.shortcuts,keys::Action::Screenshot,m)) {
+            if (llcv::viewer_help::IsScreenshotRequest(m, g_settings.audioOnly,g_settings.shortcuts))
                 ShowTransientHud(g_screenshots.Request(g_settings.screenshotClipboard)
                     ? TransientHudContent::ScreenshotPending : TransientHudContent::ScreenshotBusy);
             continue;
