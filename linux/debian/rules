@@ -20,7 +20,7 @@ LLCV_APT_KEY := $(wildcard $(LLCV_APT_DIR)/llcv-archive-keyring.asc)
 	dh $@ --buildsystem=cmake
 
 override_dh_auto_configure:
-	dh_auto_configure -- -DLLCV_SOURCE_TREE_DATA=OFF -DLLCV_SDL3=$(LLCV_SDL3)
+	dh_auto_configure -- -DLLCV_SOURCE_TREE_DATA=OFF -DLLCV_SDL3=$(LLCV_SDL3) -DLLCV_SLEEP_INHIBIT=ON
 
 override_dh_install:
 	dh_install

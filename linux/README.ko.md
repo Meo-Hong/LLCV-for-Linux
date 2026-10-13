@@ -4,7 +4,7 @@
 
 LLCV는 USB(UVC/V4L2) HDMI 캡처 장치의 영상과 소리를 낮은 지연으로 표시하는
 뷰어입니다. 이 폴더는 [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer)의
-Windows용 LLCV 2.0.2를 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
+Windows용 LLCV 2.0.4를 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
 기준 장치는 AVerMedia Live Gamer ULTRA S GC553Pro이고, 기준 데스크톱은
 Ubuntu 26.04(GNOME, Wayland)입니다.
 
@@ -39,11 +39,11 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 
 | 파일 | 설치할 OS | 명령 |
 | --- | --- | --- |
-| `llcv_2.0.2_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.0.2_amd64.deb` |
-| `llcv_2.0.2_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.0.2_arm64.deb` |
-| `llcv_2.0.2_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.0.2_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.0.2-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.0.2-1.x86_64.rpm` |
-| `llcv-2.0.2-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.0.2-1-x86_64.pkg.tar.zst` |
+| `llcv_2.0.4_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.0.4_amd64.deb` |
+| `llcv_2.0.4_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.0.4_arm64.deb` |
+| `llcv_2.0.4_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.0.4_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.0.4-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.0.4-1.x86_64.rpm` |
+| `llcv-2.0.4-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.0.4-1-x86_64.pkg.tar.zst` |
 
 - `.deb`를 설치하면 LLCV APT 저장소도 함께 등록되어, 다음 버전부터는
   `apt upgrade`나 소프트웨어 업데이트로 받습니다. `.rpm`과 Arch는 Releases에서
@@ -111,6 +111,20 @@ HDR을 쓸 수 없는 환경이면 앱이 그 사실과 이유를 직접 알려�
 설정 화면의 프레임레이트 목록은 선택한 해상도와 형식에 대해 장치가 알려주는
 값입니다. P010에는 리눅스 7.1 이상 커널이 필요합니다([HDR](#hdr) 참고).
 
+### 40fps 캡처
+
+**영상 → 캡처 → 40fps 캡처**는 기본 꺼짐입니다. 체크하면 프레임레이트 선택 대신
+캡처 드라이버에 40fps를 요청하고, 해제하면 기존 선택으로 돌아갑니다.
+
+- 장치가 알려준 목록에 40fps가 없어도 요청할 수 있습니다. 지원 여부는 장치,
+  해상도, 픽셀 형식에 따라 다릅니다.
+- **시작**할 때 드라이버가 실제로 40fps를 설정했는지 확인합니다. 거부하거나 다른
+  속도로 설정하면 다른 FPS로 대체하지 않고 오류를 표시합니다. 이때는 옵션을
+  해제하고 다시 시작하세요.
+- 프레임을 보간하거나 게임을 40fps로 고정하는 기능이 아니며, VRR을 대체하지
+  않습니다. 40fps 게임도 120 fps 캡처로 볼 수 있으므로 꼭 켤 필요는 없습니다.
+- 실제 수신 속도는 Tab 진단 화면의 **실제 FPS**에서 확인하세요.
+
 ## 소스에서 빌드
 
 ```sh
@@ -160,6 +174,21 @@ Wayland에서는 컴포지터가 창 위치를 정합니다. 그래서 시작 �
 전체화면에서만 적용되고, 마지막 창 위치는 복원되지 않습니다. X11 모드는 둘 다
 복원하지만 HDR 출력은 할 수 없습니다.
 
+## 재생 중 절전 방지
+
+**앱 → 전원 → 재생 중 자동 절전 방지**는 기본 켜짐입니다.
+
+- 영상 재생 중에는 화면과 시스템을 깨워 둡니다.
+- 오디오 전용 모드에서는 화면 꺼짐을 허용하고, 시스템 자동 절전만 막습니다.
+- 재생을 멈추거나 캡처 장치 연결이 끊기면 해제합니다. 설정 화면에서는 화면
+  보호기와 화면 꺼짐을 막지 않습니다.
+- 시스템 전원 설정은 바꾸지 않습니다.
+
+화면은 SDL을 통해 Wayland idle-inhibit 또는 화면 보호기 D-Bus 인터페이스로
+유지합니다. 시스템 자동 절전은 데스크톱 포털(`org.freedesktop.portal.Inhibit`)로
+막으므로 `xdg-desktop-portal`이 실행 중이어야 합니다(GNOME, KDE Plasma 등).
+포털이 없으면 진단 로그에 그 사실을 남깁니다.
+
 ## 메뉴 막대
 
 재생 중에 **Alt**를 눌렀다 떼면 화면 위쪽에 메뉴 막대가 나타납니다. 보기,
@@ -197,6 +226,10 @@ Alt나 Esc를 다시 누르거나 메뉴 밖을 클릭하면 닫힙니다.
 - **소리가 안 나옴.** **오디오 → 캡처 오디오 장치**를 확인하세요. 자동 모드는
   영상과 같은 USB 장치의 오디오를 선택합니다.
 - **소리가 끊김.** PCM 버퍼 목표를 5 ms씩 올려 보세요.
+- **40fps 캡처가 시작되지 않음.** 이 장치, 해상도, 형식에서 드라이버가 40fps를
+  거부했거나 다른 속도로 설정한 경우입니다. 오류 내용과 진단 로그의
+  `40 fps request` 줄을 확인하고, 다른 해상도나 형식을 고르거나 **40fps 캡처**를
+  해제하세요.
 - **/dev/video\* 권한 오류.** 로컬 세션으로 로그인하거나 사용자를 `video`
   그룹에 추가하세요.
 

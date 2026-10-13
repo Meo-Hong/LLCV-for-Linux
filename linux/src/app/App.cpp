@@ -124,7 +124,7 @@ int App::Run(const LaunchOptions& options) {
 bool App::InitializeSdl(settings::DisplayBackend backend) {
     SDL_SetAppMetadata(kAppName, kVersion, kAppId);
     SDL_SetHint(SDL_HINT_APP_ID, kAppId);
-    SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "0");
+    SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");
     const char* hint = BackendHint(backend);
     if (hint) SDL_SetHint(SDL_HINT_VIDEO_DRIVER, hint);
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
@@ -263,6 +263,7 @@ void App::InitializeImGui() {
 void App::Shutdown() {
     capture_.Stop();
     audio_.Stop();
+    sleepInhibitor_.Release();
     hdrOutput_.Shutdown();
     if (imguiInitialized_) {
         ImGui_ImplOpenGL3_Shutdown();
@@ -523,6 +524,7 @@ void App::Update() {
         const auto state = capture_.State();
         if (state != lastCaptureState_) {
             lastCaptureState_ = state;
+            UpdateSleepPrevention();
             redrawFrames_ = std::max(redrawFrames_, 1);
         }
         const uint64_t lastFrameMs = capture_.Counters().lastFrameNs.load(std::memory_order_acquire) / 1000000ull;
@@ -579,6 +581,17 @@ void App::UpdateStatistics(uint64_t now) {
     latencySumMs_ = 0.0;
     latencySamples_ = 0;
     statsWindowStartMs_ = now;
+}
+
+void App::UpdateSleepPrevention() {
+    const bool playing = screen_ == Screen::AudioOnly ||
+                         (screen_ == Screen::Video && capture_.State() == capture::CaptureState::Streaming);
+    if (!settings_.preventSleep || !playing) {
+        sleepInhibitor_.Release();
+        return;
+    }
+    sleepInhibitor_.Acquire(screen_ == Screen::Video,
+                            T("LLCV에서 캡처를 재생 중입니다.", "LLCV capture playback is active."));
 }
 
 void App::UpdateCursor(uint64_t now) {
@@ -860,6 +873,10 @@ ui::SettingsContext App::BuildSettingsContext() {
     const char* audioDriver = SDL_GetCurrentAudioDriver();
     context.audioDriver = audioDriver ? audioDriver : "";
     context.errorMessage = errorMessage_;
+    if (!settingsSaveError_.empty()) {
+        if (!context.errorMessage.empty()) context.errorMessage += "\n";
+        context.errorMessage += settingsSaveError_;
+    }
     context.logDirectory = logDirectoryText_;
     context.screenshotDirectory = screenshotDirectoryText_;
     context.fonts = fonts_;
@@ -973,11 +990,20 @@ bool App::StartSession(std::string& error) {
         config.width = activeMode_->width;
         config.height = activeMode_->height;
         config.rate = activeMode_->rate;
+        config.capture40Fps = settings_.capture40Fps;
         config.colorOverride = settings_.colorOverride;
         config.hdrInput = settings_.hdrInput;
         std::string captureError;
         if (!capture_.Start(config, mailbox_, [this] { NotifyFrame(); }, captureError)) {
             error = std::string(T("캡처를 시작하지 못했습니다: ", "Could not start capture: ")) + captureError;
+            if (settings_.capture40Fps) {
+                error += T("\n\n40fps 캡처가 켜져 있습니다. 이 장치·해상도·형식이 40fps를 거부하거나 다른 FPS를 "
+                           "보고할 수 있습니다. 영상 → 40fps 캡처를 해제하면 기존 프레임 선택으로 다시 시도할 수 있습니다. "
+                           "형식 거부인지 다른 시작 오류인지는 진단 로그에서 확인하세요.",
+                           "\n\n40 fps capture is enabled. This device, resolution or format may reject 40 fps or "
+                           "report a different rate. Uncheck Video → 40 fps capture to retry with the normal frame-rate "
+                           "selection. The diagnostic log tells a format rejection apart from other startup errors.");
+            }
             return false;
         }
         activeDeviceName_ = device->Name();
@@ -1041,6 +1067,7 @@ bool App::StartSession(std::string& error) {
         ShowToast(T("Alt 키를 누르면 메뉴가 나타납니다.", "Press Alt to show the menu."));
     }
     UpdateBackgroundMute();
+    UpdateSleepPrevention();
     SaveSettings();
     if (activeMode_) {
         Log("[session] video %s %dx%d %s @ %s fps, audio '%s'", activeDeviceName_.c_str(), activeMode_->width,
@@ -1054,6 +1081,7 @@ bool App::StartSession(std::string& error) {
 
 void App::StopSession() {
     if (screen_ == Screen::Settings) return;
+    sleepInhibitor_.Release();
     capture_.Stop();
     audio_.Stop();
     audioWanted_ = false;
@@ -1504,7 +1532,15 @@ void App::ExecuteMenuCommand(ui::MenuCommand command) {
 }
 
 void App::SaveSettings() {
-    if (!settings::SaveSettings(settingsPath_, settings_)) Log("[settings] could not save %s", settingsPath_.c_str());
+    if (settings::SaveSettings(settingsPath_, settings_)) {
+        settingsSaveError_.clear();
+        return;
+    }
+    Log("[settings] could not save %s", settingsPath_.c_str());
+    settingsSaveError_ = Format(T("설정을 저장하지 못했습니다. 기존 설정 파일은 그대로 유지됩니다: %s",
+                                  "Settings could not be saved. The previous settings file is kept: %s"),
+                                settingsPath_.c_str());
+    if (screen_ != Screen::Settings) ShowToast(settingsSaveError_, true);
 }
 
 void App::NotifyFrame() {

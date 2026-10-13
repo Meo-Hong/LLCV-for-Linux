@@ -93,8 +93,8 @@ for your password.
 At the end, it prints the package and the install command, for example:
 
 ```text
-Package: /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.0.2_amd64.deb
-Install: sudo apt install /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.0.2_amd64.deb
+Package: /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.0.4_amd64.deb
+Install: sudo apt install /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.0.4_amd64.deb
 ```
 
 **5. Install**
@@ -157,7 +157,7 @@ Without SDL3, the script downloads the SDL3 source (`tools/fetch-sdl3.sh`)
 and builds it in.
 
 **Result**: `dist/<distro>-<version>/llcv_<version>~<distro><version>_<arch>.deb`
-(for example `dist/debian-13/llcv_2.0.2_arm64.deb`)
+(for example `dist/debian-13/llcv_2.0.4_arm64.deb`)
 
 **Install.** The folder name is your `ID`-`VERSION_ID`:
 
@@ -221,7 +221,7 @@ SDL3 into the program are selected automatically.
 ./tools/build-rpm.sh
 ```
 
-**Result**: `dist/<distro>-<version>/llcv-2.0.2-1.x86_64.rpm`
+**Result**: `dist/<distro>-<version>/llcv-2.0.4-1.x86_64.rpm`
 (debug packages `llcv-debuginfo` and `llcv-debugsource`, and a source RPM, are
 created too)
 
@@ -248,13 +248,13 @@ cd packaging/arch
 makepkg -f
 ```
 
-**Result**: `packaging/arch/llcv-2.0.2-1-x86_64.pkg.tar.zst`
+**Result**: `packaging/arch/llcv-2.0.4-1-x86_64.pkg.tar.zst`
 (`./tools/build-package.sh` also copies it to `dist/arch/`)
 
 **Install**
 
 ```sh
-sudo pacman -U llcv-2.0.2-1-*.pkg.tar.zst
+sudo pacman -U llcv-2.0.4-1-*.pkg.tar.zst
 ```
 
 `makepkg -si` installs the dependencies, builds and installs in one step.
@@ -345,11 +345,12 @@ app without installing it.
 | MJPEG decoding | `libturbojpeg` | yes |
 | PNG screenshots | `libpng` | yes |
 | HDR output (Wayland) | `wayland-client`, `wayland-scanner` | no |
+| Blocking automatic suspend during playback | `dbus-1` | no |
 
 openSUSE can install by pkg-config name (an untested example):
 
 ```sh
-sudo zypper install cmake gcc-c++ 'pkgconfig(sdl3)' 'pkgconfig(libturbojpeg)' 'pkgconfig(libpng)' 'pkgconfig(wayland-client)' 'pkgconfig(wayland-scanner)'
+sudo zypper install cmake gcc-c++ 'pkgconfig(sdl3)' 'pkgconfig(libturbojpeg)' 'pkgconfig(libpng)' 'pkgconfig(wayland-client)' 'pkgconfig(wayland-scanner)' 'pkgconfig(dbus-1)'
 ```
 
 **Build and run**
@@ -389,6 +390,7 @@ ALSA and D-Bus development packages.
 | --- | --- | --- |
 | `LLCV_SDL3` | `AUTO` | `SYSTEM` (system SDL3), `BUNDLED` (link the downloaded SDL3 statically), `AUTO` (system first) |
 | `LLCV_WAYLAND_COLOR_MANAGEMENT` | `AUTO` | Build HDR output for Wayland; `ON` makes missing dependencies an error |
+| `LLCV_SLEEP_INHIBIT` | `AUTO` | Block automatic suspend during playback through the desktop portal (needs `dbus-1`); `ON` makes a missing `dbus-1` an error |
 | `LLCV_USE_SYSTEM_IMGUI` | `OFF` | Use a system Dear ImGui 1.92 or newer instead of the bundled copy |
 | `LLCV_SOURCE_TREE_DATA` | `ON` | Find fonts and icons in the source tree when not installed (off for packages) |
 

@@ -1,3 +1,20 @@
+llcv (2.0.4) resolute; urgency=medium
+
+  * Follow the Windows LLCV 2.0.3 and 2.0.4 updates.
+  * Optional 40 fps capture (Video, off by default). It requests 40 fps from
+    the driver even when the rate is not in the detected list, confirms the
+    rate the driver reports on Start, and shows an error instead of falling
+    back to another rate.
+  * "Prevent sleep during playback" (App, on by default). Video keeps the
+    display and system awake; audio-only lets the display turn off and only
+    blocks automatic suspend through the desktop portal. The request is
+    released when playback stops or the capture device disconnects. The
+    screen saver is no longer blocked on the settings screen.
+  * A failed settings save keeps the previous settings file, removes the
+    temporary file and shows a notice.
+
+ -- Meohong <busimh001@gmail.com>  Wed, 14 Oct 2026 12:00:00 +0900
+
 llcv (2.0.2) resolute; urgency=medium
 
   * First Linux release, rewritten from the Windows LLCV 2.0.2 design.

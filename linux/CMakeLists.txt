@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22...3.25)
-project(llcv VERSION 2.0.2 LANGUAGES C CXX)
+project(llcv VERSION 2.0.4 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,6 +16,8 @@ option(LLCV_SOURCE_TREE_DATA "Also look for fonts and icons in the source tree (
 option(LLCV_USE_SYSTEM_IMGUI "Use the system Dear ImGui 1.92 or newer instead of the bundled copy" OFF)
 set(LLCV_WAYLAND_COLOR_MANAGEMENT AUTO CACHE STRING "Wayland HDR output through wp_color_management_v1 (AUTO, ON, OFF)")
 set_property(CACHE LLCV_WAYLAND_COLOR_MANAGEMENT PROPERTY STRINGS AUTO ON OFF)
+set(LLCV_SLEEP_INHIBIT AUTO CACHE STRING "Block automatic suspend during playback through the desktop portal over dbus-1 (AUTO, ON, OFF)")
+set_property(CACHE LLCV_SLEEP_INHIBIT PROPERTY STRINGS AUTO ON OFF)
 set(LLCV_SDL3 AUTO CACHE STRING "SDL3 source: AUTO (system, else bundled), SYSTEM, BUNDLED")
 set_property(CACHE LLCV_SDL3 PROPERTY STRINGS AUTO SYSTEM BUNDLED)
 set(LLCV_SDL3_BUNDLED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/sdl3/SDL3-3.4.18)
@@ -99,6 +101,17 @@ if (NOT LLCV_WAYLAND_COLOR_MANAGEMENT STREQUAL "OFF")
 endif()
 message(STATUS "Wayland HDR output (wp_color_management_v1): ${LLCV_HAVE_COLOR_MANAGEMENT} ${LLCV_COLOR_MANAGEMENT_XML}")
 
+set(LLCV_HAVE_DBUS OFF)
+if (NOT LLCV_SLEEP_INHIBIT STREQUAL "OFF")
+    pkg_check_modules(DBUS IMPORTED_TARGET dbus-1)
+    if (DBUS_FOUND)
+        set(LLCV_HAVE_DBUS ON)
+    elseif (LLCV_SLEEP_INHIBIT STREQUAL "ON")
+        message(FATAL_ERROR "Blocking automatic suspend during playback needs dbus-1 (libdbus-1-dev, dbus-devel or dbus)")
+    endif()
+endif()
+message(STATUS "Suspend inhibition during playback (desktop portal over dbus-1): ${LLCV_HAVE_DBUS}")
+
 add_executable(llcv
     src/main.cpp
     src/app/App.cpp
@@ -113,6 +126,7 @@ add_executable(llcv
     src/diagnostics/Logger.cpp
     src/platform/Paths.cpp
     src/platform/PngImage.cpp
+    src/platform/SleepInhibitor.cpp
     src/platform/Strings.cpp
     src/screenshot/Screenshot.cpp
     src/settings/SettingsStore.cpp
@@ -162,6 +176,11 @@ if (LLCV_HAVE_COLOR_MANAGEMENT)
     target_include_directories(llcv PRIVATE ${LLCV_WAYLAND_GENERATED})
     target_compile_definitions(llcv PRIVATE LLCV_HAVE_COLOR_MANAGEMENT=1)
     target_link_libraries(llcv PRIVATE PkgConfig::WAYLAND_CLIENT)
+endif()
+
+if (LLCV_HAVE_DBUS)
+    target_compile_definitions(llcv PRIVATE LLCV_HAVE_DBUS=1)
+    target_link_libraries(llcv PRIVATE PkgConfig::DBUS)
 endif()
 
 target_compile_options(llcv PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra>)

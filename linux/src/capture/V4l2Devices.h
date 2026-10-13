@@ -20,6 +20,8 @@ struct FrameRate {
     int Milli() const;
 };
 
+inline constexpr FrameRate kFortyFps{1, 40};
+
 struct CaptureMode {
     PixelFormat format = PixelFormat::Nv12;
     int width = 0;
@@ -46,6 +48,7 @@ struct ModeRequest {
     int height = 1080;
     std::optional<PixelFormat> format;
     int fpsMilli = 0;
+    bool capture40Fps = false;
 };
 
 struct ResolvedMode {
@@ -60,6 +63,7 @@ uint32_t FourccFor(PixelFormat format);
 bool IsCompressed(PixelFormat format);
 bool IsHdrOnly(PixelFormat format);
 std::string FormatRate(const FrameRate& rate);
+bool IsFortyFps(const FrameRate& rate);
 
 std::vector<CaptureDevice> EnumerateCaptureDevices();
 const CaptureDevice* SelectDevice(const std::vector<CaptureDevice>& devices, const std::string& id);

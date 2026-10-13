@@ -298,6 +298,12 @@ std::string FormatRate(const FrameRate& rate) {
     return platform::Format("%.2f", fps);
 }
 
+bool IsFortyFps(const FrameRate& rate) {
+    if (!rate.numerator || !rate.denominator) return false;
+    const double frameNs = static_cast<double>(rate.numerator) * 1.0e9 / static_cast<double>(rate.denominator);
+    return frameNs >= 24900000.0 && frameNs <= 25100000.0;
+}
+
 std::vector<CaptureDevice> EnumerateCaptureDevices() {
     std::vector<CaptureDevice> devices;
     const auto stableNames = StableNames();
@@ -390,6 +396,15 @@ std::optional<ResolvedMode> ResolveMode(const CaptureDevice& device, const ModeR
     const auto make = [&](const CaptureMode* mode, const FrameRate& rate) {
         return ResolvedMode{mode->format, mode->width, mode->height, rate};
     };
+
+    if (request.capture40Fps) {
+        for (const CaptureMode* mode : candidates) {
+            for (const auto& rate : mode->rates) {
+                if (IsFortyFps(rate)) return make(mode, rate);
+            }
+        }
+        return make(candidates.front(), kFortyFps);
+    }
 
     if (request.fpsMilli > 0) {
         for (const CaptureMode* mode : candidates) {

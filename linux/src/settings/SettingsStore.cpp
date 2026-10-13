@@ -132,12 +132,14 @@ AppSettings LoadSettings(const std::filesystem::path& path) {
     s.displayBackend = ReadEnum(v, "App.DisplayBackend", kBackends, s.displayBackend);
     s.skipStartupSettings = ReadBool(v, "App.SkipStartupSettings", s.skipStartupSettings);
     s.saveLog = ReadBool(v, "App.SaveLog", s.saveLog);
+    s.preventSleep = ReadBool(v, "App.PreventSleep", s.preventSleep);
 
     s.captureDevice = ReadString(v, "Video.Device");
     s.videoWidth = ReadInt(v, "Video.Width", s.videoWidth, 160, 8192);
     s.videoHeight = ReadInt(v, "Video.Height", s.videoHeight, 120, 8192);
     s.pixelFormat = ReadEnum(v, "Video.PixelFormat", kFormats, s.pixelFormat);
     s.frameRateMilli = ReadInt(v, "Video.FrameRateMilli", s.frameRateMilli, 0, 1000000);
+    s.capture40Fps = ReadBool(v, "Video.Capture40Fps", s.capture40Fps);
     s.presentationMode = ReadEnum(v, "Video.Presentation", kPresentation, s.presentationMode);
     s.scalingMode = ReadEnum(v, "Video.Scaling", kScaling, s.scalingMode);
     s.colorOverride = ReadEnum(v, "Video.Color", kColors, s.colorOverride);
@@ -178,21 +180,27 @@ AppSettings LoadSettings(const std::filesystem::path& path) {
 bool SaveSettings(const std::filesystem::path& path, const AppSettings& s) {
     if (!platform::EnsureDirectory(path.parent_path())) return false;
     const auto temporary = path.string() + ".tmp";
+    bool written = false;
     {
         std::ofstream file(temporary, std::ios::trunc);
-        if (!file) return false;
+        if (!file) {
+            diagnostics::Log("[settings] could not create %s", temporary.c_str());
+            return false;
+        }
         file << "[App]\n"
              << "Language=" << EnumText(s.uiLanguage, kLanguages) << "\n"
              << "LightTheme=" << Bool(s.lightTheme) << "\n"
              << "DisplayBackend=" << EnumText(s.displayBackend, kBackends) << "\n"
              << "SkipStartupSettings=" << Bool(s.skipStartupSettings) << "\n"
-             << "SaveLog=" << Bool(s.saveLog) << "\n\n"
+             << "SaveLog=" << Bool(s.saveLog) << "\n"
+             << "PreventSleep=" << Bool(s.preventSleep) << "\n\n"
              << "[Video]\n"
              << "Device=" << s.captureDevice << "\n"
              << "Width=" << s.videoWidth << "\n"
              << "Height=" << s.videoHeight << "\n"
              << "PixelFormat=" << EnumText(s.pixelFormat, kFormats) << "\n"
              << "FrameRateMilli=" << s.frameRateMilli << "\n"
+             << "Capture40Fps=" << Bool(s.capture40Fps) << "\n"
              << "Presentation=" << EnumText(s.presentationMode, kPresentation) << "\n"
              << "Scaling=" << EnumText(s.scalingMode, kScaling) << "\n"
              << "Color=" << EnumText(s.colorOverride, kColors) << "\n"
@@ -226,12 +234,19 @@ bool SaveSettings(const std::filesystem::path& path, const AppSettings& s) {
              << "HasPosition=" << Bool(s.hasWindowPosition) << "\n"
              << "X=" << s.windowX << "\n"
              << "Y=" << s.windowY << "\n";
-        if (!file) return false;
+        file.flush();
+        written = static_cast<bool>(file);
     }
     std::error_code error;
+    if (!written) {
+        diagnostics::Log("[settings] could not write %s; keeping the previous settings", temporary.c_str());
+        std::filesystem::remove(temporary, error);
+        return false;
+    }
     std::filesystem::rename(temporary, path, error);
     if (error) {
-        diagnostics::Log("[settings] save failed: %s", error.message().c_str());
+        diagnostics::Log("[settings] save failed: %s; keeping the previous settings", error.message().c_str());
+        std::filesystem::remove(temporary, error);
         return false;
     }
     return true;

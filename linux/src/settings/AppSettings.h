@@ -27,12 +27,14 @@ struct AppSettings {
     DisplayBackend displayBackend = DisplayBackend::Auto;
     bool skipStartupSettings = false;
     bool saveLog = false;
+    bool preventSleep = true;
 
     std::string captureDevice;
     int videoWidth = 1920;
     int videoHeight = 1080;
     PixelFormatChoice pixelFormat = PixelFormatChoice::Auto;
     int frameRateMilli = 0;
+    bool capture40Fps = false;
     PresentationMode presentationMode = PresentationMode::Immediate;
     ScalingMode scalingMode = ScalingMode::Smooth;
     video::ColorOverride colorOverride = video::ColorOverride::Auto;

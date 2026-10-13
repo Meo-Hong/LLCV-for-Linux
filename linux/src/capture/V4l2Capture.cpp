@@ -53,6 +53,37 @@ uint64_t TimestampNs(const v4l2_buffer& buffer, uint64_t fallback) {
     return value ? value : fallback;
 }
 
+bool Confirm40Fps(int fd, bool rateSet, int rateError, const v4l2_streamparm& requested, FrameRate& rate,
+                  std::string& error) {
+    if (!rateSet) {
+        error = platform::Format("40 fps rejected: VIDIOC_S_PARM failed (%s)", std::strerror(rateError));
+        return false;
+    }
+    if (!(requested.parm.capture.capability & V4L2_CAP_TIMEPERFRAME)) {
+        error = "40 fps rejected: the driver does not support frame-rate requests (no V4L2_CAP_TIMEPERFRAME)";
+        return false;
+    }
+    const auto& reported = requested.parm.capture.timeperframe;
+    if (!reported.numerator || !reported.denominator) {
+        error = "40 fps rejected: the driver reported no frame interval";
+        return false;
+    }
+    rate = {reported.numerator, reported.denominator};
+    v4l2_streamparm active{};
+    active.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    if (Ioctl(fd, VIDIOC_G_PARM, &active) == 0 && active.parm.capture.timeperframe.numerator &&
+        active.parm.capture.timeperframe.denominator) {
+        rate = {active.parm.capture.timeperframe.numerator, active.parm.capture.timeperframe.denominator};
+    }
+    diagnostics::Log("[capture] 40 fps request: driver reports %u/%u s per frame (%s fps)",
+                     rate.numerator, rate.denominator, FormatRate(rate).c_str());
+    if (!IsFortyFps(rate)) {
+        error = platform::Format("40 fps rejected: the driver set %s fps", FormatRate(rate).c_str());
+        return false;
+    }
+    return true;
+}
+
 }
 
 V4l2Capture::~V4l2Capture() {
@@ -185,13 +216,18 @@ bool V4l2Capture::OpenDevice(std::string& error) {
     parameters.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     parameters.parm.capture.timeperframe.numerator = config_.rate.numerator;
     parameters.parm.capture.timeperframe.denominator = config_.rate.denominator;
-    if (Ioctl(fd_, VIDIOC_S_PARM, &parameters) == 0 &&
-        parameters.parm.capture.timeperframe.numerator &&
+    const bool rateSet = Ioctl(fd_, VIDIOC_S_PARM, &parameters) == 0;
+    const int rateError = rateSet ? 0 : errno;
+    if (rateSet && parameters.parm.capture.timeperframe.numerator &&
         parameters.parm.capture.timeperframe.denominator) {
         negotiated.rate = {parameters.parm.capture.timeperframe.numerator,
                            parameters.parm.capture.timeperframe.denominator};
     } else {
-        diagnostics::Log("[capture] VIDIOC_S_PARM failed: %s", std::strerror(errno));
+        diagnostics::Log("[capture] VIDIOC_S_PARM failed: %s", std::strerror(rateSet ? EINVAL : rateError));
+    }
+    if (config_.capture40Fps && !Confirm40Fps(fd_, rateSet, rateError, parameters, negotiated.rate, error)) {
+        CloseDevice();
+        return false;
     }
 
     v4l2_requestbuffers request{};

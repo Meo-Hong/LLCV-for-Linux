@@ -2,7 +2,7 @@
 
 > [English](README.md)
 
-리눅스판은 원본 LLCV 프로젝트와 별도로 Meo-hong이 배포합니다. 2.0.2가
+리눅스판은 원본 LLCV 프로젝트와 별도로 Meo-hong이 배포합니다. 2.0.4가
 [Releases](https://github.com/Meo-Hong/LLCV-for-Linux/releases)에 공개되어 있고,
 `.deb` 패키지는 `https://meo-hong.github.io/LLCV-for-Linux/`(GitHub Pages, 스위트
 `stable`)의 APT 저장소로 업데이트됩니다. 저장소는 "LLCV Archive Signing Key
@@ -50,7 +50,7 @@
    - Settings → Pages → Source: GitHub Actions
    - Settings → Environments → `github-pages` → 배포 태그 규칙에 `linux-v*` 추가
 4. **릴리스**
-   `linux-v2.0.2`처럼 `linux-v`로 시작하는 태그를 푸시하면, 패키지 빌드,
+   `linux-v2.0.4`처럼 `linux-v`로 시작하는 태그를 푸시하면, 패키지 빌드,
    APT 저장소 서명과 Pages 배포, GitHub 릴리스 생성(패키지 5개와
    `SHA256SUMS` 업로드)까지 진행됩니다.
 5. **Arch (선택)**
@@ -60,10 +60,17 @@
 ## 새 버전 내기
 
 1. `linux/CMakeLists.txt`, `debian/changelog`, `rpm/llcv.spec`,
-   `arch/PKGBUILD`의 버전을 올립니다.
+   `arch/PKGBUILD`, `data/io.github.meo_hong.LLCV.metainfo.xml`, `data/llcv.1`의
+   버전과, README·BUILDING 문서의 파일 이름에 들어간 버전을 올립니다.
 2. 커밋하고 `main`을 푸시합니다.
-3. `linux-v2.0.3` 같은 태그를 푸시하면 GitHub Actions가 패키지 5개를 빌드하고,
-   APT 저장소를 갱신하고, 릴리스를 만듭니다.
+3. 그 커밋에 `linux-v2.0.4` 같은 태그를 푸시하면 GitHub Actions가 패키지 5개를
+   빌드하고, APT 저장소를 갱신하고, 릴리스를 만듭니다. 패키지 버전은 태그 이름이
+   아니라 `debian/changelog`와 spec에서 정해지므로 둘을 같게 맞추세요.
+
+```sh
+git tag linux-v2.0.4
+git push origin linux-v2.0.4
+```
 
 ## 사용자 쪽 동작
 

@@ -4,6 +4,7 @@
 #include "capture/FrameMailbox.h"
 #include "capture/V4l2Capture.h"
 #include "capture/V4l2Devices.h"
+#include "platform/SleepInhibitor.h"
 #include "screenshot/Screenshot.h"
 #include "settings/AppSettings.h"
 #include "ui/HdrSupport.h"
@@ -59,6 +60,7 @@ private:
     void Update();
     void UpdateStatistics(uint64_t nowMs);
     void UpdateCursor(uint64_t nowMs);
+    void UpdateSleepPrevention();
 
     void RenderFrame();
     void DrawSettings();
@@ -135,6 +137,7 @@ private:
     capture::V4l2Capture capture_;
     audio::AudioEngine audio_;
     screenshot::Service screenshots_;
+    platform::SleepInhibitor sleepInhibitor_;
 
     std::vector<capture::CaptureDevice> captureDevices_;
     std::vector<audio::AudioDeviceEntry> recordingDevices_;
@@ -150,6 +153,7 @@ private:
     bool newVideoFrame_ = false;
     std::atomic<bool> framePending_{false};
     std::string errorMessage_;
+    std::string settingsSaveError_;
 
     std::optional<capture::ResolvedMode> activeMode_;
     std::string activeDeviceName_;

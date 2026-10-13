@@ -9,6 +9,7 @@ Build-Depends:
  libsdl3-dev (>= 3.2) <!pkg.llcv.bundled-sdl3>,
  libturbojpeg0-dev,
  libpng-dev,
+ libdbus-1-dev,
  libwayland-dev,
  libwayland-bin,
  wayland-protocols,
@@ -28,7 +29,6 @@ Build-Depends:
  libpipewire-0.3-dev <pkg.llcv.bundled-sdl3>,
  libpulse-dev <pkg.llcv.bundled-sdl3>,
  libasound2-dev <pkg.llcv.bundled-sdl3>,
- libdbus-1-dev <pkg.llcv.bundled-sdl3>,
 Standards-Version: 4.7.2
 Homepage: https://github.com/Meo-Hong/LLCV-for-Linux
 Rules-Requires-Root: no

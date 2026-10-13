@@ -3,7 +3,7 @@
 > [한국어](README.ko.md)
 
 LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices with low
-latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.0.2 viewer
+latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.0.4 viewer
 by [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer). The
 reference device is the AVerMedia Live Gamer ULTRA S GC553Pro. The reference
 desktop is Ubuntu 26.04 (GNOME, Wayland).
@@ -40,11 +40,11 @@ Download the file for your system from
 
 | File | Install on | Command |
 | --- | --- | --- |
-| `llcv_2.0.2_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.0.2_amd64.deb` |
-| `llcv_2.0.2_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.0.2_arm64.deb` |
-| `llcv_2.0.2_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.0.2_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.0.2-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.0.2-1.x86_64.rpm` |
-| `llcv-2.0.2-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.0.2-1-x86_64.pkg.tar.zst` |
+| `llcv_2.0.4_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.0.4_amd64.deb` |
+| `llcv_2.0.4_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.0.4_arm64.deb` |
+| `llcv_2.0.4_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.0.4_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.0.4-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.0.4-1.x86_64.rpm` |
+| `llcv-2.0.4-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.0.4-1-x86_64.pkg.tar.zst` |
 
 - Installing a `.deb` also registers the LLCV APT repository, so later
   versions arrive through `apt upgrade` or Software Updater. For `.rpm` and
@@ -114,6 +114,22 @@ SDR.
 The frame rate list in the settings comes from the device for the selected
 resolution and format. P010 needs Linux 7.1 or newer (see [HDR](#hdr)).
 
+### 40 fps capture
+
+**Video → Capture → 40 fps capture** is off by default. When checked, LLCV
+asks the capture driver for 40 fps instead of the frame-rate selection.
+Unchecking it restores that selection.
+
+- 40 fps can be requested even when the device does not list it. Support
+  depends on the device, resolution and pixel format.
+- On **Start**, LLCV checks that the driver actually set 40 fps. If the
+  driver rejects it or sets another rate, LLCV shows an error and does not
+  fall back to another rate. Uncheck the option and start again.
+- It does not interpolate frames, lock a game to 40 fps, or replace VRR. A
+  40 fps game can also be viewed with 120 fps capture, so the option is not
+  required for it.
+- Check the measured input rate under **Actual FPS** in the Tab diagnostics.
+
 ## Building from source
 
 ```sh
@@ -165,6 +181,24 @@ On Wayland the compositor places windows. Because of this, the startup monitor
 setting applies only to fullscreen, and the last window position is not
 restored. X11 mode restores both, but has no HDR output.
 
+## Sleep prevention
+
+**App → Power → Prevent sleep during playback** is on by default.
+
+- During video playback, the display and the system stay awake.
+- In audio-only mode, the display can turn off; only automatic suspend is
+  blocked.
+- The request is released when playback stops or the capture device
+  disconnects. The settings screen does not block the screen saver or display
+  power-off.
+- System power settings are not changed.
+
+SDL keeps the display on through Wayland idle-inhibit or the screen-saver
+D-Bus interface. Automatic suspend is blocked through the desktop portal
+(`org.freedesktop.portal.Inhibit`), so `xdg-desktop-portal` must be running
+(GNOME, KDE Plasma and most desktops). Without a portal, the diagnostic log
+says so.
+
 ## Menu bar
 
 Press and release **Alt** during playback to show the menu bar. It holds the
@@ -204,6 +238,10 @@ menu, to close it.
 - **No sound.** Check **Audio → Capture audio device**. Auto mode selects the
   audio device of the same USB device as the video.
 - **Crackling audio.** Raise the PCM buffer target in 5 ms steps.
+- **40 fps capture will not start.** The driver rejected 40 fps for this
+  device, resolution or format, or set another rate. Read the error and the
+  `40 fps request` line in the diagnostic log, then choose another resolution
+  or format, or uncheck **40 fps capture**.
 - **Permission denied on /dev/video\*.** Log in at the local seat, or add your
   user to the `video` group.
 

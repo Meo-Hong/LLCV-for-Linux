@@ -2,6 +2,7 @@
 
 #include "app/AppInfo.h"
 #include "app/ModeSelection.h"
+#include "platform/SleepInhibitor.h"
 #include "platform/Strings.h"
 #include "ui/Shortcuts.h"
 #include "ui/Text.h"
@@ -122,6 +123,36 @@ void PathRow(const char* label, const std::string& path, const char* buttonLabel
     ImGui::PopTextWrapPos();
     ImGui::SameLine(rightEdge - buttonWidth);
     clicked = ImGui::Button(buttonLabel);
+}
+
+struct GuideLine {
+    const char* korean;
+    const char* english;
+};
+
+constexpr GuideLine kCapture40Guide[] = {
+    {"일반적인 시청에는 끈 채 사용하세요.", "Leave it off for normal viewing."},
+    {"체크하면 기존 프레임 선택 대신 40fps를 요청하고, 해제하면 기존 선택으로 돌아갑니다.",
+     "When checked, 40 fps is requested instead of the frame-rate selection; unchecking restores that selection."},
+    {"지원 여부는 시작할 때 확인합니다. 드라이버가 거부하거나 다른 FPS로 연결하면 다른 FPS로 대체하지 않고 오류를 표시합니다.",
+     "Support is checked on Start. If the driver rejects it or connects at another rate, LLCV shows an error "
+     "instead of falling back to another FPS."},
+    {"프레임을 보간하거나 게임을 40fps로 고정하는 기능이 아니며 VRR을 대체하지 않습니다.",
+     "It does not interpolate frames, lock a game to 40 fps, or replace VRR."},
+    {"40fps 게임도 120 fps 캡처로 볼 수 있으므로, 40fps 게임이라는 이유만으로 켤 필요는 없습니다.",
+     "A 40 fps game can also be viewed with 120 fps capture, so it is not required just for 40 fps games."},
+    {"실제 수신 속도는 Tab 진단 화면의 실제 FPS에서 확인하세요.",
+     "Check the measured input rate under Actual FPS in the Tab diagnostics."},
+};
+
+void HelpMarker(const GuideLine* lines, size_t count) {
+    ImGui::TextDisabled("(?)");
+    if (!ImGui::BeginItemTooltip()) return;
+    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.0f);
+    const bool english = IsEnglish();
+    for (size_t i = 0; i < count; ++i) ImGui::BulletText("%s", english ? lines[i].english : lines[i].korean);
+    ImGui::PopTextWrapPos();
+    ImGui::EndTooltip();
 }
 
 std::string FormatLabel(capture::PixelFormat format) {
@@ -381,6 +412,7 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
             Row(T("프레임레이트", "Frame rate"));
             const auto rates = capture::RatesAt(*device, s.videoWidth, s.videoHeight,
                                                 app::FormatFromChoice(s.pixelFormat));
+            ImGui::BeginDisabled(s.capture40Fps);
             std::vector<std::string> rateItems{T("자동 (최고 비압축 프레임레이트)", "Auto (highest uncompressed rate)")};
             std::vector<int> rateValues{0};
             int rateIndex = s.frameRateMilli == 0 ? 0 : -1;
@@ -399,6 +431,26 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
             }
             if (Combo("##frameRate", rateIndex, rateItems)) {
                 s.frameRateMilli = rateValues[static_cast<size_t>(rateIndex)];
+            }
+            ImGui::EndDisabled();
+
+            ValueRow();
+            ImGui::Checkbox(T("40fps 캡처", "40 fps capture"), &s.capture40Fps);
+            ImGui::SameLine();
+            HelpMarker(kCapture40Guide, std::size(kCapture40Guide));
+            if (s.capture40Fps) {
+                const bool listed = std::any_of(rates.begin(), rates.end(), capture::IsFortyFps);
+                ValueRow();
+                if (listed) {
+                    Note(T("기존 프레임 선택 대신 40fps를 요청합니다. 해제하면 기존 선택으로 돌아갑니다.",
+                           "40 fps is requested instead of the frame-rate selection. Uncheck to restore it."));
+                } else {
+                    Note(T("자동 인식 목록에 40fps가 없습니다. 시작할 때 드라이버가 수락하는지 확인하며, "
+                           "거부하면 다른 FPS로 대체하지 않고 오류를 표시합니다.",
+                           "40 fps is not in the detected list. Start checks whether the driver accepts it; "
+                           "if not, LLCV shows an error instead of using another rate."),
+                         palette.warning);
+                }
             }
 
             ValueRow();
@@ -724,6 +776,15 @@ void SettingsScreen::DrawGuide(AppSettings& s, const SettingsContext& context) {
     }
     EndCard(table);
 
+    table = BeginCard("##capture40", T("40fps 캡처", "40 fps capture"));
+    if (table) {
+        for (const auto& line : kCapture40Guide) {
+            ValueRow();
+            Note(english ? line.english : line.korean);
+        }
+    }
+    EndCard(table);
+
     table = BeginCard("##troubleshooting", T("문제 해결", "Troubleshooting"));
     if (table) {
         const char* notes[] = {
@@ -792,6 +853,24 @@ void SettingsScreen::DrawApp(AppSettings& s, const SettingsContext& context) {
         ImGui::Checkbox(T("다음 실행부터 설정 화면 건너뛰기 (F2로 다시 열기)",
                           "Skip this settings screen on next launch (F2 reopens it)"),
                         &s.skipStartupSettings);
+    }
+    EndCard(table);
+
+    table = BeginCard("##power", T("전원", "Power"));
+    if (table) {
+        ValueRow();
+        ImGui::Checkbox(T("재생 중 자동 절전 방지", "Prevent sleep during playback"), &s.preventSleep);
+        ValueRow();
+        Note(T("영상 재생 중에는 화면도 켜둡니다. 오디오 전용 모드에서는 화면 꺼짐을 허용합니다. "
+               "재생을 멈추거나 캡처 장치 연결이 끊기면 해제하며, 시스템 전원 설정은 바꾸지 않습니다.",
+               "Video keeps the screen on. Audio-only allows the screen to turn off. "
+               "Released when playback stops or the capture device disconnects; system power settings are not changed."));
+        if (!platform::SleepInhibitor::BlocksSuspend()) {
+            ValueRow();
+            Note(T("이 빌드는 D-Bus 없이 빌드되어 영상 재생 중 화면 꺼짐만 막고, 시스템 자동 절전은 막지 못합니다.",
+                   "This build lacks D-Bus, so it only keeps the screen on during video and cannot block automatic suspend."),
+                 CurrentPalette().warning);
+        }
     }
     EndCard(table);
 

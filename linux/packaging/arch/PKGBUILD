@@ -1,11 +1,11 @@
 pkgname=llcv
-pkgver=2.0.2
+pkgver=2.0.4
 pkgrel=1
 pkgdesc="Low-latency viewer for USB (UVC) HDMI capture devices, with HDR10"
 arch=('x86_64' 'aarch64')
 url="https://github.com/Meo-Hong/LLCV-for-Linux"
 license=('GPL-3.0-or-later' 'MIT' 'OFL-1.1')
-depends=('gcc-libs' 'glibc' 'libglvnd' 'libjpeg-turbo' 'libpng' 'sdl3' 'wayland')
+depends=('dbus' 'gcc-libs' 'glibc' 'libglvnd' 'libjpeg-turbo' 'libpng' 'sdl3' 'wayland')
 makedepends=('cmake' 'pkgconf' 'wayland-protocols')
 optdepends=('pipewire: low-latency audio routing (recommended)'
             'libdecor: window title bar on GNOME Wayland'
@@ -21,7 +21,8 @@ build() {
         -DCMAKE_INSTALL_PREFIX=/usr \
         -DLLCV_SOURCE_TREE_DATA=OFF \
         -DLLCV_SDL3=SYSTEM \
-        -DLLCV_WAYLAND_COLOR_MANAGEMENT=ON
+        -DLLCV_WAYLAND_COLOR_MANAGEMENT=ON \
+        -DLLCV_SLEEP_INHIBIT=ON
     cmake --build build
 }
 

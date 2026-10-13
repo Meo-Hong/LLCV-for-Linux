@@ -3,7 +3,7 @@
 > [한국어](README.ko.md)
 
 The Linux build is released by Meo-hong, separately from the original LLCV
-project. Version 2.0.2 is published on the
+project. Version 2.0.4 is published on the
 [Releases](https://github.com/Meo-Hong/LLCV-for-Linux/releases) page, and the
 `.deb` packages update through the APT repository at
 `https://meo-hong.github.io/LLCV-for-Linux/` (GitHub Pages, suite `stable`),
@@ -52,7 +52,7 @@ Packages register the repository because the public key
    - Settings → Pages → Source: GitHub Actions
    - Settings → Environments → `github-pages` → add a deployment tag rule for `linux-v*`
 4. **Release**
-   Push a tag that starts with `linux-v`, such as `linux-v2.0.2`. The
+   Push a tag that starts with `linux-v`, such as `linux-v2.0.4`. The
    workflow builds the packages, signs and deploys the APT repository to
    Pages, and creates a GitHub release with the five packages and
    `SHA256SUMS`.
@@ -63,10 +63,18 @@ Packages register the repository because the public key
 ## New version
 
 1. Raise the version in `linux/CMakeLists.txt`, `debian/changelog`,
-   `rpm/llcv.spec` and `arch/PKGBUILD`.
+   `rpm/llcv.spec`, `arch/PKGBUILD`, `data/io.github.meo_hong.LLCV.metainfo.xml`
+   and `data/llcv.1`, and in the file names of the READMEs and BUILDING guides.
 2. Commit and push `main`.
-3. Push a tag such as `linux-v2.0.3`. GitHub Actions builds the five packages,
-   updates the APT repository and creates the release.
+3. Push a tag such as `linux-v2.0.4` on that commit. GitHub Actions builds the
+   five packages, updates the APT repository and creates the release. The
+   package version comes from `debian/changelog` and the spec, not from the
+   tag name, so keep them the same.
+
+```sh
+git tag linux-v2.0.4
+git push origin linux-v2.0.4
+```
 
 ## On user machines
 

@@ -22,6 +22,7 @@ struct CaptureConfig {
     int width = 1920;
     int height = 1080;
     FrameRate rate;
+    bool capture40Fps = false;
     video::ColorOverride colorOverride = video::ColorOverride::Auto;
     video::HdrInput hdrInput = video::HdrInput::Auto;
 };

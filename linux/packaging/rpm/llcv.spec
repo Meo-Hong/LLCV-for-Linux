@@ -9,7 +9,7 @@
 %endif
 
 Name:           llcv
-Version:        2.0.2
+Version:        2.0.4
 Release:        1
 Summary:        Low-latency viewer for USB HDMI capture devices
 
@@ -28,9 +28,9 @@ BuildRequires:  pkgconfig(libpng)
 BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(wayland-scanner)
 BuildRequires:  wayland-protocols-devel
+BuildRequires:  pkgconfig(dbus-1)
 %if %{with bundled_sdl3}
 BuildRequires:  pkgconfig(alsa)
-BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(egl)
 BuildRequires:  pkgconfig(gl)
 BuildRequires:  pkgconfig(libdecor-0)
@@ -91,7 +91,8 @@ cp -p third_party/pretendard/LICENSE.txt Pretendard-LICENSE.txt
 %cmake \
     -DLLCV_SOURCE_TREE_DATA=OFF \
     -DLLCV_SDL3=%{?with_bundled_sdl3:BUNDLED}%{!?with_bundled_sdl3:SYSTEM} \
-    -DLLCV_WAYLAND_COLOR_MANAGEMENT=ON
+    -DLLCV_WAYLAND_COLOR_MANAGEMENT=ON \
+    -DLLCV_SLEEP_INHIBIT=ON
 %cmake_build
 
 %install
@@ -108,6 +109,14 @@ cp -p third_party/pretendard/LICENSE.txt Pretendard-LICENSE.txt
 %{_mandir}/man1/llcv.1*
 
 %changelog
+* Wed Oct 14 2026 Meohong <busimh001@gmail.com> - 2.0.4-1
+- Follow the Windows LLCV 2.0.3 and 2.0.4 updates.
+- Optional 40 fps capture, confirmed against the rate the driver reports,
+  without falling back to another rate.
+- Prevent sleep during playback (on by default) through SDL and the desktop
+  portal; audio-only lets the display turn off.
+- A failed settings save keeps the previous file and shows a notice.
+
 * Sat Oct 10 2026 Meohong <busimh001@gmail.com> - 2.0.2-1
 - First RPM package of the Linux port: V4L2 capture, OpenGL presentation,
   SDL3 audio on PipeWire, HDR10 passthrough and tone mapping.

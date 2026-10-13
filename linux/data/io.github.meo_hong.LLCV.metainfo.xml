@@ -37,6 +37,16 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="2.0.4" date="2026-10-14">
+      <description>
+        <p>Follows the Windows LLCV 2.0.3 and 2.0.4 updates.</p>
+        <ul>
+          <li>Optional 40 fps capture, confirmed against the rate the driver reports.</li>
+          <li>Prevent sleep during playback, on by default. Audio-only lets the display turn off.</li>
+          <li>A failed settings save keeps the previous settings file and shows a notice.</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.0.2" date="2026-10-07">
       <description>
         <p>First Linux release: V4L2 capture, OpenGL presentation, SDL3/PipeWire audio.</p>

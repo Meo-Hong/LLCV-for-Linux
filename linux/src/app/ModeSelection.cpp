@@ -31,6 +31,7 @@ capture::ModeRequest RequestFromSettings(const settings::AppSettings& settings) 
     request.height = settings.videoHeight;
     request.format = FormatFromChoice(settings.pixelFormat);
     request.fpsMilli = settings.frameRateMilli;
+    request.capture40Fps = settings.capture40Fps;
     return request;
 }
 

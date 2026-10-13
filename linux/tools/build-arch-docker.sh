@@ -21,7 +21,7 @@ $docker run --rm \
     -v "$cache:/var/cache/pacman/pkg" \
     "$image" /bin/sh -euc '
         pacman -Syu --noconfirm --needed --noprogressbar \
-            base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd >/dev/null
+            base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd dbus >/dev/null
         useradd -m builder
         mkdir -p /build/linux
         tar -C /src --exclude=./build --exclude=./dist --exclude="./obj-*" \
