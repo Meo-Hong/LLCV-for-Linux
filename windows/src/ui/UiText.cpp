@@ -78,7 +78,7 @@ const wchar_t* Translate(const wchar_t* korean, bool useEnglish) {
         {L"자동 선택 (NV12 우선 · 권장)", L"Auto select (NV12 first · recommended)"},
         {L"P010 10-bit HDR10", L"P010 10-bit HDR10"},
         {L"P010 HDR10 강제 (색 정보가 틀릴 때)", L"Force P010 HDR10 (incorrect color metadata)"},
-        {L"HDR 색차 배치", L"HDR chroma placement"},
+        {L"HDR 색차 배치", L"HDR chroma"},
         {L"Top-left (호환성 해석)", L"Top-left (compatibility)"},
         {L"Left (호환성 해석)", L"Left (compatibility)"},
         {L"MJPEG (압축 호환)", L"MJPEG (compressed compatibility)"},

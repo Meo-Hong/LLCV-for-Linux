@@ -1,6 +1,12 @@
+<img align="right" src="images/app-icon.png" width="40" height="40" alt="LLCV">
+
 # Video modes, scaling, and fullscreen
 
-> [한국어](VIDEO.ko.md) · [Back to README](../README.md)
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](VIDEO.ko.md)
+
+[Capture path](#capture-path) · [Mode detection](#mode-detection) · [NV12, YUY2, and MJPEG](#nv12-yuy2-and-mjpeg) · [Frame rate](#frame-rate) · [40 fps capture](#40-fps-capture) · [Presentation](#presentation) · [P010 HDR10](#p010-hdr10) · [Pixel-perfect and resizing](#pixel-perfect-and-resizing) · [Scaling and multi-monitor behavior](#scaling-and-multi-monitor-behavior)
+
+<br>
 
 ## Capture path
 
@@ -15,14 +21,27 @@ frames using stale settings. Equivalent format confirmations continue normally.
 Restart capture if prompted after changing the console's HDR or resolution.
 This does not detect source changes that the device never reports.
 
+Reported device loss or input-path errors also stop playback and provide restart
+guidance; the app does not repeatedly rescan or reconnect the device. An explicit
+end of all capture streams returns to settings and releases sleep-prevention
+requests. Temporary no-signal alone is not treated as stream completion. See
+[playback troubleshooting](TROUBLESHOOTING.md#playback-stops-or-input-disappears).
+
 The app-processing value in the Tab overlay covers this application path. It is
 not the total HDMI-to-display latency; the capture device, source, desktop
 composition, monitor, and input device add latency outside the application.
 
+<br>
+
 ## Mode detection
 
-Changing the capture device or resolution refreshes the pixel-format and
-frame-rate lists. A fresh configuration starts at 1920 x 1080. The selected
+Changing the capture device or resolution updates the pixel-format and
+frame-rate lists using background queries and cached results. Results are reused
+while settings remain open; **Refresh** requests a fresh device/capability query
+after a device or driver change. Start is unavailable while required video
+capabilities are being checked or could not be queried.
+
+A fresh configuration starts at 1920 x 1080. The selected
 resolution is saved and does not change when the settings or viewer window is
 moved to another monitor.
 
@@ -33,6 +52,8 @@ compatibility)** is never chosen by Auto and must be selected explicitly.
 
 H.264/AVC and MPEG-4 are not supported. Their inter-frame references and decoder
 reordering make a consistently low-latency path difficult to guarantee.
+
+<br>
 
 ## NV12, YUY2, and MJPEG
 
@@ -49,6 +70,8 @@ MJPEG uses Windows Media Foundation for decoding and is intended for devices
 that cannot provide a useful raw mode. Decoding does not add an application
 frame queue, but the device encoder and decoder path can still add more latency
 and load than NV12 or YUY2.
+Decode buffers are reused to reduce repeated allocation. This does not change
+the latest-frame policy or guarantee lower end-to-end latency on every device.
 The viewer prefers the decoder-reported color range and BT.601/709 matrix, then
 DirectShow metadata, and falls back to JPEG full range when neither is present.
 The Tab overlay and diagnostic log report the applied result and its source.
@@ -56,6 +79,8 @@ Start with **Auto (recommended)**. If colors still differ from another
 application, an explicit MJPEG selection exposes **MJPEG color interpretation**
 with manual BT.709/BT.601 and Full/Limited combinations. This override applies
 only to MJPEG and neither appears for nor affects NV12/YUY2.
+
+<br>
 
 ## Frame rate
 
@@ -73,6 +98,60 @@ a stable 60 or 120 fps source provides lower video latency and smoother motion.
 When several valid source rates exist, a rate with an even cadence on the target
 display can improve VSync pacing—for example, 120 fps on a 120 or 240 Hz display.
 The source's real maximum rate still takes priority over monitor refresh rate.
+
+<br>
+
+### 40 fps capture
+
+**40 fps capture** is off by default. Enable it at the bottom-left of Video settings
+to request 40 fps from the capture driver instead of the normal frame-rate selection. Disabling it
+restores that selection. Mode detection does not insert synthetic 40 fps entries.
+An unlisted rate may work, but support depends on the device, resolution and pixel
+format. If the driver rejects the request or the connected format does not report
+40 fps, startup fails rather than silently substituting another rate. The check
+runs on **Start**; toggling the option alone does not open or test the device.
+Driver-reported format and actual delivery rate can differ, so check the measured
+input FPS in the Tab overlay too.
+
+The option requests a capture rate within a supported resolution/format combination.
+Which NV12, YUY2, P010, or MJPEG combinations accept 40 fps depends on the driver.
+The app does not interpolate frames or convert a faster stream to 40 fps in software.
+Each 40 fps frame spans 25 ms, so input changes may appear later than with
+60/120 fps capture. The option alone does not reduce latency or smooth motion.
+
+Keep the normal frame-rate selection for ordinary viewing. A 40 fps game can
+also be viewed by capturing its supported 120 Hz output at 120 fps; the game's
+40 fps rate alone is not a reason to enable this option. Use it only when a
+specific capture rate is needed.
+
+A game varying between 30 and 40 fps can produce repeated frames in fixed 40 fps
+capture, for example held for 25 or 50 ms, even without losing unique frames.
+This does not lock the game to 40 fps or replace VRR. The app also includes
+**Guide & logs → 40 fps capture guide** for the basic behavior and cautions.
+
+#### Usage example: Lossless Scaling
+
+This is an example of supplying 40 fps input to an external frame-generation app,
+not a built-in LS integration or a required combination.
+
+**This assumes a game holding a steady 40 fps.** If it fluctuates between 30 and
+40 fps, repeated frames can leave stutter intact or make it more noticeable with LS.
+
+For a console's 40 fps game mode, use 120 Hz HDMI output when supported and confirm
+the signal in the capture card's input information. HDMI 120 Hz does not imply
+120 unique game frames. A 60 Hz signal cannot preserve evenly spaced 40 fps motion.
+
+[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) is
+a separate app, not a built-in LLCV feature. If you choose to use it, leave GPU
+headroom and apply its frame generation to the LLCV window. For example, 40 fps multiplied by three targets
+120 fps; compare on a 120 Hz viewing monitor. LLCV does not change the monitor
+refresh rate or configure LS automatically.
+
+LS can add latency and visual artifacts; actual game/LS
+results are not guaranteed. If worse, disable this option and LS, then compare
+normal capture.
+
+<br>
 
 ## Presentation
 
@@ -94,6 +173,8 @@ Capture and audio buffering remain unchanged.
 an explicit selection starts on that monitor, or the primary monitor if it is
 disconnected. The choice does not lock the window or GPU output route: you can
 still move the window and use F11 on its current monitor.
+
+<br>
 
 ## P010 HDR10
 
@@ -125,7 +206,8 @@ changes are checked periodically.
   as SDR. Use NV12/YUY2 for SDR sources without color metadata. Turning Force
   HDR10 off does not disable the automatic HDR assumption for untagged P010.
 - Video PQ values are preserved without inventing mastering or peak-light
-  metadata. The app does not provide its own HDR-to-SDR tone mapper.
+  metadata. The app does not provide its own HDR-to-SDR tone mapper for **live viewing**.
+  [Screenshot saving](USAGE.md#screenshots) separately uses SDR sRGB tone mapping.
 - HDR overlays use linear-light composition with Windows' SDR UI white level,
   or a 203-nit reference when that query is unavailable. This does not adjust
   the video's brightness.
@@ -156,11 +238,24 @@ Windows device container; ambiguous matches are skipped. No guessed commands
 are sent to other models or vendors. This is not a real-hardware compatibility
 guarantee for every card. Avoid concurrent capture-device use by multiple apps.
 
+<br>
+
 ## Pixel-perfect and resizing
+
+The original-size 1:1 behavior below describes **VSR disabled in settings**. Enabling
+VSR changes this option to **Lock display size**, which keeps the selected display
+resolution. F6 toggles the effect without changing that sizing policy; F5 restores
+input size. See [VSR usage](USAGE.md#nvidia-vsr-experimental) for capture/display
+resolution choices and requirements.
 
 With **Pixel-perfect** enabled, the client area is fixed to the selected capture
 resolution and mouse resizing is disabled. With it disabled, the window remains
 freely resizable while preserving the video aspect ratio.
+
+Resizing updates only the necessary video-output resources and reuses resources
+that do not depend on window size. This reduces recreation work; it does not
+change capture resolution or buffering, and does not guarantee a measured
+latency improvement.
 
 Pixel-perfect fullscreen keeps a strict 1:1 mapping whenever the capture fits
 the monitor, centers the original image, and clears unused space to black. Both
@@ -175,13 +270,15 @@ window cannot fit the monitor work area, the HUD reports that it is unavailable.
 
 The fullscreen cursor defaults to **Auto-hide**: it disappears after two seconds
 without pointer activity and returns immediately on mouse movement or wheel
-input. Select **Always show** in the Video & window tab when a persistent
+input. Select **Always show** in the **Window** page when a persistent
 pointer is preferred.
 
 When capture and monitor resolutions match, the viewer starts in borderless
 fullscreen regardless of the Pixel-perfect setting. A genuinely smaller saved
 relative window takes priority so that a window intentionally moved and resized
 on another monitor does not unexpectedly reopen fullscreen.
+
+<br>
 
 ## Scaling and multi-monitor behavior
 
@@ -200,3 +297,7 @@ press `F5` to restore exact mapping.
 **Hide title bar** removes the caption and border in windowed mode. Edge snap
 works at outer monitor edges and shared boundaries. Entry and release distance
 is 20 DIP after DPI scaling. Hold Shift while dragging to bypass snap.
+
+---
+
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](VIDEO.ko.md)

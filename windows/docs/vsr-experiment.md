@@ -801,8 +801,9 @@ separate recreation guard test. No real capture-to-display/HDMI timing was run.
   path validation and observer-overhead checks remain necessary.
 - 8,640 measured timing frames; normal VSR/HDR/SDR/overlay regressions passed
   4/4. Production executable hash unchanged from the OSD boost preview.
-  Full protocol, variability caveats and raw logs:
-  [timing validation report](../outputs/vsr-timing-validation/REPORT.md).
+  Full protocol, variability caveats and raw logs were recorded in the local
+  validation artifact `outputs/vsr-timing-validation/REPORT.md` (not included
+  in the repository or distribution packages).
 
 ### Tab VSR request status (2026-10-04)
 

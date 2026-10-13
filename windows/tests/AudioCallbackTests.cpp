@@ -77,6 +77,108 @@ void TestAsioIntegerPacking() {
 }
 void SaveMessage(const wchar_t* message) { savedMessage = message; }
 
+void TestAsioInitialMixAndRuntimeMode() {
+    const auto settings = g_settings;
+    const auto runtimeMode = ActiveAudioMode();
+    const int master = g_volumePercent.load();
+    const int left = g_leftVolumePercent.load(), right = g_rightVolumePercent.load();
+    const bool muted = g_backgroundAudioMuted.load();
+    const auto tracking = g_audioTrackingStartMs.load();
+    const auto target = g_audioQueueTargetFrames.load();
+    g_settings.driftCorrection = DriftCorrectionMode::Off;
+    g_audioTrackingStartMs.store(UINT64_MAX);
+    g_audioQueueTargetFrames.store(480);
+    struct Case { int master, left, right; bool background; int expectedLeft, expectedRight; };
+    for (const auto test : {
+             Case{0, 100, 100, false, 0, 0},
+             Case{100, 100, 100, true, 0, 0},
+             Case{100, 0, 100, false, 0, 12000},
+             Case{50, 100, 100, false, 6000, 6000}}) {
+        g_volumePercent.store(test.master);
+        g_leftVolumePercent.store(test.left);
+        g_rightVolumePercent.store(test.right);
+        g_backgroundAudioMuted.store(test.background);
+        AsioRenderState state;
+        // Recreate the slow-driver case: captured PCM exists BEFORE the first
+        // callback, so there is no empty block to accidentally seed the gain.
+        for (bool restarting : {false, true}) {
+            if (restarting) {
+                state.currentMix = {1, 1};
+                PrepareAsioMix(&state);
+            }
+            g_ring.Clear();
+            const std::vector<int16_t> input(480 * 2, 12000);
+            g_ring.Push(input.data(), 480);
+            std::array<int16_t, 480 * 2> output{};
+            Require(FillAsioPcm(&state, output.data(), 480) == 480,
+                    "ASIO first callback consumes preloaded capture");
+            for (size_t frame = 0; frame < 480; ++frame) {
+                Require(output[frame * 2] == test.expectedLeft &&
+                        output[frame * 2 + 1] == test.expectedRight,
+                        "ASIO initial/restarted block respects mute and saved gains from its first sample");
+            }
+        }
+    }
+    g_settings.audioMode = AudioMode::Asio;
+    g_settings.asioDriverName = L"Saved ASIO selection";
+    g_activeAudioMode.store(AudioMode::WasapiShared);
+    Require(BuildRuntimeOsdText(1920, 1080).find(L"WASAPI Shared") != std::wstring::npos &&
+            g_settings.audioMode == AudioMode::Asio &&
+            g_settings.asioDriverName == L"Saved ASIO selection",
+            "runtime fallback reports the effective backend without changing saved preferences");
+    g_ring.Clear();
+    g_settings = settings;
+    g_activeAudioMode.store(runtimeMode);
+    g_volumePercent.store(master);
+    g_leftVolumePercent.store(left); g_rightVolumePercent.store(right);
+    g_backgroundAudioMuted.store(muted);
+    g_audioTrackingStartMs.store(tracking);
+    g_audioQueueTargetFrames.store(target);
+}
+
+void TestRealtimeDiagnosticQueue() {
+    llcv::audio::RealtimeLogQueue queue;
+    llcv::audio::RealtimeLogQueue::Message message;
+    Require(!queue.Pop(message), "diagnostic queue starts empty");
+    for (size_t index = 0; index < llcv::audio::RealtimeLogQueue::kCapacity; ++index)
+        Require(queue.Push(std::to_wstring(index).c_str()), "bounded log queue accepts its capacity");
+    Require(!queue.Push(L"overflow") && queue.TakeDropped() == 1 && queue.TakeDropped() == 0,
+            "busy UI drops a diagnostic without blocking audio and reports it once");
+    for (size_t index = 0; index < llcv::audio::RealtimeLogQueue::kCapacity; ++index)
+        Require(queue.Pop(message) && message.data() == std::to_wstring(index),
+                "deferred messages preserve FIFO order");
+    std::wstring longMessage(llcv::audio::RealtimeLogQueue::kMessageCharacters * 2, L'x');
+    Require(queue.Push(longMessage.c_str()) && queue.Pop(message) && message.back() == L'\0' &&
+            std::wcslen(message.data()) == message.size() - 1,
+            "oversized diagnostics are bounded and terminated");
+
+    constexpr unsigned count = 100000;
+    std::atomic<bool> finished{false};
+    std::thread producer([&] {
+        for (unsigned index = 1; index <= count; ++index) {
+            wchar_t number[32]; swprintf_s(number, L"%u", index);
+            queue.Push(number);
+        }
+        finished.store(true, std::memory_order_release);
+    });
+    unsigned received = 0, previous = 0;
+    while (true) {
+        if (queue.Pop(message)) {
+            const unsigned value = static_cast<unsigned>(std::wcstoul(message.data(), nullptr, 10));
+            Require(value > previous && value <= count, "concurrent diagnostic messages are complete and ordered");
+            previous = value; ++received;
+        } else if (finished.load(std::memory_order_acquire)) {
+            // Recheck after synchronizing with the producer's final publish.
+            if (!queue.Pop(message)) break;
+            const unsigned value = static_cast<unsigned>(std::wcstoul(message.data(), nullptr, 10));
+            Require(value > previous && value <= count, "final deferred diagnostic is intact");
+            previous = value; ++received;
+        } else std::this_thread::yield();
+    }
+    producer.join();
+    Require(received + queue.TakeDropped() == count, "concurrent queue accounts for every diagnostic");
+}
+
 DWORD settingsProbeThread = 0;
 std::atomic<int> settingsProbeCalls{0};
 std::atomic<bool> settingsProbeFails{false};
@@ -99,6 +201,128 @@ LRESULT CALLBACK CapabilityReplayProc(HWND hwnd, UINT message, WPARAM wParam, LP
     // hardware enumeration. Hidden fixture controls are supplied below.
     if (message == WM_CREATE) return 0;
     return SettingsWndProc(hwnd, message, wParam, lParam);
+}
+
+void Test40FpsSettingsIntegration() {
+    const auto saved = g_settings;
+    g_settings.capture40Fps = false;
+    g_settings.videoFrameRate = 120;
+    Require(RequestedVideoFrameRate()==120,"normal capture rate retained");
+    g_settings.capture40Fps = true;
+    Require(RequestedVideoFrameRate()==40 && g_settings.videoFrameRate==120,
+        "40fps override leaves saved frame-rate preference unchanged");
+    g_settings.capture40Fps = false;
+    Require(RequestedVideoFrameRate()==120,"disabling override restores normal request");
+    g_settings=saved;
+
+    HWND parent=CreateWindowW(L"STATIC",L"40fps settings fixture",WS_POPUP,
+        0,0,400,300,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    Require(parent!=nullptr,"40fps hidden parent");
+    SettingsDialogState state;
+    state.frameRateCombo=CreateWindowW(L"COMBOBOX",L"",WS_CHILD|CBS_DROPDOWNLIST,
+        0,0,180,100,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+    state.capture40Check=CreateWindowW(L"BUTTON",L"40fps",WS_CHILD|BS_AUTOCHECKBOX,
+        0,110,180,32,parent,nullptr,GetModuleHandleW(nullptr),nullptr);
+    state.pixelFormats={{VideoPixelFormat::Nv12,120}};
+    SendMessageW(state.frameRateCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"120fps"));
+    SendMessageW(state.frameRateCombo,CB_SETCURSEL,0,0);
+    for (int i=0;i<20;++i) {
+        const bool checked=i%2==0;
+        SendMessageW(state.capture40Check,BM_SETCHECK,checked?BST_CHECKED:BST_UNCHECKED,0);
+        UpdateVideoCapabilityStatus(&state);
+        Require((IsWindowEnabled(state.frameRateCombo)!=FALSE)==!checked &&
+            SendMessageW(state.frameRateCombo,CB_GETCURSEL,0,0)==0,
+            "async capability refresh preserves 40fps override and normal selection");
+    }
+    state.videoModesPending=true;
+    UpdateVideoCapabilityStatus(&state);
+    Require(!IsWindowEnabled(state.frameRateCombo) && !IsWindowEnabled(state.capture40Check),
+        "mode query gates both normal and 40fps selectors");
+    DestroyWindow(parent);
+}
+
+void TestCaptureColorStartupFallback() {
+    const auto saved = g_settings;
+    constexpr DWORD pqLeft = AMCONTROL_COLORINFO_PRESENT |
+        (5u << DXVA_VideoChromaSubsamplingShift) |
+        (2u << DXVA_NominalRangeShift) | (4u << DXVA_VideoTransferMatrixShift) |
+        (9u << DXVA_VideoPrimariesShift) | (15u << DXVA_VideoTransFuncShift);
+    constexpr DWORD hlgLeft = (pqLeft & ~(31u << DXVA_VideoTransFuncShift)) |
+        (16u << DXVA_VideoTransFuncShift);
+    for (bool request40 : {false, true}) for (bool legacy : {false, true})
+    for (DWORD flags : {pqLeft, hlgLeft}) {
+        g_settings.capture40Fps = request40;
+        FakeVideoPin pin;
+        pin.modes = {{60}};
+        pin.modes[0].subtype = MFVideoFormat_P010;
+        pin.modes[0].imageBytes = 1920 * 1080 * 3;
+        pin.modes[0].controlFlags = flags;
+        pin.echoAcceptedFormat = pin.stripReadbackColor = true;
+        pin.legacyReadback = legacy;
+        DWORD bytes = 0;
+        UINT32 stride = 0;
+        int fps = 0;
+        VideoPixelFormat format{};
+        DirectShowColorMetadata candidate{}, effective{};
+        Require(SUCCEEDED(ConfigureVideoPin(&pin, 1920, 1080, request40 ? 40 : 60,
+            VideoPixelFormat::P010, bytes, stride, fps, format, candidate)),
+            "production wrapper negotiates caps-only color driver");
+        Require(candidate.present == request40,
+            "ordinary capture retains its existing metadata lookup path");
+        AM_MEDIA_TYPE* active = nullptr;
+        Require(SUCCEEDED(GetActiveVideoPinFormat(&pin, &active)), "read active color fixture");
+        Require(ResolveInitialVideoColorMetadata(&pin, active, format, 1920, 1080,
+            fps, candidate, effective) && effective.controlFlags == flags,
+            "startup preserves caps-only color at ordinary 60 and unlisted 40fps");
+        const auto input = llcv::hdr::ResolveInput(effective, false);
+        Require(flags == pqLeft
+            ? input.kind == llcv::hdr::InputKind::Hdr10 && !input.assumed &&
+                input.colorSpace == DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020
+            : input.kind == llcv::hdr::InputKind::Unsupported,
+            "production startup preserves Left chroma and rejects reported HLG");
+
+        VIDEOINFOHEADER2 taggedInfo = pin.acceptedInfo;
+        taggedInfo.dwControlFlags = flags == pqLeft ? hlgLeft : pqLeft;
+        AM_MEDIA_TYPE tagged = *active;
+        tagged.formattype = FORMAT_VideoInfo2;
+        tagged.cbFormat = sizeof(taggedInfo);
+        tagged.pbFormat = reinterpret_cast<BYTE*>(&taggedInfo);
+        Require(ResolveInitialVideoColorMetadata(&pin, &tagged, format, 1920, 1080,
+            fps, candidate, effective) && effective.controlFlags == taggedInfo.dwControlFlags,
+            "explicit active metadata takes priority over accepted candidate hints");
+        DirectShowColorMetadata connected{};
+        Require(ExtractVideoColorMetadata(&tagged, connected), "extract connected color fixture");
+        const auto finalColor = llcv::hdr::ConnectedMetadata(candidate, connected);
+        Require(finalColor.controlFlags == taggedInfo.dwControlFlags &&
+            finalColor.transferFunction == connected.transferFunction,
+            "explicit connected metadata still overrides startup color");
+        FreeMediaType(*active);
+        CoTaskMemFree(active);
+        Require(pin.references == 1, "startup metadata fixture releases COM references");
+    }
+    g_settings = saved;
+}
+
+void TestVsrLiveTestRateIsolation() {
+    const auto saved = g_settings;
+    for (bool capture40 : {false, true}) for (int rate : {0, 40, 60, 120}) {
+        g_settings = saved;
+        g_settings.capture40Fps = capture40;
+        g_settings.videoFrameRate = rate;
+        g_settings.audioMode = AudioMode::WasapiShared;
+        g_settings.volumePercent = 73;
+        ApplyVsrLiveTestSettings(g_settings);
+        Require(!g_settings.capture40Fps && g_settings.videoFrameRate == 120 &&
+            RequestedVideoFrameRate() == 120,
+            "live VSR experiment always requests 120fps regardless of saved override");
+        Require(g_settings.videoPreset == VideoPreset::R2560x1440 &&
+            g_settings.vsrCapturePreset == VideoPreset::R1920x1080 && g_settings.vsrEnabled &&
+            g_settings.pixelFormat == VideoPixelFormat::Nv12 &&
+            g_settings.presentationMode == PresentationMode::AllowTearing &&
+            g_settings.audioMode == AudioMode::WasapiShared && g_settings.volumePercent == 73,
+            "VSR experiment keeps its capture plan and unrelated audio preferences");
+    }
+    g_settings = saved;
 }
 
 void TestSettingsCapabilityRefresh() {
@@ -169,9 +393,14 @@ void TestSettingsCapabilityRefresh() {
             settingsProbeFails = failure;
             ResetEvent(settingsProbeGate);
             const int before = settingsProbeCalls.load();
-            if (refresh) SendMessageW(parent, WM_COMMAND,
-                MAKEWPARAM(IDC_SETTINGS_VIDEO_REFRESH, BN_CLICKED), 0);
-            else PopulatePixelFormatCombo(&state);
+            // Inventory refresh has its own multi-device controller test.
+            // Isolate its per-device capability invalidation here so this
+            // driver replay never enumerates the host's real devices.
+            if (refresh) {
+                state.videoModeCache->InvalidateDevice(SelectedCaptureDeviceId(&state));
+                state.appliedVideoModeKey.reset();
+            }
+            PopulatePixelFormatCombo(&state);
             Require(state.videoModesPending && !IsWindowEnabled(state.startButton) &&
                     !IsWindowEnabled(state.frameRateCombo),
                     "pending query prevents starting with stale capabilities");
@@ -717,8 +946,13 @@ int main(int argc, char** argv) {
     }
     TestPresentationPolicy();
     TestAsioIntegerPacking();
+    TestAsioInitialMixAndRuntimeMode();
+    TestRealtimeDiagnosticQueue();
     TestStartupWaitBoundary();
     TestSettingsCapabilityRefresh();
+    Test40FpsSettingsIntegration();
+    TestCaptureColorStartupFallback();
+    TestVsrLiveTestRateIsolation();
     TestExclusiveScanResultLifetime();
     TestOutputTransitions();
     TestSurroundWasapiFill();

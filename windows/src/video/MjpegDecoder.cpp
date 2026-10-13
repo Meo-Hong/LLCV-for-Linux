@@ -158,8 +158,8 @@ HRESULT MjpegDecoder::decode(IMediaSample* directShowSample,
     IMFMediaBuffer* inputBuffer = nullptr;
     hr = MFCreateSample(&inputSample);
     if (SUCCEEDED(hr)) {
-        hr = MFCreateMemoryBuffer(static_cast<DWORD>(sourceLength),
-                                  &inputBuffer);
+        hr = inputBuffers_.Acquire((std::max)(static_cast<DWORD>(sourceLength), inputInfo_.cbSize),
+                                   inputInfo_.cbAlignment, &inputBuffer);
     }
     BYTE* destination = nullptr;
     if (SUCCEEDED(hr)) hr = inputBuffer->Lock(&destination, nullptr, nullptr);
@@ -223,6 +223,9 @@ void MjpegDecoder::reset() {
     }
     SafeRelease(outputType_);
     SafeRelease(transform_);
+    inputBuffers_.Reset();
+    outputBuffers_.Reset();
+    inputInfo_ = {};
     outputInfo_ = {};
     bufferBytes_ = 0;
     stride_ = 0;
@@ -351,6 +354,12 @@ HRESULT MjpegDecoder::SetNv12OutputType(IMFTransform* transform) {
                 }
                 MFT_OUTPUT_STREAM_INFO info{};
                 if (SUCCEEDED(hr)) hr = transform->GetOutputStreamInfo(0, &info);
+                MFT_INPUT_STREAM_INFO inputInfo{};
+                if (SUCCEEDED(hr)) hr = transform->GetInputStreamInfo(0, &inputInfo);
+                if (SUCCEEDED(hr) &&
+                    ((info.cbAlignment && (info.cbAlignment & (info.cbAlignment - 1))) ||
+                     (inputInfo.cbAlignment && (inputInfo.cbAlignment & (inputInfo.cbAlignment - 1)))))
+                    hr = MF_E_INVALIDMEDIATYPE;
                 if (FAILED(hr)) {
                     Log(L"[video] MJPEG output layout/stream requirements rejected; "
                         L"capture dimensions must remain unchanged.\n");
@@ -363,6 +372,7 @@ HRESULT MjpegDecoder::SetNv12OutputType(IMFTransform* transform) {
                 outputType_ = candidate;
                 stride_ = stride;
                 outputInfo_ = info;
+                inputInfo_ = inputInfo;
                 bufferBytes_ = (std::max)(info.cbSize, static_cast<DWORD>(bytes));
                 UpdateColorConfiguration();
                 return S_OK;
@@ -380,7 +390,7 @@ HRESULT MjpegDecoder::PullOutput(IMFMediaBuffer** newest) {
         HRESULT hr = MFCreateSample(&suppliedSample);
         if (SUCCEEDED(hr)) {
             IMFMediaBuffer* suppliedBuffer = nullptr;
-            hr = MFCreateMemoryBuffer(bufferBytes_, &suppliedBuffer);
+            hr = outputBuffers_.Acquire(bufferBytes_, outputInfo_.cbAlignment, &suppliedBuffer);
             if (SUCCEEDED(hr)) hr = suppliedSample->AddBuffer(suppliedBuffer);
             SafeRelease(suppliedBuffer);
         }

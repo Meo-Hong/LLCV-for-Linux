@@ -70,13 +70,12 @@ void RefreshSettingsPageHeader(SettingsControls* state) {
 }
 
 int SettingsClientHeightDip(const SettingsControls* state) {
-    (void)state;
-    return kSettingsTabbedClientHeightDip;
+    return state ? state->clientHeightDip : kSettingsTabbedClientHeightDip;
 }
 
 SIZE SettingsDialogOuterSize(HWND hwnd, UINT dpi,
                                     const SettingsControls* state) {
-    RECT rect{0, 0, SettingsPixels(kSettingsClientWidthDip, dpi),
+    RECT rect{0, 0, SettingsPixels(state ? state->clientWidthDip : kSettingsClientWidthDip, dpi),
               SettingsPixels(SettingsClientHeightDip(state), dpi)};
     const DWORD style =
         static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_STYLE));
@@ -122,7 +121,7 @@ void PlaceSettingsControl(HWND control, int x, int y, int width,
                  SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
-static void ApplySettingsComboMetrics(HWND control, UINT dpi) {
+void ApplySettingsComboMetrics(HWND control, UINT dpi) {
     if (!control) return;
     RECT previous{};
     GetWindowRect(control, &previous);
@@ -184,7 +183,7 @@ void ApplySettingsFont(SettingsControls* state, HWND hwnd,
                          state->vsrStatus, state->screenshotHelp,
                          state->relativeSizeWarning, state->fullscreenCursorHint,
                          state->guideDiagnosticsText, state->guideVideoHint, state->skipStartupHint,
-                         state->updateText, state->updateStatus}) {
+                         state->preventSleepHint, state->updateText, state->updateStatus}) {
         if (control) SendMessageW(control, WM_SETFONT,
                                   reinterpret_cast<WPARAM>(secondaryFont), FALSE);
     }
@@ -340,12 +339,16 @@ void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
     place(state->videoCapabilityStatus, 184, 392, 376, 84);
     place(state->forceHdr10Check, 184, 480, 344, 40);
     place(state->forceHdr10Help, 536, 488, 24, 24);
-    place(state->hdrChromaLabel, 184, 528, 322, 20);
-    place(state->hdrChromaCombo, 184, 552, 344, 150);
-    place(state->hdrChromaHelp, 536, 555, 24, 24);
+    // Keep the full compatibility captions readable in the closed field,
+    // including the themed text inset and dropdown arrow.
+    place(state->hdrChromaLabel, 184, 524, 112, 20);
+    place(state->hdrChromaCombo, 304, 520, 224, 150);
+    place(state->hdrChromaHelp, 536, 523, 24, 24);
     place(state->mjpegColorLabel, 184, 488, 322, 20);
     place(state->mjpegColorCombo, 184, 512, 344, 150);
     place(state->mjpegColorHelp, 536, 515, 24, 24);
+    place(state->capture40Check, 184, 554, 344, 28);
+    place(state->capture40Help, 536, 556, 24, 24);
 
     place(state->videoDisplaySection, 600, 112, 376, 20);
     place(state->presentationLabel, 600, 140, 300, 20);
@@ -384,6 +387,7 @@ void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
     place(state->saveLogCheck, 600, 208, 376, 32);
     place(state->showConsoleCheck, 600, 248, 376, 32);
     place(state->guideLogFolderButton, 600, 296, 185, 32);
+    place(state->guideLsButton, 600, 360, 376, 32);
 
     // App-wide preferences no longer dominate every page.
     place(state->appPreferencesSection, 184, 112, 792, 20);
@@ -391,13 +395,15 @@ void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
     place(state->languageCombo, 184, 164, 376, 120);
     place(state->themeLabel, 600, 140, 376, 20);
     place(state->themeCombo, 600, 164, 376, 120);
-    place(state->skipStartupCheck, 184, 212, 760, 32);
-    place(state->skipStartupHint, 212, 252, 732, 28);
-    place(state->updateTitle, 184, 312, 792, 24);
-    place(state->updateText, 184, 344, 730, 56);
-    place(state->checkForUpdatesCheck, 184, 412, 760, 32);
-    place(state->updateNowButton, 184, 456, 185, 32);
-    place(state->updateStatus, 184, 500, 792, 48);
+    place(state->skipStartupCheck, 184, 212, 376, 32);
+    place(state->skipStartupHint, 212, 252, 348, 56);
+    place(state->preventSleepCheck, 600, 212, 376, 32);
+    place(state->preventSleepHint, 628, 252, 348, 56);
+    place(state->updateTitle, 184, 344, 792, 24);
+    place(state->updateText, 184, 376, 730, 44);
+    place(state->checkForUpdatesCheck, 184, 432, 760, 32);
+    place(state->updateNowButton, 184, 476, 185, 32);
+    place(state->updateStatus, 184, 520, 792, 48);
     for (HWND combo : {state->audioCombo, state->audioOutputCombo,
                         state->bufferCombo, state->volumeHudCombo,
                         state->driftCombo, state->pcmQueueCombo,
@@ -406,12 +412,15 @@ void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
                         state->pixelFormatCombo, state->presentationCombo,
                         state->displayMonitorCombo, state->scalingCombo,
                         state->hdrChromaCombo, state->mjpegColorCombo,
-                        state->fullscreenCursorCombo, state->languageCombo, state->themeCombo})
+                        state->fullscreenCursorCombo, state->languageCombo, state->themeCombo,
+                        state->sectionNavigation})
         ApplySettingsComboMetrics(combo, dpi);
+    LayoutCompactSettingsControls(state, dpi);
 }
 
 void SetSettingsControlVisible(HWND control, bool visible, bool enabled) {
     if (!control) return;
+    visible = visible && SettingsControlOnCurrentPage(control);
     const bool wasVisible = (GetWindowLongPtrW(control, GWL_STYLE) & WS_VISIBLE) != 0;
     if (wasVisible != visible) ShowWindow(control, visible ? SW_SHOWNA : SW_HIDE);
     const bool shouldEnable = visible && enabled;
@@ -454,6 +463,7 @@ void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
     const bool video = state->activeTab == SettingsTab::VideoWindow;
     const bool guide = state->activeTab == SettingsTab::GuideDiagnostics;
     const bool updates = state->activeTab == SettingsTab::Updates;
+    LayoutCompactSettingsControls(state, state->layoutDpi);
     RefreshSettingsPageHeader(state);
     for (HWND control : {state->tabControl, state->brandLabel,
                          state->pageTitle, state->pageSubtitle,
@@ -462,9 +472,12 @@ void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
         SetSettingsControlVisible(control, true);
     }
     SetSettingsControlVisible(state->startButton, true, availability.start);
+    SetSettingsControlVisible(state->sectionNavigationLabel, SettingsCompactLayout(state));
+    SetSettingsControlVisible(state->sectionNavigation, SettingsCompactLayout(state));
     for (HWND control : {state->languageLabel, state->languageCombo,
                          state->themeLabel, state->themeCombo,
                          state->skipStartupCheck, state->skipStartupHint,
+                         state->preventSleepCheck, state->preventSleepHint,
                          state->appPreferencesSection})
         SetSettingsControlVisible(control, updates);
     for (HWND control : {state->audioOutputSection,
@@ -504,7 +517,11 @@ void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
     }
     SetSettingsControlVisible(state->captureDeviceCombo, video, availability.captureDevice);
     SetSettingsControlVisible(state->pixelFormatCombo, video, availability.formats);
-    SetSettingsControlVisible(state->frameRateCombo, video, availability.formats);
+    const bool capture40 = SendMessageW(state->capture40Check, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    SetSettingsControlVisible(state->frameRateCombo, video, availability.formats && !capture40);
+    SetSettingsControlVisible(state->capture40Check, video, availability.formats);
+    SetSettingsControlVisible(state->capture40Help, video);
+    SetSettingsControlVisible(state->guideLsButton, guide);
     // This row has two mutually exclusive controls: the device picker for a
     // separate capture endpoint, or the short "built-in audio" status. Keep
     // its existing video-tab choice intact; hide both together off-tab.
@@ -619,6 +636,36 @@ bool IsSettingsHelpControl(const SettingsControls* state,
 }
 
 const wchar_t* SettingsHelpText(SettingsHelpTopic topic, bool english) {
+    if (topic == SettingsHelpTopic::Capture40) {
+        // Frame generation is only an external-app example, not an integration.
+        return english
+            ? L"40 fps capture\n"
+              L"• Leave off for normal viewing.\n"
+              L"• Enable to request 40 fps; disable to restore your setting.\n"
+              L"• Support is checked on Start. No fallback to another FPS.\n"
+              L"\n"
+              L"Keep in mind\n"
+              L"• Does not lock game FPS or replace VRR.\n"
+              L"\n"
+              L"Example: Lossless Scaling (LS)\n"
+              L"Console 120 Hz → LLCV 40 fps → LS 3x → Monitor 120 Hz\n"
+              L"• Assumes steady 40 fps. At 30–40 fps, stutter may persist or become more noticeable with LS.\n"
+              L"• LS is separate; configure it and refresh rate yourself.\n"
+              L"• May add latency or artifacts. If worse, disable and compare."
+            : L"40fps 캡처\n"
+              L"• 일반적인 시청에는 끈 채 사용하세요.\n"
+              L"• 체크하면 40fps 요청, 해제하면 기존 설정으로 돌아갑니다.\n"
+              L"• 지원은 시작할 때 확인하며, 다른 FPS로 대체하지 않습니다.\n"
+              L"\n"
+              L"주의사항\n"
+              L"• 게임 FPS 고정·VRR 대체 기능이 아닙니다.\n"
+              L"\n"
+              L"활용 예시: Lossless Scaling (LS)\n"
+              L"콘솔 120Hz → LLCV 40fps → LS 3배 → 모니터 120Hz\n"
+              L"• 40fps 유지 시 예시입니다. 30~40fps로 흔들리면 LS를 써도 끊김이 남거나 더 두드러질 수 있습니다.\n"
+              L"• LS는 별도 앱입니다. 주사율·LS는 직접 설정하세요.\n"
+              L"• 지연·화면 왜곡이 생길 수 있습니다. 더 끊기면 끄고 비교하세요.";
+    }
     if (english) {
         switch (topic) {
         case SettingsHelpTopic::Drift:

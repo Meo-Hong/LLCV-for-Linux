@@ -164,6 +164,7 @@ static void TestExclusiveScanLifecycle() {
         SettingsDialogState state;
         state.activeTab = SettingsTab::Audio;
         state.probeReady = true;
+        state.appliedSharedEndpoint = L"fake-endpoint";
         state.audioEndpoints = {{L"fixture-a", L"Fixture A", true},
                                 {L"fixture-b", L"Fixture B", false}};
         state.exclusiveEndpointResults.resize(2);
@@ -408,7 +409,8 @@ static void TestSettingsAudioTransitions() {
         state.exclusiveScanRunning = true;
         HWND hwnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
             wc.lpszClassName, L"Audio transition fixture", WS_POPUP | WS_CLIPCHILDREN,
-            -32000, -32000, SettingsPixels(1000,dpi), SettingsPixels(650,dpi),
+            -32000, -32000, llcv::settings_ui::SettingsPixels(1000,dpi),
+            llcv::settings_ui::SettingsPixels(650,dpi),
             nullptr, nullptr, wc.hInstance, &state);
         Require(hwnd != nullptr, "audio transition fixture");
         AppSettings initialSettings{};
@@ -591,6 +593,15 @@ static void TestSettingsModeFlow() {
         0,0,200,30,window,nullptr,wc.hInstance,nullptr);
     state.startButton = CreateWindowW(L"BUTTON",L"Start",WS_CHILD,
         0,0,100,30,window,nullptr,wc.hInstance,nullptr);
+    // Manual Refresh also discovers device inventory. Keep this regression
+    // entirely synthetic, including its internal capture-audio follow-up.
+    unsigned inventoryQueries = 0;
+    state.inventoryCache = std::make_unique<llcv::settings_ui::SettingsModeCache<SettingsDeviceInventory>>(
+        [&](const auto&) { ++inventoryQueries; return SettingsDeviceInventory{}; },
+        [window] { PostMessageW(window, WM_SETTINGS_INVENTORY_READY, 0, 0); });
+    state.captureAudioProbeCache = std::make_unique<llcv::settings_ui::SettingsModeCache<InternalCaptureAudioProbe>>(
+        [](const auto&) { return InternalCaptureAudioProbe{}; },
+        [window] { PostMessageW(window, WM_CAPTURE_AUDIO_PROBE_COMPLETE, 0, 0); });
     for (const auto& preset : kVideoPresets) {
         SendMessageW(state.videoCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(preset.label));
         SendMessageW(state.vsrCaptureCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(preset.label));
@@ -600,7 +611,7 @@ static void TestSettingsModeFlow() {
     SendMessageW(state.videoCombo,CB_SETCURSEL,2,0);
     auto complete = [&] {
         const auto deadline = GetTickCount64() + 2000;
-        while (state.videoModesPending && GetTickCount64() < deadline) {
+        while ((state.inventoryPending || state.videoModesPending) && GetTickCount64() < deadline) {
             MsgWaitForMultipleObjects(0,nullptr,FALSE,20,QS_ALLINPUT);
             MSG msg{}; while (PeekMessageW(&msg,window,0,0,PM_REMOVE)) DispatchMessageW(&msg);
         }
@@ -624,7 +635,7 @@ static void TestSettingsModeFlow() {
         state.pixelFormats.front().selectedFps == 144, "revisiting capture mode uses cached capabilities");
     SendMessageW(window,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_VIDEO_REFRESH,BN_CLICKED),0);
     complete();
-    Require(modeQueryCalls == 3, "only explicit refresh repeats the same query");
+    Require(modeQueryCalls == 3 && inventoryQueries == 1, "only explicit refresh repeats the same query and enumerates inventory");
     state.vsrGpuUnavailable = true;
     // A stale check or forged notification must not select the VSR capture plan.
     SendMessageW(state.vsrCheck, BM_SETCHECK, BST_CHECKED, 0);
@@ -638,6 +649,8 @@ static void TestSettingsModeFlow() {
     Require(state.pixelFormats.front().selectedFps == 60,
         "unavailable VSR uses ordinary capture size even with a stale check");
     state.videoModeCache.reset();
+    state.inventoryCache.reset();
+    state.captureAudioProbeCache.reset();
     DestroyWindow(window);
     UnregisterClassW(wc.lpszClassName,wc.hInstance);
     g_testVideoCapabilityProbe = nullptr;
@@ -965,7 +978,44 @@ static void TestSplitResolutionRenderer(HWND window) {
 
 #include "VsrTimingValidation.inl"
 
+#include "SettingsControllerRegressionTests.inl"
+#include "ViewerLifecycleTests.inl"
+
+static void TestPlaybackPowerBroadcastRouting() {
+    struct Request {
+        bool suspended = false;
+        int resumed = 0;
+        void Suspend() { suspended = true; }
+        void Resume() { suspended = false; ++resumed; }
+    } request;
+    Require(g_playbackPowerEvents.Initialize(true) == ERROR_SUCCESS, "initialize viewer power notification fixture");
+    uint64_t revision = 0;
+    Require(WndProc(nullptr, WM_POWERBROADCAST, PBT_APMSUSPEND, 0) == TRUE,
+            "viewer accepts the explicit suspend notification");
+    Require(WaitForSingleObject(g_playbackPowerEvents.Event(), 0) == WAIT_OBJECT_0 &&
+            g_playbackPowerEvents.ApplyPending(request, revision) && request.suspended,
+            "viewer forwards suspend to capture instead of altering Windows policy");
+    WndProc(nullptr, WM_POWERBROADCAST, PBT_APMRESUMEAUTOMATIC, 0);
+    Require(WaitForSingleObject(g_playbackPowerEvents.Event(), 0) == WAIT_TIMEOUT && request.resumed == 0,
+            "viewer ignores unattended resume");
+    WndProc(nullptr, WM_POWERBROADCAST, PBT_APMRESUMESUSPEND, 0);
+    Require(WaitForSingleObject(g_playbackPowerEvents.Event(), 0) == WAIT_OBJECT_0 &&
+            g_playbackPowerEvents.ApplyPending(request, revision) && !request.suspended && request.resumed == 1,
+            "viewer forwards user resume exactly once");
+    WndProc(nullptr, WM_POWERBROADCAST, PBT_APMRESUMESUSPEND, 0);
+    Require(WaitForSingleObject(g_playbackPowerEvents.Event(), 0) == WAIT_TIMEOUT,
+            "duplicate window broadcasts do not rearm capture");
+}
+
 int main(int argc, char** argv) {
+    if (argc > 1 && std::string(argv[1]) == "--viewer-lifecycle") {
+        Check(CoInitializeEx(nullptr, COINIT_MULTITHREADED), "lifecycle COM");
+        INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_WIN95_CLASSES};
+        Require(InitCommonControlsEx(&controls) != FALSE, "lifecycle common controls");
+        TestViewerLifecycle();
+        CoUninitialize();
+        return 0;
+    }
     if (argc > 1 && std::string(argv[1]) == "--timing-validation") return ValidateVsrTiming(argc, argv);
     TestPolicy();
     const bool nativeColor = argc > 1 && std::string(argv[1]) == "--bench-native-color";
@@ -987,8 +1037,12 @@ int main(int argc, char** argv) {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_WIN95_CLASSES};
         Require(InitCommonControlsEx(&controls) != FALSE, "controller common controls");
+        TestPlaybackPowerBroadcastRouting();
         TestSettingsController();
         TestSettingsAudioTransitions();
+        TestSettingsBufferModeTransitions();
+        TestSettingsSharedRefreshAcrossModes();
+        TestSettingsAudioIdentityAndRefresh();
         TestExclusiveScanLifecycle();
         TestSettingsModeFlow();
         CoUninitialize();

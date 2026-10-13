@@ -1,6 +1,7 @@
 #pragma once
 
 #include <windows.h>
+#include <string>
 #include <vector>
 #include "ViewerShortcuts.h"
 
@@ -32,6 +33,17 @@ struct SettingsControls {
     bool vsrGpuUnavailable = false;
     bool vsrGpuUnknown = false;
     UINT layoutDpi = USER_DEFAULT_SCREEN_DPI;
+    // Physical work-area fitting never changes type size. Smaller desktops
+    // use short, whole-option pages instead of scrolling or clipping controls.
+    int clientWidthDip = 1000;
+    int clientHeightDip = 650;
+    int sidebarWidthDip = 156;
+    int footerTopDip = 590;
+    std::array<int, 5> compactPages{};
+    std::vector<std::wstring> compactPageNames;
+    bool compactPropertiesApplied = false;
+    HWND sectionNavigationLabel = nullptr;
+    HWND sectionNavigation = nullptr;
     HWND brandLabel = nullptr;
     HWND pageTitle = nullptr;
     HWND pageSubtitle = nullptr;
@@ -45,6 +57,9 @@ struct SettingsControls {
     HWND guideDiagnosticsText = nullptr;
     HWND guideLogFolderButton = nullptr;
     HWND screenshotClipboardCheck = nullptr;
+    HWND capture40Check = nullptr;
+    HWND capture40Help = nullptr;
+    HWND guideLsButton = nullptr;
     HWND screenshotTitle = nullptr;
     HWND screenshotHelp = nullptr;
     HWND screenshotFolderButton = nullptr;
@@ -130,6 +145,8 @@ struct SettingsControls {
     HWND showConsoleCheck = nullptr;
     HWND skipStartupCheck = nullptr;
     HWND skipStartupHint = nullptr;
+    HWND preventSleepCheck = nullptr;
+    HWND preventSleepHint = nullptr;
     HWND checkForUpdatesCheck = nullptr;
     HWND versionWatermark = nullptr;
     HWND startButton = nullptr;
@@ -141,6 +158,7 @@ struct SettingsControls {
 };
 
 enum class SettingsHelpTopic {
+    Capture40,
     Drift,
     PcmQueue,
     Presentation,
@@ -155,14 +173,20 @@ inline constexpr int kSettingsClientWidthDip = 1000;
 // Shared by native layout and its paint-only theme. Keep the shell compact
 // enough for a small desktop while using one consistent content grid.
 inline constexpr int kSettingsSidebarWidthDip = 156;
-inline constexpr int kSettingsContentLeftDip = 184;
-inline constexpr int kSettingsContentRightDip = 976;
 inline constexpr int kSettingsFooterTopDip = 590;
 inline constexpr int kSettingsComboHeightDip = 30;
 inline constexpr int kSettingsBodyFontPoints = 10;
 inline constexpr int kSettingsSecondaryFontPoints = 9;
 inline constexpr int kSettingsTitleFontPoints = 20;
 int SettingsClientHeightDip(const SettingsControls* state);
+bool SettingsCompactLayout(const SettingsControls* state);
+void ApplySettingsComboMetrics(HWND control, UINT dpi);
+// Available client size in physical pixels (non-client chrome excluded).
+void FitSettingsClientArea(SettingsControls* state, SIZE available, UINT dpi);
+RECT FitSettingsDialogToWorkArea(SettingsControls* state, RECT work, UINT dpi,
+                                DWORD style, DWORD exStyle);
+void LayoutCompactSettingsControls(SettingsControls* state, UINT dpi);
+bool SettingsControlOnCurrentPage(HWND control);
 // Short, synchronous UI-only transaction. Never hold across modal dialogs or
 // driver work. Nested and hidden-window scopes do not re-enable a hidden owner.
 class SettingsVisualUpdate final {

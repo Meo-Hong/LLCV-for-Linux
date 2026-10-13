@@ -2,6 +2,7 @@
 
 #include "video/CaptureColorMetadata.h"
 #include "video/VideoColor.h"
+#include "video/MediaBufferPool.h"
 
 #include <dshow.h>
 #include <mfapi.h>
@@ -43,6 +44,8 @@ public:
     }
 
     void reset();
+    MediaBufferPool::Statistics inputAllocations() const { return inputBuffers_.Stats(); }
+    MediaBufferPool::Statistics outputAllocations() const { return outputBuffers_.Stats(); }
 
 private:
     static void SetColorAttribute(IMFMediaType* destination, REFGUID key,
@@ -61,6 +64,8 @@ private:
     IMFTransform* transform_ = nullptr;
     IMFMediaType* outputType_ = nullptr;
     MFT_OUTPUT_STREAM_INFO outputInfo_{};
+    MFT_INPUT_STREAM_INFO inputInfo_{};
+    MediaBufferPool inputBuffers_, outputBuffers_;
     DWORD bufferBytes_ = 0;
     LONG stride_ = 0;
     int width_ = 0;

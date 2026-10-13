@@ -1,7 +1,7 @@
 ﻿param(
-    [string]$Version = "2.0.2",
-    [string]$BuildDir = "..\build-v2020-release",
-    [string]$OutputDir = "outputs\v2.0.2"
+    [string]$Version = "2.0.4",
+    [string]$BuildDir = "..\build-v2040-release",
+    [string]$OutputDir = "outputs\v2.0.4"
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,20 +33,14 @@ if (Test-Path -LiteralPath $portable) {
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 New-Item -ItemType Directory -Force -Path $portable | Out-Null
 
-$files = @("README.md", "README.ko.md", "LICENSE", "실행안내.txt", "DEPENDENCIES.txt")
 Copy-Item -LiteralPath $exe -Destination $portable
-foreach ($file in $files) {
-    if (-not (Test-Path -LiteralPath (Join-Path $root $file) -PathType Leaf)) {
-        throw "Missing required package input: $file"
-    }
-    Copy-Item -LiteralPath (Join-Path $root $file) -Destination $portable
-}
+& (Join-Path $PSScriptRoot "Copy-PackageDocs.ps1") -SourceRoot $root -DestinationRoot $portable
 Copy-Item -LiteralPath (Join-Path $root "third_party\asio\LICENSE.txt") `
     -Destination (Join-Path $portable "ASIO-SDK-LICENSE.txt")
 Copy-Item -LiteralPath (Join-Path $root "third_party\asio\HOST-LICENSE.txt") `
     -Destination (Join-Path $portable "ASIO-HOST-LICENSE.txt")
 Copy-Item -LiteralPath (Join-Path $root "third_party\pretendard\LICENSE.txt") `
     -Destination (Join-Path $portable "PRETENDARD-LICENSE.txt")
-Copy-Item -LiteralPath (Join-Path $root "docs") -Destination $portable -Recurse
+& (Join-Path $PSScriptRoot "Test-PackageDocs.ps1") -PackageRoot $portable | Out-Null
 Compress-Archive -Path (Join-Path $portable "*") -DestinationPath $zip -CompressionLevel Optimal
 Write-Host "Portable package: $zip"

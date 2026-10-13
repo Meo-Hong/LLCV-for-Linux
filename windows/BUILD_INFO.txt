@@ -1,4 +1,35 @@
-LLCV v2.0.2 x64 (continued from the v0.14.2 rework)
+LLCV v2.0.4 x64 (continued from the v0.14.2 rework)
+
+v2.0.4 Optional 40 fps capture
+----------------------------------------------------------
+- Adds an off-by-default 40 fps driver request, retaining the normal FPS preference.
+- Requires driver acceptance and 40 fps active/connected formats; no silent rate fallback.
+- Leaves detected capability lists unchanged and verifies support only on Start.
+- Preserves accepted-candidate color metadata when an unlisted rate loses readback tags.
+- Keeps explicit connected-format metadata authoritative and normal capture behavior unchanged.
+- Adds bilingual capture guidance; LS appears only as an external-app usage example.
+- Adjusts English HDR chroma layout and isolates saved 40 fps settings from private VSR tests.
+- Extends settings, negotiation, metadata, and UI regression coverage.
+- Retains playback/audio defaults and existing installation/settings paths.
+- Does not establish support for every capture device or guarantee real-game/LS results.
+
+v2.0.3 Settings responsiveness and playback reliability
+-----------------------------------------------------
+- Fits settings to small/high-DPI work areas using section pages, without scrolling.
+- Caches background capability queries and preserves WASAPI/ASIO device and buffer choices.
+- Refreshes the retained WASAPI endpoint correctly after an ASIO inventory refresh.
+- Applies saved ASIO volume/mute from the first buffer and preserves preferences on fallback.
+- Reuses MJPEG buffers and video-device resources during output resizing.
+- Moves diagnostic message output off the audio path and bounds error-history storage.
+- Handles capture graph failure without repeated device rescans.
+- Adds default-on sleep prevention during playback, allowing display sleep in audio-only mode.
+- Releases power requests on completion/error and rearms only on user resume, including Modern Standby notifications.
+- Preserves final volume and window placement when stream completion overlaps UI message handling.
+- Preserves old settings on save failure and supports cancellable update checks.
+- Verifies account/path before optional uninstall data cleanup.
+- Packages linked documentation and validates its local file targets.
+- Retains existing paths, executable filename, presentation policy and audio defaults.
+- Automated checks do not establish physical-device or end-to-end latency guarantees.
 
 v2.0.2 LLCV branding, Exclusive refinements and audio efficiency
 --------------------------------------------------------------

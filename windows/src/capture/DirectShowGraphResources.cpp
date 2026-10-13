@@ -34,6 +34,7 @@ DirectShowGraphResources::~DirectShowGraphResources() {
 
 void DirectShowGraphResources::Reset() {
     if (control) control->Stop();
+    events.Reset();
     if (audioGrabber) audioGrabber->SetCallback(nullptr, 0);
     SafeRelease(audioCallback);
     if (videoGrabber) videoGrabber->SetCallback(nullptr, 0);

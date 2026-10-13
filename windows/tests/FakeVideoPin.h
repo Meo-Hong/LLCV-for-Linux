@@ -20,12 +20,20 @@ public:
         bool emptyFormat = false;
         REFERENCE_TIME minimumInterval = 0;
         REFERENCE_TIME maximumInterval = 0;
+        DWORD controlFlags = 0;
     };
     std::vector<Mode> modes;
     std::vector<int> attemptedRates;
     int rejectedRate = 0;
+    DWORD rejectedControlFlags = 0;
+    int formatQueries = 0;
     bool countFails = false;
     bool nullActiveFormat = false;
+    bool echoAcceptedFormat = false;
+    bool stripReadbackColor = false;
+    bool legacyReadback = false;
+    VIDEOINFOHEADER2 acceptedInfo{};
+    GUID acceptedSubtype{};
     ULONG references = 1;
 
     STDMETHODIMP QueryInterface(REFIID iid, void** object) override {
@@ -58,6 +66,7 @@ public:
         }
         *media = {}; *info = {};
         info->AvgTimePerFrame = mode.fps ? 10'000'000 / mode.fps : 0;
+        info->dwControlFlags = mode.controlFlags;
         info->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
         info->bmiHeader.biWidth = mode.width;
         info->bmiHeader.biHeight = mode.height;
@@ -88,12 +97,38 @@ public:
         const int fps = static_cast<int>((10'000'000 + info->AvgTimePerFrame / 2) /
                                          info->AvgTimePerFrame);
         attemptedRates.push_back(fps);
-        return fps == rejectedRate ? E_FAIL : S_OK;
+        const bool rejected = fps == rejectedRate || (rejectedControlFlags != 0 &&
+            info->dwControlFlags == rejectedControlFlags);
+        if (!rejected) { acceptedInfo = *info; acceptedSubtype = media->subtype; }
+        return rejected ? E_FAIL : S_OK;
     }
     STDMETHODIMP GetFormat(AM_MEDIA_TYPE** media) override {
+        ++formatQueries;
         if (nullActiveFormat) { *media = nullptr; return S_OK; }
         BYTE caps[sizeof(VIDEO_STREAM_CONFIG_CAPS)]{};
-        return GetStreamCaps(0, media, caps);
+        const HRESULT hr = GetStreamCaps(0, media, caps);
+        if (SUCCEEDED(hr) && echoAcceptedFormat && acceptedInfo.AvgTimePerFrame) {
+            *reinterpret_cast<VIDEOINFOHEADER2*>((*media)->pbFormat) = acceptedInfo;
+            (*media)->subtype = acceptedSubtype;
+        }
+        if (SUCCEEDED(hr) && (*media)->pbFormat) {
+            auto* info = reinterpret_cast<VIDEOINFOHEADER2*>((*media)->pbFormat);
+            if (stripReadbackColor) info->dwControlFlags = 0;
+            if (legacyReadback) {
+                // Model a driver that exposes color flags only in its caps.
+                VIDEOINFOHEADER legacy{};
+                legacy.rcSource = info->rcSource;
+                legacy.rcTarget = info->rcTarget;
+                legacy.dwBitRate = info->dwBitRate;
+                legacy.dwBitErrorRate = info->dwBitErrorRate;
+                legacy.AvgTimePerFrame = info->AvgTimePerFrame;
+                legacy.bmiHeader = info->bmiHeader;
+                std::memcpy((*media)->pbFormat, &legacy, sizeof(legacy));
+                (*media)->formattype = FORMAT_VideoInfo;
+                (*media)->cbFormat = sizeof(legacy);
+            }
+        }
+        return hr;
     }
     STDMETHODIMP Connect(IPin*, const AM_MEDIA_TYPE*) override { return E_NOTIMPL; }
     STDMETHODIMP ReceiveConnection(IPin*, const AM_MEDIA_TYPE*) override { return E_NOTIMPL; }

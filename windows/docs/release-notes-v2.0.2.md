@@ -2,6 +2,10 @@
 
 ### 한국어
 
+**2026-10-06 설치파일 갱신:** 시작 메뉴 바로가기를 자동으로 생성하고 설치 화면 정렬을
+개선했습니다. 바탕화면 바로가기는 선택 사항입니다. 앱 버전은 2.0.2로 유지하며,
+앱 실행파일과 포터블 ZIP은 변경하지 않았습니다. 기존 사용자는 다시 설치할 필요가 없습니다.
+
 앱 이름과 안내를 간결하게 정리하고, WASAPI Exclusive 사용 경험과 설치 편의성,
 오디오 처리 효율을 개선했습니다.
 
@@ -22,7 +26,7 @@
 
 #### 설치 편의
 
-- 설치 중 **시작 메뉴 바로가기**와 **바탕화면 바로가기**를 각각 선택할 수 있습니다.
+- **시작 메뉴 바로가기**는 자동으로 생성하며, **바탕화면 바로가기**는 설치 중 선택할 수 있습니다.
 - Windows 표시 배율에 맞춰 설치 선택 항목의 여백을 다듬었습니다.
 
 #### 처리 효율
@@ -40,6 +44,11 @@
 기능별 사용 조건은 [한국어 README](../README.ko.md)를 참고하세요.
 
 ### English
+
+**Installer refreshed on 2026-10-06:** restored automatic Start Menu shortcut creation
+and refined installer alignment. The desktop shortcut remains optional. The version
+remains 2.0.2; the app executable and portable ZIP are unchanged. Existing users do not
+need to reinstall.
 
 This update simplifies app naming and guidance, improves the WASAPI Exclusive
 experience and installation choices, and reduces unnecessary audio-processing work.
@@ -61,7 +70,7 @@ experience and installation choices, and reduces unnecessary audio-processing wo
 
 #### Installation
 
-- Choose **Start Menu** and **desktop shortcuts** individually during installation.
+- A **Start Menu shortcut** is created automatically; the **desktop shortcut** is optional during installation.
 - Improved task-list spacing across Windows display scales.
 
 #### Efficiency

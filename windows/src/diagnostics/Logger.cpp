@@ -204,7 +204,6 @@ bool Logger::OpenUniquePartLocked(size_t firstPart) {
             savedLogFile_ = file;
             currentPath_ = path;
             part_ = candidate;
-            ++managedFileCount_;
             return true;
         }
         const DWORD error = GetLastError();
@@ -294,7 +293,6 @@ bool Logger::PruneLocked(uint64_t reservedBytes, size_t reservedFiles) {
         return false;
     }
     managedTotalBytes_ = total;
-    managedFileCount_ = files.size();
     return true;
 }
 

@@ -104,6 +104,8 @@ struct AppSettings {
     VideoPreset videoPreset = VideoPreset::R1920x1080;
     VideoPixelFormat pixelFormat = VideoPixelFormat::Auto;
     int videoFrameRate = 0;
+    // Explicit driver request; leave the normal frame-rate preference intact.
+    bool capture40Fps = false;
     std::wstring captureDeviceId;
     // Empty means: use an audio pin on the video filter when available, then
     // try a clearly matching DirectShow audio-capture filter.
@@ -122,6 +124,7 @@ struct AppSettings {
     bool showDiagnosticConsole = false;
     bool skipStartupSettings = false;
     bool checkForUpdates = true;
+    bool preventSleep = true;
     bool audioOnly = false;
     // Client pixels, independent from video sizing preferences.
     int audioOnlyWidth = 380;

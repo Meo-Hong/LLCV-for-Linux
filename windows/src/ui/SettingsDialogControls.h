@@ -63,6 +63,11 @@ inline constexpr int IDC_SETTINGS_VSR_CAPTURE = 2051;
 inline constexpr int IDC_SETTINGS_VIDEO_REFRESH = 2052;
 inline constexpr int IDC_SETTINGS_THEME = 2053;
 inline constexpr int IDC_SETTINGS_ROUNDED_CORNERS = 2054;
+inline constexpr int IDC_SETTINGS_SECTION = 2055;
+inline constexpr int IDC_SETTINGS_PREVENT_SLEEP = 2056;
+inline constexpr int IDC_SETTINGS_CAPTURE_40 = 2057;
+inline constexpr int IDC_SETTINGS_CAPTURE_40_HELP = 2058;
+inline constexpr int IDC_SETTINGS_LS_GUIDE = 2059;
 } // namespace control_id
 
 // Borrowed for the duration of creation only; no settings/device list copies.
@@ -94,5 +99,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                                   HINSTANCE instance,
                                   const SettingsControlInitialValues& initial,
                                   const SettingsControlPopulation& population);
+void PopulateCaptureDevicePicker(HWND picker, std::span<const capture::DeviceInfo> devices,
+                                 const std::wstring& selected, bool audio, bool english);
 
 } // namespace llcv::settings_ui

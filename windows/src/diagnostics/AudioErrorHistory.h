@@ -2,7 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <deque>
+#include <array>
 #include <mutex>
 
 namespace llcv::diagnostics {
@@ -26,6 +26,9 @@ struct AudioPatternStats {
 
 class AudioErrorHistory {
 public:
+    static constexpr size_t kMaximumCapacity = 128;
+    // Diagnostic history is deliberately bounded even for an invalid caller.
+    // Storage is in-place: recording an audio error never allocates memory.
     explicit AudioErrorHistory(size_t capacity = 128) noexcept;
 
     void Record(const AudioErrorEvent& event);
@@ -37,7 +40,9 @@ public:
 private:
     const size_t capacity_;
     mutable std::mutex mutex_;
-    std::deque<AudioErrorEvent> events_;
+    std::array<AudioErrorEvent, kMaximumCapacity> events_{};
+    size_t next_ = 0;
+    size_t size_ = 0;
 };
 
 }  // namespace llcv::diagnostics

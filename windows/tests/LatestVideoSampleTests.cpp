@@ -15,6 +15,8 @@ static void Check(bool ok, const char* message) {
     if (!ok) { std::fprintf(stderr, "FAILED: %s\n", message); ++failures; }
 }
 
+#include "CaptureGraphEventsTests.inl"
+
 // A COM sample with explicit ownership accounting; no capture device is opened.
 class Sample final : public IMediaSample {
 public:
@@ -469,5 +471,6 @@ int main(int argc, char** argv) {
     TestPartialRunTeardown(true);
     TestPartialRunTeardown(false);
     TestDelayedFirstCallback();
+    TestCaptureGraphEvents();
     return failures ? 1 : 0;
 }

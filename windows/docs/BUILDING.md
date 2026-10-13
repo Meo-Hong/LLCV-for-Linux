@@ -1,6 +1,12 @@
+<img align="right" src="images/app-icon.png" width="40" height="40" alt="LLCV">
+
 # Building from source
 
-> [한국어](BUILDING.ko.md) · [Back to README](../README.md)
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](BUILDING.ko.md)
+
+[Requirements](#requirements) · [Release build](#release-build) · [Installer and portable ZIP](#installer-and-portable-zip)
+
+<br>
 
 ## Requirements
 
@@ -12,6 +18,8 @@
 The project uses Windows system APIs and libraries: Win32, DirectShow, D3D11,
 DXGI, Media Foundation for MJPEG decoding, and WASAPI. It does not
 require FFmpeg or a third-party codec pack.
+
+<br>
 
 ## Release build
 
@@ -33,10 +41,19 @@ build\Release\LowLatencyCaptureViewer.exe
 The release configuration uses the static MSVC runtime, so the packaged
 executable does not require a separate Visual C++ Redistributable installation.
 
+The 2.0.4 suite adds 40 fps settings restoration, format negotiation, color
+metadata, and bilingual UI coverage to existing settings-page, device-transition,
+save-failure, stream-completion, and power-lifetime checks. File-save tests need a temporary
+directory that permits writing and renaming files. Record tests skipped because
+a GPU or Windows feature is unavailable separately from passes. Power API tests
+do not put the PC to sleep and do not replace real sleep/resume validation.
+
+<br>
+
 ## Installer and portable ZIP
 
 After the Release build, run these commands from the repository root. These
-examples package v2.0.2 using the `build\Release` output above; the build-directory
+examples package v2.0.4 using the `build\Release` output above; the build-directory
 override is required because the release scripts normally use a versioned
 build directory.
 
@@ -45,11 +62,11 @@ chcp.com 65001 > $null
 & "C:\Program Files\Inno Setup 7\ISCC.exe" `
   "--define=BuildDir=..\build\Release" ".\installer\LowLatencyCaptureViewer.iss"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-v1.ps1 `
-  -Version 2.0.2 -BuildDir ..\build\Release -OutputDir outputs\v2.0.2
+  -Version 2.0.4 -BuildDir ..\build\Release -OutputDir outputs\v2.0.4
 ```
 
-The outputs are `outputs\v2.0.2\LowLatencyCaptureViewer_v2.0.2_Setup.exe`
-and `outputs\v2.0.2\LowLatencyCaptureViewer_v2.0.2_x64.zip`. When preparing
+The outputs are `outputs\v2.0.4\LowLatencyCaptureViewer_v2.0.4_Setup.exe`
+and `outputs\v2.0.4\LowLatencyCaptureViewer_v2.0.4_x64.zip`. When preparing
 another version, update the versioned release files first; changing a ZIP name
 does not update the executable. See the [release checklist](RELEASING.md).
 
@@ -67,3 +84,7 @@ Runtime settings and logs are stored per user under:
 
 An older `settings.ini` beside the executable is copied to that location on the
 first launch and is not deleted automatically.
+
+---
+
+[README](../README.md) · [Documentation](INDEX.md) · [한국어](BUILDING.ko.md)

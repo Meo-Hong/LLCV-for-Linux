@@ -12,6 +12,13 @@ namespace {
 constexpr UINT_PTR kSubclassId = 0x4c4c4354;
 // Shared application chrome; video composition is deliberately independent.
 constexpr int kCornerDiameterDip = 14;
+int NavigationItemHeight(const SettingsControls& controls, UINT dpi) {
+    const int normalHeight = SettingsPixels(44, dpi);
+    if (!SettingsCompactLayout(&controls)) return normalHeight;
+    RECT client{};
+    GetClientRect(controls.tabControl, &client);
+    return std::max(1, std::min(normalHeight, static_cast<int>(client.bottom) / kSettingsNavigationCount));
+}
 void Solid(HDC dc, const RECT& rect, COLORREF color) {
     SetDCBrushColor(dc, color);
     FillRect(dc, &rect, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
@@ -138,7 +145,8 @@ void SettingsTheme::RefreshControls(UINT layoutDpi) {
     dpi_ = layoutDpi ? layoutDpi : GetDpiForWindow(owner_);
     if (!dpi_) dpi_ = 96;
     EnumChildWindows(owner_, AttachChild, reinterpret_cast<LPARAM>(this));
-    if (controls_->tabControl) SendMessageW(controls_->tabControl, LB_SETITEMHEIGHT, 0, Pixels(44));
+    if (controls_->tabControl)
+        SendMessageW(controls_->tabControl, LB_SETITEMHEIGHT, 0, NavigationItemHeight(*controls_, dpi_));
     if (controls_->tooltipWindow) {
         SendMessageW(controls_->tooltipWindow, TTM_SETTIPBKCOLOR,
             highContrast_ ? GetSysColor(COLOR_INFOBK) : palette_.kControl, 0);
@@ -160,6 +168,7 @@ bool SettingsTheme::IsSecondary(HWND hwnd) const {
     const auto& c = *controls_;
     return hwnd == c.pageSubtitle || hwnd == c.videoCapabilityStatus || hwnd == c.captureAudioStatus ||
         hwnd == c.vsrStatus || hwnd == c.screenshotHelp || hwnd == c.skipStartupHint ||
+        hwnd == c.preventSleepHint ||
         hwnd == c.versionWatermark || hwnd == c.fullscreenCursorHint || hwnd == c.surround51Hint ||
         hwnd == c.relativeSizeWarning || hwnd == c.guideDiagnosticsText || hwnd == c.guideVideoHint || hwnd == c.updateText ||
         hwnd == c.updateStatus || hwnd == c.audioStatus;
@@ -176,7 +185,7 @@ bool SettingsTheme::IsCardControl(HWND hwnd) const {
         std::find(c.guideDescriptions.begin(), c.guideDescriptions.end(), hwnd) != c.guideDescriptions.end());
 }
 void SettingsTheme::PaintCards(HDC dc) {
-    const auto paintGroup = [&](std::initializer_list<HWND> children, int padding = 8) {
+    const auto paintGroup = [&](const std::vector<HWND>& children, int padding = 8) {
         RECT bounds{};
         bool found = false;
         for (HWND child : children) {
@@ -196,7 +205,12 @@ void SettingsTheme::PaintCards(HDC dc) {
     const auto& c = *controls_;
     paintGroup({c.vsrCheck, c.vsrGuideButton, c.vsrCaptureLabel, c.vsrCaptureCombo, c.vsrStatus});
     paintGroup({c.screenshotTitle, c.screenshotClipboardCheck, c.screenshotFolderButton, c.screenshotHelp});
-    paintGroup({c.guideShortcutsTitle, c.guideVideoHint}, 20);
+    if (SettingsCompactLayout(&c)) {
+        std::vector<HWND> shortcuts{c.guideVideoHint};
+        shortcuts.insert(shortcuts.end(),c.guideKeys.begin(),c.guideKeys.end());
+        shortcuts.insert(shortcuts.end(),c.guideDescriptions.begin(),c.guideDescriptions.end());
+        paintGroup(shortcuts);
+    } else paintGroup({c.guideShortcutsTitle, c.guideVideoHint}, 20);
     // Read-only keycaps: decoration is not a button or a keyboard-focus target.
     for (HWND key : c.guideKeys) {
         if (!key || !(GetWindowLongPtrW(key, GWL_STYLE) & WS_VISIBLE)) continue;
@@ -210,11 +224,11 @@ void SettingsTheme::PaintBackground(HDC dc) {
     RECT client{}; GetClientRect(owner_, &client);
     FillRect(dc, &client, background_);
     if (highContrast_) return;
-    RECT sidebar = client; sidebar.right = std::min(client.right, LONG(Pixels(kSettingsSidebarWidthDip)));
+    RECT sidebar = client; sidebar.right = std::min(client.right, LONG(Pixels(controls_->sidebarWidthDip)));
     FillRect(dc, &sidebar, sidebar_);
     Line(dc, sidebar.right, 0, sidebar.right, client.bottom, palette_.kCardEdge);
     // The footer is constant across tabs; the content itself stays uncluttered.
-    const int footer = Pixels(kSettingsFooterTopDip);
+    const int footer = Pixels(controls_->footerTopDip);
     if (client.bottom > footer) Line(dc, sidebar.right, footer, client.right, footer, palette_.kCardEdge);
     PaintCards(dc);
 }
@@ -526,7 +540,8 @@ bool SettingsTheme::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, LR
         UpdateSystemTheme(); RefreshControls(); break;
     case WM_DPICHANGED:
         dpi_ = HIWORD(wParam) ? HIWORD(wParam) : 96;
-        if (controls_->tabControl) SendMessageW(controls_->tabControl, LB_SETITEMHEIGHT, 0, Pixels(44));
+        if (controls_->tabControl)
+            SendMessageW(controls_->tabControl, LB_SETITEMHEIGHT, 0, NavigationItemHeight(*controls_, dpi_));
         break;
     case WM_NCDESTROY:
         Detach(); break;

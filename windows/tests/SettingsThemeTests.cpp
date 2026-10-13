@@ -360,7 +360,7 @@ void CreateActualContents(TestWindow& state, HWND hwnd, bool english, UINT dpi, 
         settings.allowVolumeBoost = true;
         settings.consoleSurround51 = true;
         settings.captureDeviceId = L"sample-capture";
-        const SettingsControlInitialValues initial{settings, english, asioAvailable, L"v1.3.1 · Preview",
+        const SettingsControlInitialValues initial{settings, english, asioAvailable, L"v2.0.4 · Preview",
             VideoPreset::R1920x1080, devices, devices, presets, pcm, monitors};
         SettingsControlPopulation population{
             &state.controls,
@@ -425,6 +425,7 @@ void CheckActualTabOrder() {
                         c.hdrChromaCombo, c.hdrChromaHelp});
                 if (format == VideoPixelFormat::Mjpeg)
                     expected.insert(expected.end(), {c.mjpegColorCombo, c.mjpegColorHelp});
+                expected.insert(expected.end(), {c.capture40Check, c.capture40Help});
                 expected.insert(expected.end(), {c.presentationCombo, c.presentationHelp,
                     c.displayMonitorCombo, c.pixelCheck});
                 expected.push_back(c.scalingCombo); // fixture enables VSR; lock is display-size only
@@ -444,11 +445,11 @@ void CheckActualTabOrder() {
                     c.roundedCornersCheck, c.windowSnapCheck, c.fullscreenCursorCombo});
                 break;
             case SettingsTab::GuideDiagnostics:
-                expected.insert(expected.end(), {c.saveLogCheck, c.showConsoleCheck, c.guideLogFolderButton});
+                expected.insert(expected.end(), {c.saveLogCheck, c.showConsoleCheck, c.guideLogFolderButton, c.guideLsButton});
                 break;
             case SettingsTab::Updates:
                 expected.insert(expected.end(), {c.languageCombo, c.themeCombo, c.skipStartupCheck,
-                    c.checkForUpdatesCheck, c.updateNowButton});
+                    c.preventSleepCheck, c.checkForUpdatesCheck, c.updateNowButton});
                 break;
             }
             expected.insert(expected.end(), {c.startButton, c.cancelButton});
@@ -827,6 +828,83 @@ void CheckComboRows() {
         DrainNativeMessages();
     }
 }
+void CheckCompactNavigationTheme() {
+    for (UINT dpi : {192u, 288u}) for (bool english : {false, true}) {
+        TestWindow state;
+        auto& c = state.controls;
+        FitSettingsClientArea(&c, {SettingsPixels(627,dpi),SettingsPixels(276,dpi)}, dpi);
+        HWND hwnd = CreateWindowW(L"LLCV.SettingsTheme.Tests", L"Offscreen short-sidebar test",
+            WS_POPUP | WS_CLIPCHILDREN, -32000, -32000,
+            SettingsPixels(c.clientWidthDip,dpi), SettingsPixels(c.clientHeightDip,dpi),
+            nullptr,nullptr,GetModuleHandleW(nullptr),&state);
+        Check(hwnd != nullptr, "create short-sidebar theme fixture");
+        CreateActualContents(state,hwnd,english,dpi,true);
+        const auto font = SendMessageW(c.tabControl,WM_GETFONT,0,0);
+        for (bool light : {false,true}) {
+            SendMessageW(c.themeCombo,CB_SETCURSEL,light ? 1 : 0,0);
+            SendMessageW(hwnd,WM_COMMAND,MAKEWPARAM(2053,CBN_SELCHANGE),reinterpret_cast<LPARAM>(c.themeCombo));
+            state.theme.RefreshControls(dpi);
+            LRESULT result = 0;
+            state.theme.HandleMessage(WM_DPICHANGED,MAKEWPARAM(dpi,dpi),0,result);
+            RECT bounds{}; GetClientRect(c.tabControl,&bounds);
+            for (int row=0;row<kSettingsNavigationCount;++row) {
+                RECT item{};
+                Check(SendMessageW(c.tabControl,LB_GETITEMRECT,row,reinterpret_cast<LPARAM>(&item)) != LB_ERR &&
+                      item.top >= 0 && item.bottom <= bounds.bottom,
+                      "theme refresh and DPI handling keep every compact navigation row visible");
+            }
+            RECT navigation{}, watermark{}, overlap{};
+            GetWindowRect(c.tabControl,&navigation); GetWindowRect(c.versionWatermark,&watermark);
+            Check(!IntersectRect(&overlap,&navigation,&watermark), "compact navigation stays above version");
+            Check(SendMessageW(c.tabControl,WM_GETFONT,0,0) == font, "compact theme keeps original font");
+            Check(!(GetWindowLongPtrW(c.tabControl,GWL_STYLE) & (WS_VSCROLL|WS_HSCROLL)),
+                  "compact navigation does not add scrollbars");
+        }
+        FitSettingsClientArea(&c,{2000,1400},96);
+        LayoutSettingsControls(&c,96); state.theme.RefreshControls(96);
+        Check(SendMessageW(c.tabControl,LB_GETITEMHEIGHT,0,0) == 44,
+              "normal navigation spacing is restored after compact mode");
+        DestroyWindow(hwnd);
+        for (HFONT item : c.uiFonts) DeleteObject(item);
+        DrainNativeMessages();
+    }
+}
+void CompactSnapshots(const wchar_t* directory, bool shortWorkArea = false) {
+    using namespace llcv::settings;
+    const UINT dpi=shortWorkArea ? 192 : 144;
+    for(bool light:{false,true}) for(bool english:{false,true}) {
+        TestWindow state;
+        FitSettingsClientArea(&state.controls,shortWorkArea ? SIZE{1254,552} : SIZE{1280,680},dpi);
+        HWND hwnd=CreateWindowW(L"LLCV.SettingsTheme.Tests",L"Offscreen compact settings",
+            WS_POPUP|WS_CLIPCHILDREN,-32000,-32000,
+            SettingsPixels(state.controls.clientWidthDip,dpi),SettingsPixels(state.controls.clientHeightDip,dpi),
+            nullptr,nullptr,GetModuleHandleW(nullptr),&state);
+        Check(hwnd!=nullptr,"create compact snapshot fixture");
+        CreateActualContents(state,hwnd,english,dpi,true);
+        auto& c=state.controls;
+        SendMessageW(c.themeCombo,CB_SETCURSEL,light?1:0,0);
+        SendMessageW(hwnd,WM_COMMAND,MAKEWPARAM(2053,CBN_SELCHANGE),reinterpret_cast<LPARAM>(c.themeCombo));
+        state.theme.RefreshControls(dpi);
+        for(int tab=0;tab<kSettingsNavigationCount;++tab) {
+            c.activeTab=SettingsTabFromNavigationIndex(tab);
+            SendMessageW(c.tabControl,LB_SETCURSEL,tab,0);
+            UpdateAdvancedControlVisibility(&c,false,VideoPixelFormat::Nv12);
+            const int pages=static_cast<int>(c.compactPageNames.size());
+            for(int page=0;page<pages;++page) {
+                c.compactPages[tab]=page;
+                UpdateAdvancedControlVisibility(&c,false,VideoPixelFormat::Nv12);
+                SetSettingsControlVisible(c.captureAudioDeviceCombo,tab==0);
+                SetSettingsControlVisible(c.captureAudioStatus,false);
+                wchar_t name[100]{};
+                swprintf_s(name,L"compact-%s-%s-tab%d-page%d.bmp",light?L"light":L"dark",english?L"en":L"ko",tab,page);
+                SaveSnapshot(hwnd,(std::wstring(directory)+L"/"+name).c_str());
+            }
+        }
+        DestroyWindow(hwnd);
+        for(HFONT font:c.uiFonts) DeleteObject(font);
+    }
+}
+
 void ActualSnapshots(const wchar_t* directory) {
     using namespace llcv::settings;
     for (bool light : {false, true}) for (bool english : {false, true}) for (UINT dpi : {96u, 120u, 144u, 192u}) {
@@ -963,6 +1041,13 @@ int wmain(int argc, wchar_t** argv) {
     }
     // A fast design-only path; the normal invocation and --screenshots still
     // exercise every native input/state assertion and all 32 lifecycle cycles.
+    if (argc == 3 && (std::wcscmp(argv[1], L"--compact-screenshots-only") == 0 ||
+                     std::wcscmp(argv[1], L"--compact-edge-screenshots-only") == 0)) {
+        CompactSnapshots(argv[2],std::wcscmp(argv[1], L"--compact-edge-screenshots-only") == 0);
+        UnregisterClassW(wc.lpszClassName,wc.hInstance);
+        std::puts("Compact native offscreen snapshots saved.");
+        return 0;
+    }
     if (argc == 3 && std::wcscmp(argv[1], L"--screenshots-only") == 0) {
         ActualSnapshots(argv[2]);
         UnregisterClassW(wc.lpszClassName, wc.hInstance);
@@ -973,6 +1058,7 @@ int wmain(int argc, wchar_t** argv) {
     CheckDeferredTransitions();
     CheckDisabledLabelPixels();
     CheckComboRows();
+    CheckCompactNavigationTheme();
     PrintResourceDiagnostics("after-tab-order", 0);
     if (argc == 2 && std::wcscmp(argv[1], L"--tab-order") == 0) {
         UnregisterClassW(wc.lpszClassName, wc.hInstance);

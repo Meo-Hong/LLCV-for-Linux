@@ -13,6 +13,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <cwchar>
+#include <set>
+#include <utility>
 
 using namespace llcv::settings_ui;
 using llcv::settings::VideoPixelFormat;
@@ -27,6 +29,9 @@ static LRESULT CALLBACK CountEnableTransitions(HWND hwnd, UINT message, WPARAM w
     return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 static constexpr Member kMembers[] = {
+    {&SettingsControls::capture40Check, "capture40Check"},
+    {&SettingsControls::capture40Help, "capture40Help"},
+    {&SettingsControls::guideLsButton, "guideLsButton"},
     {&SettingsControls::videoRefreshButton, "videoRefreshButton"},
     {&SettingsControls::brandLabel, "brandLabel"},
     {&SettingsControls::pageTitle, "pageTitle"},
@@ -123,6 +128,8 @@ static constexpr Member kMembers[] = {
     {&SettingsControls::showConsoleCheck, "showConsoleCheck"},
     {&SettingsControls::skipStartupCheck, "skipStartupCheck"},
     {&SettingsControls::skipStartupHint, "skipStartupHint"},
+    {&SettingsControls::preventSleepCheck, "preventSleepCheck"},
+    {&SettingsControls::preventSleepHint, "preventSleepHint"},
     {&SettingsControls::checkForUpdatesCheck, "checkForUpdatesCheck"},
     {&SettingsControls::versionWatermark, "versionWatermark"},
     {&SettingsControls::startButton, "startButton"},
@@ -142,7 +149,14 @@ static constexpr Geometry kGeometry[] = {
     {&SettingsControls::pageSubtitle, "pageSubtitle", 184, 66, 66, 792, 24},
     {&SettingsControls::languageCombo, "languageCombo", 184, 164, 164, 376, 30},
     {&SettingsControls::themeCombo, "themeCombo", 600, 164, 164, 376, 30},
-    {&SettingsControls::skipStartupCheck, "skipStartupCheck", 184, 212, 212, 760, 32},
+    {&SettingsControls::skipStartupCheck, "skipStartupCheck", 184, 212, 212, 376, 32},
+    {&SettingsControls::preventSleepCheck, "preventSleepCheck", 600, 212, 212, 376, 32},
+    {&SettingsControls::skipStartupHint, "skipStartupHint", 212, 252, 252, 348, 56},
+    {&SettingsControls::preventSleepHint, "preventSleepHint", 628, 252, 252, 348, 56},
+    {&SettingsControls::updateTitle, "updateTitle", 184, 344, 344, 792, 24},
+    {&SettingsControls::updateText, "updateText", 184, 376, 376, 730, 44},
+    {&SettingsControls::checkForUpdatesCheck, "checkForUpdatesCheck", 184, 432, 432, 760, 32},
+    {&SettingsControls::updateStatus, "updateStatus", 184, 520, 520, 792, 48},
     {&SettingsControls::versionWatermark, "versionWatermark", 10, 608, 608, 132, 20},
     {&SettingsControls::startButton, "startButton", 762, 602, 602, 102, 34},
     {&SettingsControls::cancelButton, "cancelButton", 876, 602, 602, 100, 34},
@@ -158,7 +172,10 @@ static constexpr Geometry kGeometry[] = {
     {&SettingsControls::frameRateCombo, "frameRateCombo", 380, 292, 292, 180, 30},
     {&SettingsControls::pixelFormatCombo, "pixelFormatCombo", 184, 356, 356, 376, 30},
     {&SettingsControls::videoCapabilityStatus, "videoCapabilityStatus", 184, 392, 392, 376, 84},
-    {&SettingsControls::hdrChromaCombo, "hdrChromaCombo", 184, 552, 552, 344, 30},
+    {&SettingsControls::hdrChromaCombo, "hdrChromaCombo", 304, 520, 520, 224, 30},
+    {&SettingsControls::capture40Check, "capture40Check", 184, 554, 554, 344, 28},
+    {&SettingsControls::capture40Help, "capture40Help", 536, 556, 556, 24, 24},
+    {&SettingsControls::guideLsButton, "guideLsButton", 600, 360, 360, 376, 32},
     {&SettingsControls::vsrCheck, "vsrCheck", 600, 376, 376, 264, 32},
     {&SettingsControls::vsrGuideButton, "vsrGuideButton", 876, 376, 376, 100, 32},
     {&SettingsControls::vsrCaptureCombo, "vsrCaptureCombo", 786, 412, 412, 190, 30},
@@ -177,7 +194,7 @@ static constexpr Geometry kGeometry[] = {
     {&SettingsControls::saveLogCheck, "saveLogCheck", 600, 208, 208, 376, 32},
     {&SettingsControls::showConsoleCheck, "showConsoleCheck", 600, 248, 248, 376, 32},
     {&SettingsControls::guideLogFolderButton, "guideLogFolderButton", 600, 296, 296, 185, 32},
-    {&SettingsControls::updateNowButton, "updateNowButton", 184, 456, 456, 185, 32},
+    {&SettingsControls::updateNowButton, "updateNowButton", 184, 476, 476, 185, 32},
 };
 static RECT ClientRectOf(HWND parent, HWND child) {
     RECT r{}; Check(GetWindowRect(child, &r) != FALSE, "read control rectangle");
@@ -191,6 +208,18 @@ static void ExpectVisible(HWND hwnd, bool visible) {
 }
 
 static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
+    const RECT startup = ClientRectOf(parent, state.skipStartupCheck);
+    const RECT power = ClientRectOf(parent, state.preventSleepCheck);
+    const RECT hint = ClientRectOf(parent, state.preventSleepHint);
+    const RECT updates = ClientRectOf(parent, state.updateTitle);
+    const RECT status = ClientRectOf(parent, state.updateStatus);
+    Check(startup.top == power.top && startup.right < power.left,
+          "startup and sleep options share a row without overlap");
+    Check(hint.top >= power.bottom + SettingsPixels(8, dpi) &&
+          updates.top >= hint.bottom + SettingsPixels(24, dpi),
+          "sleep hint and update section retain spacing");
+    Check(status.bottom < SettingsPixels(state.footerTopDip, dpi),
+          "update status remains above the footer");
     const HWND centered[][2] = {
         {state.videoCaptureSection, state.videoRefreshButton},
         {state.vsrCaptureLabel, state.vsrCaptureCombo},
@@ -232,7 +261,11 @@ static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
               (CBS_OWNERDRAWFIXED | CBS_HASSTRINGS), "all dropdown rows use centered paint with native strings");
         const RECT label = ClientRectOf(parent, pair.label);
         const RECT field = ClientRectOf(parent, pair.field);
-        Check(field.left == label.left && field.top - label.bottom == SettingsPixels(4, dpi),
+        if (pair.field == state.hdrChromaCombo) {
+            Check(field.left-label.right == SettingsPixels(8,dpi) &&
+                label.top-field.top == SettingsPixels(4,dpi),
+                "HDR inline label remains aligned with the field above 40fps");
+        } else Check(field.left == label.left && field.top - label.bottom == SettingsPixels(4, dpi),
               "labels align with their fields across a consistent four-DIP gap");
         if (field.bottom - field.top != SettingsPixels(30, dpi)) {
             wchar_t name[128]{};
@@ -369,6 +402,40 @@ static void CheckCaptionFits(HWND control, const char* name, UINT dpi,
     }
 }
 
+static void CheckHdrChromaChoicesFit(SettingsControls& state, UINT dpi, bool english) {
+    const HWND combo = state.hdrChromaCombo;
+    const LRESULT selected = SendMessageW(combo, CB_GETCURSEL, 0, 0);
+    const LRESULT count = SendMessageW(combo, CB_GETCOUNT, 0, 0);
+    Check(count == 3, "measure every actual HDR chroma choice");
+    RECT client{}; GetClientRect(combo, &client);
+    // Match SettingsTheme::PaintControl's separately rounded 11/31-DIP
+    // insets, not the expanded list width or the full closed control width.
+    const int availableWidth = client.right - SettingsPixels(11, dpi) - SettingsPixels(31, dpi);
+    HDC dc = GetDC(combo);
+    const auto previous = SelectObject(dc,
+        reinterpret_cast<HFONT>(SendMessageW(combo, WM_GETFONT, 0, 0)));
+    for (LRESULT index = 0; index < count; ++index) {
+        Check(SendMessageW(combo, CB_SETCURSEL, index, 0) != CB_ERR,
+              "select every HDR caption in the closed field");
+        wchar_t caption[256]{};
+        Check(GetWindowTextW(combo, caption, ARRAYSIZE(caption)) > 0,
+              "read actual selected HDR caption");
+        SIZE measured{};
+        Check(GetTextExtentPoint32W(dc, caption, static_cast<int>(std::wcslen(caption)), &measured) != FALSE,
+              "measure HDR caption using the actual control font");
+        if (measured.cx > availableWidth || measured.cy > client.bottom)
+            std::fwprintf(stderr, L"HDR choice clipped: %ls lang=%ls dpi=%u needed=%ldx%ld available=%dx%ld\n",
+                caption, english ? L"en" : L"ko", dpi, measured.cx, measured.cy, availableWidth, client.bottom);
+        Check(measured.cx <= availableWidth && measured.cy <= client.bottom,
+              "every HDR choice fits the closed field with theme padding");
+    }
+    SelectObject(dc, previous); ReleaseDC(combo, dc);
+    SendMessageW(combo, CB_SETCURSEL, selected, 0);
+    Check(SendMessageW(combo, CB_GETCURSEL, 0, 0) == selected,
+          "caption measurements preserve the user's HDR selection");
+    CheckCaptionFits(state.hdrChromaLabel, "HDR chroma label", dpi, english, 0, false);
+}
+
 static void CheckAllCaptionsFit(SettingsControls& state, UINT dpi, bool english) {
     for (const auto& entry : kMembers) {
         const HWND control = state.*entry.handle;
@@ -435,6 +502,26 @@ static void CheckAllCaptionsFit(SettingsControls& state, UINT dpi, bool english)
 }
 static void TestHelpText() {
     for (bool english : {false, true}) {
+        const auto* ls = SettingsHelpText(SettingsHelpTopic::Capture40, english);
+        const auto* caution = std::wcsstr(ls, english ? L"Keep in mind" : L"주의사항");
+        const auto* example = std::wcsstr(ls, english ? L"Example: Lossless Scaling" : L"활용 예시: Lossless Scaling");
+        Check(std::wcsstr(ls, english ? L"40 fps capture" : L"40fps 캡처") == ls &&
+            std::wcsstr(ls, english ? L"Leave off for normal viewing" : L"일반적인 시청에는 끈 채") &&
+            caution && example && caution < example,
+            "capture behavior and cautions precede the optional external-app example");
+        Check(std::wcsstr(ls,L"Lossless Scaling") && std::wcsstr(ls,L"VRR") &&
+            std::wcsstr(ls,english ? L"Start" : L"시작") &&
+            std::wcsstr(ls,english ? L"latency" : L"지연") &&
+            std::wcsstr(ls,english ? L"LS 3x" : L"LS 3배"),
+            "short 40fps help retains startup validation, LS example and caveats");
+        Check(std::wcsstr(ls, english ? L"Assumes steady 40 fps" : L"40fps 유지 시") &&
+            std::wcsstr(ls, english ? L"At 30–40 fps" : L"30~40fps로 흔들리면") &&
+            std::wcsstr(ls, english ? L"stutter may persist or become more noticeable with LS" :
+                L"LS를 써도 끊김이 남거나 더 두드러질 수 있습니다"),
+            "LS example warns that variable game FPS can retain or emphasize stutter");
+        Check(std::wcslen(ls) <= (english ? 550u : 350u) &&
+            std::wcsstr(ls,L"\n\n") && std::wcsstr(ls,L"•"),
+            "40fps popup stays brief with separated sections and short bullets");
         const wchar_t* guide = llcv::ui_text::VsrSetupGuide(english);
         Check(std::wcsstr(guide,L"NV12/YUY2") && std::wcsstr(guide,L"MJPEG"),
             "VSR guide includes both raw SDR formats and decoded MJPEG");
@@ -599,9 +686,13 @@ static void TestActualControlCreation() {
     {&SettingsControls::languageCombo, 2024},
     {&SettingsControls::themeCombo, 2053},
     {&SettingsControls::skipStartupCheck, 2028},
+    {&SettingsControls::preventSleepCheck, 2056},
     {&SettingsControls::checkForUpdatesCheck, 2035},
     {&SettingsControls::guideLogFolderButton, 2039},
     {&SettingsControls::screenshotClipboardCheck, 2047},
+    {&SettingsControls::capture40Check, 2057},
+    {&SettingsControls::capture40Help, 2058},
+    {&SettingsControls::guideLsButton, 2059},
     {&SettingsControls::screenshotFolderButton, 2048},
     {&SettingsControls::updateNowButton, 2038},
     {&SettingsControls::presentationCombo, 2009},
@@ -665,11 +756,13 @@ static void TestActualControlCreation() {
         settings.consoleSurround51 = profile % 2 != 0;
         settings.saveLog = !settings.borderlessWindow;
         settings.screenshotClipboard = profile % 2 != 0;
+        settings.capture40Fps = profile % 2 != 0;
         settings.vsrEnabled = profile % 2 != 0;
         settings.vsrCapturePreset = presets[(profile + 1) % 4].preset;
         settings.showDiagnosticConsole = !settings.windowSnap;
         settings.skipStartupSettings = settings.allowVolumeBoost;
         settings.checkForUpdates = settings.pixelPerfect;
+        settings.preventSleep = settings.allowVolumeBoost;
         settings.captureDeviceId = devices[profile % 2].id;
         settings.captureAudioDeviceId = devices[1 - profile % 2].id;
         const bool available = (profile & 1) != 0;
@@ -740,15 +833,20 @@ static void TestActualControlCreation() {
             {state.surround51Check, settings.consoleSurround51},
             {state.saveLogCheck, settings.saveLog},
             {state.screenshotClipboardCheck, settings.screenshotClipboard},
+            {state.capture40Check, settings.capture40Fps},
             {state.showConsoleCheck, settings.showDiagnosticConsole},
             {state.skipStartupCheck, settings.skipStartupSettings},
             {state.checkForUpdatesCheck, settings.checkForUpdates},
+            {state.preventSleepCheck, settings.preventSleep},
         };
         for (const auto& item : checks)
             Check((SendMessageW(item.handle, BM_GETCHECK, 0, 0) == BST_CHECKED) == item.expected, "initial checkbox value");
         wchar_t caption[512]{};
         GetWindowTextW(state.startButton, caption, 512);
         Check(std::wcscmp(caption, english ? L"Start" : L"시작") == 0, "factory language is explicit");
+        GetWindowTextW(state.guideLsButton, caption, 512);
+        Check(std::wcscmp(caption, english ? L"40 fps capture guide" : L"40fps 캡처 안내") == 0,
+              "capture guide caption does not imply LS integration");
         GetWindowTextW(state.updateTitle, caption, 512);
         Check(std::wcsstr(caption, L"vTEST") != nullptr, "explicit version label");
         GetWindowTextW(state.fullscreenCursorHint, caption, 512);
@@ -767,11 +865,23 @@ static void TestActualControlCreation() {
             ? L"Console 5.1: output period is negotiated on start; actual value in Tab diagnostics."
             : L"콘솔 5.1: 출력 주기는 시작 시 협상 · 실제 값은 Tab 진단에서 확인");
         const SettingsTab initialTab = state.activeTab;
+        state.activeTab = SettingsTab::VideoWindow;
+        const LRESULT savedFrameChoice = selection(state.frameRateCombo);
+        for (int toggle = 0; toggle < 10; ++toggle) {
+            const bool checked = toggle % 2 == 0;
+            SendMessageW(state.capture40Check, BM_SETCHECK, checked ? BST_CHECKED : BST_UNCHECKED, 0);
+            UpdateAdvancedControlVisibility(&state, false, VideoPixelFormat::Nv12);
+            Check((IsWindowEnabled(state.frameRateCombo) != FALSE) == !checked &&
+                selection(state.frameRateCombo) == savedFrameChoice,
+                "40fps toggles normal picker availability without changing its selection");
+        }
+        SendMessageW(state.capture40Check, BM_SETCHECK, settings.capture40Fps ? BST_CHECKED : BST_UNCHECKED, 0);
         for (UINT textDpi : {96u, 120u, 144u, 192u}) {
             ApplySettingsFont(&state, parent, textDpi);
             LayoutSettingsControls(&state, textDpi);
             CheckFontHierarchy(state, textDpi, english);
             CheckFieldMetrics(state, parent, textDpi);
+            CheckHdrChromaChoicesFit(state, textDpi, english);
             const auto savedVsrCheck = SendMessageW(state.vsrCheck, BM_GETCHECK, 0, 0);
             state.activeTab = SettingsTab::VideoWindow;
             for (bool unknown : {false, true}) {
@@ -865,10 +975,173 @@ static void TestActualControlCreation() {
     }
     std::puts("Actual control factory: 24 profiles, original IDs/settings/population order passed.");
 }
-int main() {
+static void TestCompactWorkAreas() {
+    using namespace llcv::settings;
+    const VideoPresetInfo presets[]={{VideoPreset::R1920x1080,1920,1080,60,L"1920 x 1080"}};
+    const int pcm[]={10,15,20,25,30};
+    const struct { RECT work; UINT dpi; } areas[]={
+        {{0,0,1920,1040},96},{{0,0,1366,728},120},{{-1920,0,0,1040},192},
+        {{0,0,1280,680},144},{{0,0,800,560},120},{{0,0,1366,728},192},
+        // A complete 128-DIP option cannot fit these roughly 96-DIP page
+        // bodies. Its explanation and all five navigation entries still must.
+        {{0,0,1280,624},192},{{0,0,1920,936},288}};
+    for(bool english:{false,true}) for(const auto& area:areas) {
+        SettingsControls state;
+        constexpr DWORD style=WS_CAPTION|WS_SYSMENU;
+        constexpr DWORD exStyle=WS_EX_DLGMODALFRAME;
+        RECT fitted=FitSettingsDialogToWorkArea(&state,area.work,area.dpi,style,exStyle);
+        Check(fitted.left>=area.work.left && fitted.top>=area.work.top &&
+            fitted.right<=area.work.right && fitted.bottom<=area.work.bottom,"settings outer frame fits work area at high DPI");
+        HWND parent=CreateWindowExW(exStyle,L"STATIC",L"Hidden compact fixture",style,
+            fitted.left,fitted.top,fitted.right-fitted.left,fitted.bottom-fitted.top,
+            nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+        Check(parent!=nullptr,"create compact fixture");
+        AppSettings settings; settings.audioMode=AudioMode::WasapiExclusive;
+        SettingsControlInitialValues initial{settings,english,true,L"vTEST",VideoPreset::R1920x1080,
+            {},{},presets,pcm,{}};
+        PopulationProbe probe{&state,GetCurrentThreadId()};
+        SettingsControlPopulation population{&probe,PopulationProbe::Output,PopulationProbe::Buffer,PopulationProbe::Pixel};
+        CreateSettingsDialogControls(&state,parent,GetModuleHandleW(nullptr),initial,population);
+        ApplySettingsFont(&state,parent,area.dpi);
+        const HFONT originalFont=reinterpret_cast<HFONT>(SendMessageW(state.audioLabel,WM_GETFONT,0,0));
+        const auto originalFonts=state.uiFonts;
+        SetWindowTextW(state.videoCapabilityStatus,english
+            ? L"Detected modes:\r\nNV12 240/144/120/100/90/60/50/30 fps\r\nYUY2 120/100/60/50/30 fps\r\nP010 60/50/30 fps\r\nMJPEG 240/144/120/100/90/60/50/30 fps"
+            : L"자동 인식:\r\nNV12 240/144/120/100/90/60/50/30 fps\r\nYUY2 120/100/60/50/30 fps\r\nP010 60/50/30 fps\r\nMJPEG 240/144/120/100/90/60/50/30 fps");
+        SendMessageW(state.pixelCheck,BM_SETCHECK,BST_CHECKED,0);
+        SendMessageW(state.relativeSizeCheck,BM_SETCHECK,BST_CHECKED,0);
+        std::set<HWND> seen;
+        for(int tab=0;tab<kSettingsNavigationCount;++tab) {
+            state.activeTab=SettingsTabFromNavigationIndex(tab);
+            for(const auto format:{VideoPixelFormat::Nv12,VideoPixelFormat::P010,VideoPixelFormat::Mjpeg}) {
+                SendMessageW(state.pixelFormatCombo,CB_SETITEMDATA,0,static_cast<LPARAM>(format));
+                LayoutSettingsControls(&state,area.dpi);
+                UpdateAdvancedControlVisibility(&state,true,format);
+                const int pages=SettingsCompactLayout(&state)?static_cast<int>(state.compactPageNames.size()):1;
+                for(int page=0;page<pages;++page) {
+                    state.compactPages[tab]=page;
+                    UpdateAdvancedControlVisibility(&state,true,format);
+                    // Capture audio visibility is intentionally controller-owned.
+                    SetSettingsControlVisible(state.captureAudioDeviceCombo,tab==0);
+                    SetSettingsControlVisible(state.captureAudioStatus,false);
+                    const int footer=SettingsPixels(state.footerTopDip,area.dpi);
+                    const int width=SettingsPixels(state.clientWidthDip,area.dpi);
+                    const int height=SettingsPixels(state.clientHeightDip,area.dpi);
+                    std::vector<RECT> contentRects;
+                    for(HWND child=GetWindow(parent,GW_CHILD);child;child=GetWindow(child,GW_HWNDNEXT)) {
+                        if(!Visible(child)) continue;
+                        const RECT rect=ClientRectOf(parent,child);
+                        Check(rect.left>=0 && rect.top>=0 && rect.right<=width+1 && rect.bottom<=height+1,
+                            "every visible control fits the client area without scrolling");
+                        if(child!=state.startButton && child!=state.cancelButton && child!=state.versionWatermark &&
+                            child!=state.tabControl) Check(rect.bottom<=footer,"content never overlaps footer buttons");
+                        if(SettingsCompactLayout(&state)) {
+                            for(const auto& previous:contentRects) {
+                                RECT intersection{};
+                                Check(!IntersectRect(&intersection,&previous,&rect),"compact controls never overlap one another");
+                            }
+                            contentRects.push_back(rect);
+                            wchar_t className[32]{}, caption[2048]{};
+                            GetClassNameW(child,className,32); GetWindowTextW(child,caption,2048);
+                            if(std::wcscmp(className,L"COMBOBOX")==0)
+                                Check(rect.bottom-rect.top==SettingsPixels(30,area.dpi),
+                                    "compact dropdown retains exact 30 DIP collapsed height after page changes");
+                            if(std::wcscmp(className,L"BUTTON")==0) {
+                                const auto buttonStyle=GetWindowLongPtrW(child,GWL_STYLE);
+                                const bool checkbox=(buttonStyle&BS_TYPEMASK)==BS_AUTOCHECKBOX;
+                                CheckCaptionFits(child,"compact button",area.dpi,english,
+                                    checkbox?27:14,checkbox&&(buttonStyle&BS_MULTILINE));
+                            }
+                            const auto staticType=GetWindowLongPtrW(child,GWL_STYLE)&SS_TYPEMASK;
+                            if(std::wcscmp(className,L"STATIC")==0 && caption[0] &&
+                                (staticType==SS_LEFT || staticType==SS_RIGHT || staticType==SS_CENTER || staticType==SS_LEFTNOWORDWRAP)) {
+                                HDC dc=GetDC(child);
+                                HGDIOBJ previous=SelectObject(dc,reinterpret_cast<HFONT>(SendMessageW(child,WM_GETFONT,0,0)));
+                                RECT text{0,0,rect.right-rect.left,0};
+                                DrawTextW(dc,caption,-1,&text,DT_CALCRECT|DT_NOPREFIX|
+                                    (staticType==SS_LEFTNOWORDWRAP?DT_SINGLELINE:DT_WORDBREAK));
+                                SelectObject(dc,previous); ReleaseDC(child,dc);
+                                if(text.bottom>rect.bottom-rect.top+1)
+                                    std::fwprintf(stderr,L"Clipped compact text: %s (%ld needed, %ld available)\n",caption,text.bottom,rect.bottom-rect.top);
+                                Check(text.bottom<=rect.bottom-rect.top+1,"compact labels and explanations retain all text");
+                            }
+                        }
+                        seen.insert(child);
+                    }
+                    Check(Visible(state.startButton)&&Visible(state.cancelButton),"action buttons always remain visible");
+                    if (Visible(state.hdrChromaCombo))
+                        CheckHdrChromaChoicesFit(state, area.dpi, english);
+                    if(SettingsCompactLayout(&state)) {
+                        // The sidebar itself can fit while its owner-drawn
+                        // rows are clipped or internally scrolled off-screen.
+                        RECT navClient{}; GetClientRect(state.tabControl,&navClient);
+                        Check(SendMessageW(state.tabControl,LB_GETTOPINDEX,0,0)==0,
+                            "all navigation options remain visible without scrolling");
+                        HDC dc=GetDC(state.tabControl);
+                        const auto previous=SelectObject(dc,
+                            reinterpret_cast<HFONT>(SendMessageW(state.tabControl,WM_GETFONT,0,0)));
+                        for(int row=0;row<kSettingsNavigationCount;++row) {
+                            RECT item{};
+                            Check(SendMessageW(state.tabControl,LB_GETITEMRECT,row,reinterpret_cast<LPARAM>(&item))!=LB_ERR &&
+                                item.top>=0 && item.bottom<=navClient.bottom,
+                                "every navigation row fits above the version watermark");
+                            wchar_t caption[256]{};
+                            SendMessageW(state.tabControl,LB_GETTEXT,row,reinterpret_cast<LPARAM>(caption));
+                            SIZE text{}; GetTextExtentPoint32W(dc,caption,static_cast<int>(wcslen(caption)),&text);
+                            Check(text.cx<=navClient.right-SettingsPixels(25,area.dpi) &&
+                                text.cy<=item.bottom-item.top-SettingsPixels(6,area.dpi),
+                                "compact sidebar captions fit with the original font and theme insets");
+                        }
+                        SelectObject(dc,previous); ReleaseDC(state.tabControl,dc);
+                        for(const auto& pair:{std::pair{state.captureDeviceLabel,state.captureDeviceCombo},
+                            std::pair{state.hdrChromaLabel,state.hdrChromaCombo},
+                            std::pair{state.mjpegColorLabel,state.mjpegColorCombo},
+                            std::pair{state.driftLabel,state.driftCombo},std::pair{state.pcmQueueLabel,state.pcmQueueCombo}})
+                            Check(Visible(pair.first)==Visible(pair.second),"pagination preserves complete labeled fields");
+                        if(Visible(state.surround51Hint)&&!Visible(state.surround51Check))
+                            Check(state.compactPageNames[page].find(L"5.1")!=std::wstring::npos,
+                                "standalone surround explanation retains its option context");
+                    }
+                }
+            }
+        }
+        for(HWND required:{state.captureDeviceCombo,state.captureAudioDeviceCombo,state.videoCombo,state.frameRateCombo,
+            state.pixelFormatCombo,state.forceHdr10Check,state.hdrChromaCombo,state.mjpegColorCombo,
+            state.presentationCombo,state.displayMonitorCombo,state.scalingCombo,state.pixelCheck,
+            state.vsrCheck,state.vsrCaptureCombo,state.screenshotClipboardCheck,state.screenshotFolderButton,
+            state.audioCombo,state.audioOutputCombo,state.bufferCombo,state.exclusiveTestButton,
+            state.volumeHudCombo,state.volumeBoostCheck,state.muteBackgroundCheck,state.audioOnlyCheck,state.surround51Check,
+            state.driftCombo,state.pcmQueueCombo,state.relativeSizeCheck,state.borderlessCheck,state.roundedCornersCheck,
+            state.windowSnapCheck,state.fullscreenCursorCombo,state.saveLogCheck,state.showConsoleCheck,state.guideLogFolderButton,
+            state.languageCombo,state.themeCombo,state.skipStartupCheck,state.preventSleepCheck,state.checkForUpdatesCheck,state.updateNowButton})
+            Check(seen.contains(required),"all settings remain reachable across compact section pages");
+        for(HWND description:{state.videoCapabilityStatus,state.screenshotTitle,state.screenshotHelp,
+            state.surround51Hint,state.fullscreenCursorHint,state.relativeSizeWarning,
+            state.guideVideoHint,state.guideDiagnosticsText,state.skipStartupHint,state.preventSleepHint,state.updateText,state.updateStatus})
+            Check(seen.contains(description),"all descriptions remain reachable across compact section pages");
+        Check(state.uiFonts==originalFonts,"pagination preserves the entire original font hierarchy");
+        Check(reinterpret_cast<HFONT>(SendMessageW(state.audioLabel,WM_GETFONT,0,0))==originalFont,
+            "compact layout does not shrink font for legibility");
+        Check(!(GetWindowLongPtrW(parent,GWL_STYLE)&(WS_VSCROLL|WS_HSCROLL)),"no scrollbar required");
+        FitSettingsClientArea(&state,{2000,1400},96);
+        LayoutSettingsControls(&state,96);
+        state.activeTab=SettingsTab::Updates;
+        UpdateAdvancedControlVisibility(&state,false,VideoPixelFormat::Nv12);
+        Check(!Visible(state.sectionNavigation)&&Visible(state.skipStartupCheck),"returning to large monitor restores normal layout");
+        DestroyWindow(parent);
+        for(HFONT font:state.uiFonts) DeleteObject(font);
+    }
+    std::puts("Compact work areas: 8 sizes/scales, Korean/English, every option, fixed font, no scroll passed.");
+}
+
+int main(int argc, char** argv) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     INITCOMMONCONTROLSEX init{sizeof(init), ICC_WIN95_CLASSES};
     Check(InitCommonControlsEx(&init) != FALSE, "initialize tooltip controls");
+    if(argc==2 && std::strcmp(argv[1],"--compact-only")==0) {
+        TestCompactWorkAreas();
+        return EXIT_SUCCESS;
+    }
     for (int i = 0; i < kSettingsNavigationCount; ++i)
         Check(SettingsNavigationIndex(SettingsTabFromNavigationIndex(i)) == i,
               "sidebar order maps one-to-one to stable page values");
@@ -877,6 +1150,7 @@ int main() {
           "invalid navigation safely selects video");
     TestTranslationBoundary();
     TestActualControlCreation();
+    TestCompactWorkAreas();
     HWND parent = CreateWindowExW(0, L"STATIC", L"Hidden settings view regression",
         WS_POPUP, 0, 0, 2000, 1400, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
     Check(parent != nullptr, "create hidden parent");
@@ -975,6 +1249,9 @@ int main() {
             ExpectVisible(state.roundedCornersCheck, tab == SettingsTab::Window);
             ExpectVisible(state.guideLogFolderButton, tab == SettingsTab::GuideDiagnostics);
             ExpectVisible(state.screenshotTitle, tab == SettingsTab::VideoWindow);
+            ExpectVisible(state.capture40Check, tab == SettingsTab::VideoWindow);
+            ExpectVisible(state.capture40Help, tab == SettingsTab::VideoWindow);
+            ExpectVisible(state.guideLsButton, tab == SettingsTab::GuideDiagnostics);
             ExpectVisible(state.vsrCheck, video);
             ExpectVisible(state.vsrGuideButton, video);
             ExpectVisible(state.vsrStatus, video);
@@ -995,7 +1272,8 @@ int main() {
                 }
             }
             ExpectVisible(state.updateNowButton, tab == SettingsTab::Updates);
-            for (HWND control : {state.languageCombo, state.themeLabel, state.themeCombo, state.skipStartupCheck, state.appPreferencesSection})
+            for (HWND control : {state.languageCombo, state.themeLabel, state.themeCombo, state.skipStartupCheck,
+                                 state.preventSleepCheck, state.preventSleepHint, state.appPreferencesSection})
                 ExpectVisible(control, tab == SettingsTab::Updates);
             for (HWND control : {state.brandLabel, state.pageTitle, state.pageSubtitle, state.versionWatermark,
                                  state.startButton, state.cancelButton}) ExpectVisible(control, true);

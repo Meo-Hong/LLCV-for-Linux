@@ -38,11 +38,16 @@ bool FindMatchingDirectShowColorMetadata(
     IPin* videoPin, VideoPixelFormat wantedFormat, int wantedWidth,
     int wantedHeight, int wantedFps, CaptureColorMetadata& metadata);
 
+// Optional color hints are cleared on entry and taken only from the accepted
+// candidate. Active/connected metadata must override these startup-only hints.
 HRESULT ConfigureVideoPin(
     IPin* videoPin, int wantedWidth, int wantedHeight, int wantedFps,
     VideoPixelFormat wantedFormat, DWORD& imageBytes, UINT32& stride,
     int& configuredFps, VideoPixelFormat& configuredFormat,
-    LogCallback logCallback);
+    LogCallback logCallback, bool request40Fps = false,
+    CaptureColorMetadata* acceptedCandidateColor = nullptr);
+// Strict timing check used at negotiation and after graph connection.
+bool Is40FpsMediaType(const AM_MEDIA_TYPE* mediaType);
 HRESULT GetActiveVideoPinFormat(IPin* videoPin, AM_MEDIA_TYPE** mediaType);
 std::vector<PixelFormatSupport> ProbePixelFormats(
     IPin* videoPin, int width, int height, HRESULT* queryStatus = nullptr,

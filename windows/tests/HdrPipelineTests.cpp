@@ -825,7 +825,10 @@ static int TestHdrVsr(bool paced = false) {
     return 0;
 }
 
+#include "RendererResizeTests.inl"
+
 int main(int argc, char** argv) {
+    if (argc == 2 && std::string(argv[1]) == "--resize") return TestRendererResize();
     if (argc == 2 && std::string(argv[1]) == "--vsr-hdr-paced") return TestHdrVsr(true);
     if (argc == 2 && std::string(argv[1]) == "--vsr-hdr") return TestHdrVsr();
     if (argc >= 2 && std::string(argv[1]) == "--osd-ui") return TestOverlayUi(argc >= 3 ? argv[2] : nullptr);

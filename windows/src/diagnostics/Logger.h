@@ -54,7 +54,6 @@ private:
     // Cached after open/rotation/pruning so ordinary diagnostic records do
     // not enumerate the log directory.
     uint64_t managedTotalBytes_ = 0;
-    size_t managedFileCount_ = 0;
     std::mutex mutex_;
 };
 
