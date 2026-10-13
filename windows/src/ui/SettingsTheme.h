@@ -34,7 +34,7 @@ private:
     void UpdateSystemTheme();
     void PaintBackground(HDC);
     void PaintControl(HWND, HDC, bool combo, bool hover);
-    void PaintDisabledLabel(HWND, HDC);
+    void PaintLabel(HWND, HDC);
     void PaintBrand(HWND, HDC);
     void PaintComboItem(const DRAWITEMSTRUCT&);
     void PaintNavigation(const DRAWITEMSTRUCT&);

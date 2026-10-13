@@ -1,4 +1,14 @@
-LLCV v2.0.4 x64 (continued from the v0.14.2 rework)
+LLCV v2.0.5 x64 (continued from the v0.14.2 rework)
+
+v2.0.5 Customizable keyboard shortcuts
+--------------------------------------
+- Edits all nine viewer shortcuts in Guide & logs, including fullscreen exit/app exit.
+- Accepts single keys and Ctrl/Alt/Shift combinations; rejects empty, duplicate and reserved bindings.
+- Restores all default bindings with one button and persists accepted settings.
+- Reflects configured keys in help, settings and OSD captions; expands key columns for long combinations.
+- Preserves native settings navigation and text editing when keys overlap.
+- Extends shortcut routing, persistence, reset, bilingual layout and repeat-key regression coverage.
+- Retains capture/render/audio paths, defaults and existing installation/settings paths.
 
 v2.0.4 Optional 40 fps capture
 ----------------------------------------------------------

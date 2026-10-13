@@ -196,9 +196,14 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
         break;
     case SettingsTab::GuideDiagnostics:
         pages.Group(text(L"키보드 단축키",L"Keyboard shortcuts"));
+        pages.Button(s->shortcutResetButton);
+        {
+        const auto metrics=MeasureShortcutLayout(s,dpi);
         for (size_t i=0;i<s->guideKeys.size();++i)
-            pages.Block(29,{{s->guideKeys[i],10,3,40,23},{s->guideDescriptions[i],72,0,width-72,29}});
-        pages.Text(s->guideVideoHint,36);
+            pages.Block(36,{{s->guideKeys[i],0,0,metrics.keyWidth,29},
+                {s->guideDescriptions[i],metrics.keyWidth+12,0,width-metrics.keyWidth-12,29}});
+        pages.Text(s->guideVideoHint,metrics.hintHeight);
+        }
         pages.Group(text(L"진단",L"Diagnostics"));
         pages.Text(s->guideDiagnosticsText,52);
         pages.Check(s->saveLogCheck);

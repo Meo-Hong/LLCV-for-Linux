@@ -6,6 +6,9 @@
 
 [Capture path](#capture-path) · [Mode detection](#mode-detection) · [NV12, YUY2, and MJPEG](#nv12-yuy2-and-mjpeg) · [Frame rate](#frame-rate) · [40 fps capture](#40-fps-capture) · [Presentation](#presentation) · [P010 HDR10](#p010-hdr10) · [Pixel-perfect and resizing](#pixel-perfect-and-resizing) · [Scaling and multi-monitor behavior](#scaling-and-multi-monitor-behavior)
 
+Keys in this guide are defaults. If you [change a shortcut](USAGE.md#changing-shortcuts),
+use its assigned key instead.
+
 <br>
 
 ## Capture path

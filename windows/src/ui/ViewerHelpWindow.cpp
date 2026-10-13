@@ -72,7 +72,8 @@ bool Window::CreateContent() {
         reinterpret_cast<HMENU>(100),GetModuleHandleW(nullptr),this);
     if (!body_) return false;
     auto add=[&](const wchar_t* ko,const wchar_t* en,Font font,Surface surface,bool muted=false) {
-        HWND child=CreateWindowW(L"STATIC",english_ ? en : ko,WS_CHILD|WS_VISIBLE|SS_LEFT|SS_NOPREFIX,
+        const auto caption=shortcuts::Expand(english_ ? en : ko,bindings_);
+        HWND child=CreateWindowW(L"STATIC",caption.c_str(),WS_CHILD|WS_VISIBLE|SS_LEFT|SS_NOPREFIX,
             0,0,1,1,body_,reinterpret_cast<HMENU>(INT_PTR(200+fields_.size())),nullptr,nullptr);
         fields_.push_back({child,font,surface,muted});
     };
@@ -96,7 +97,8 @@ bool Window::CreateContent() {
     add(L"저장 위치",L"Save location",Small,Card,true);
     add(L"사진 / LowLatencyCaptureViewer",L"Pictures / LowLatencyCaptureViewer",Small,Card);
     add(L"클립보드 복사: 영상 설정의 스크린샷",L"Clipboard copy: Screenshots in Video settings.",Small,Card,true);
-    footer_=CreateWindowW(L"STATIC",english_ ? L"Playback continues · F1 / Esc closes this guide" : L"재생은 계속됩니다 · F1 / Esc로 안내창 닫기",
+    const auto footer=shortcuts::Expand(english_ ? L"Playback continues · F1 / Esc closes this guide" : L"재생은 계속됩니다 · F1 / Esc로 안내창 닫기",bindings_);
+    footer_=CreateWindowW(L"STATIC",footer.c_str(),
         WS_CHILD|WS_VISIBLE|SS_NOPREFIX,0,0,1,1,window_,nullptr,nullptr,nullptr);
     close_=CreateWindowW(L"BUTTON",english_ ? L"Close" : L"닫기",WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_OWNERDRAW,
         0,0,1,1,window_,reinterpret_cast<HMENU>(IDCANCEL),nullptr,nullptr);
@@ -110,11 +112,19 @@ void Window::Layout() {
     const UINT dpi=GetDpiForWindow(window_);
     auto px=[&](int value) { return Pixels(value,dpi); };
     RECT root{}; GetClientRect(window_,&root);
-    const int footerHeight=px(64), margin=px(24), gap=px(16), padding=px(20);
-    MoveWindow(body_,0,0,root.right,std::max(1,int(root.bottom)-footerHeight),TRUE);
-    MoveWindow(footer_,margin,std::max(0,int(root.bottom)-px(43)),std::max(1,int(root.right)-px(166)),px(38),TRUE);
-    MoveWindow(close_,std::max(0,int(root.right)-px(124)),std::max(0,int(root.bottom)-px(48)),px(100),px(34),TRUE);
+    const int margin=px(24), gap=px(16), padding=px(20);
     HDC dc=GetDC(body_);
+    const auto footerFont=SelectObject(dc,fonts_[Small]);
+    wchar_t footerText[512]{}; GetWindowTextW(footer_,footerText,512);
+    RECT footerMeasure{0,0,std::max(1,int(root.right)-px(166)),0};
+    DrawTextW(dc,footerText,-1,&footerMeasure,DT_CALCRECT|DT_WORDBREAK|DT_NOPREFIX);
+    SelectObject(dc,footerFont);
+    const int footerTextHeight=std::max(px(38),int(footerMeasure.bottom));
+    const int footerHeight=footerTextHeight+px(26);
+    MoveWindow(body_,0,0,root.right,std::max(1,int(root.bottom)-footerHeight),TRUE);
+    MoveWindow(footer_,margin,std::max(0,int(root.bottom)-footerTextHeight-px(5)),
+        std::max(1,int(root.right)-px(166)),footerTextHeight,TRUE);
+    MoveWindow(close_,std::max(0,int(root.right)-px(124)),std::max(0,int(root.bottom)-px(48)),px(100),px(34),TRUE);
     // Showing/hiding the scrollbar changes the client width. Reflow until stable.
     for (int pass=0;pass<3;++pass) {
         RECT client{}; GetClientRect(body_,&client);
@@ -143,10 +153,22 @@ void Window::Layout() {
         const int rightWidth=columns ? width-leftWidth-gap : width;
         int y=top+padding;
         y+=field(KeyboardTitle,margin+padding,y,leftWidth-2*padding)+px(16);
+        int keyWidth=px(80);
+        const auto previousFont=SelectObject(dc,fonts_[Strong]);
+        for (unsigned binding:bindings_) {
+            const auto label=shortcuts::Label(binding);
+            SIZE size{}; GetTextExtentPoint32W(dc,label.c_str(),static_cast<int>(label.size()),&size);
+            keyWidth=std::max(keyWidth,static_cast<int>(size.cx)+px(18));
+        }
+        SelectObject(dc,previousFont);
+        // At the minimum window width, a half-column cap cuts long chords.
+        // Let the key keep its measured width while reserving a readable
+        // wrapped description and the existing gap beside it.
+        keyWidth=std::min(keyWidth,leftWidth-2*padding-px(96+12));
         for (unsigned i=0;i<kShortcuts.size();++i) {
-            const int rowHeight=std::max(px(40),field(FirstKey+2*i+1,margin+padding+px(72),y+px(6),leftWidth-2*padding-px(72))+px(14));
-            keys_.push_back({margin+padding,y,margin+padding+px(60),y+px(29)});
-            field(FirstKey+2*i,margin+padding+px(10),y+px(5),px(44));
+            const int keyHeight=field(FirstKey+2*i,margin+padding+px(8),y+px(5),keyWidth-px(16));
+            const int rowHeight=std::max({px(40),keyHeight+px(14),field(FirstKey+2*i+1,margin+padding+keyWidth+px(12),y+px(6),leftWidth-2*padding-keyWidth-px(12))+px(14)});
+            keys_.push_back({margin+padding,y,margin+padding+keyWidth,y+std::max(px(29),keyHeight+px(10))});
             y+=rowHeight;
         }
         y+=px(6); y+=field(VideoHint,margin+padding,y,leftWidth-2*padding)+padding;
@@ -189,8 +211,8 @@ void Window::Scroll(int position) {
 void Window::Paint(HDC dc,bool body) {
     RECT r{}; GetClientRect(body ? body_ : window_,&r); FillRect(dc,&r,brushes_[Background]);
     if (!body) {
-        RECT line{0,std::max(0,int(r.bottom)-Pixels(64,GetDpiForWindow(window_))),r.right,
-                  std::max(0,int(r.bottom)-Pixels(64,GetDpiForWindow(window_)))+1};
+        RECT bodyRect{}; GetClientRect(body_,&bodyRect);
+        RECT line{0,bodyRect.bottom,r.right,bodyRect.bottom+1};
         SetDCBrushColor(dc,palette_.kCardEdge);
         FillRect(dc,&line,static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
         return;
@@ -229,20 +251,36 @@ void Window::Toggle(HWND owner,bool english,const wchar_t* version,int show,bool
     if (!window_) return;
     Layout(); ShowWindow(window_,show); if (show!=SW_HIDE) SetFocus(close_);
 }
-bool Window::ProcessMessage(MSG& m,HWND owner,bool english,const wchar_t* version,bool lightTheme) {
+void Window::SetBindings(const shortcuts::Bindings& bindings) {
+    if (bindings_==bindings) return;
+    Close(); // Existing content belongs to the previous settings snapshot.
+    bindings_=bindings;
+}
+bool Window::ProcessMessage(MSG& m,HWND owner,bool english,const wchar_t* version,bool lightTheme,unsigned modifiers,MessageContext context) {
     if (window_) SetLightTheme(lightTheme);
-    if (m.message==WM_KEYUP && m.wParam==VK_ESCAPE && dismissEscape_) { dismissEscape_=false; return true; }
-    if (m.message==WM_KEYDOWN && m.wParam==VK_ESCAPE && dismissEscape_) {
+    if ((m.message==WM_KEYUP || m.message==WM_SYSKEYUP) && m.wParam==dismissKey_ && dismissKey_) { dismissKey_=0; return true; }
+    if (shortcuts::KeyDown(m.message) && m.wParam==dismissKey_ && dismissKey_) {
         if (m.lParam & (LPARAM{1}<<30)) return true;
-        dismissEscape_=false;
+        dismissKey_=0;
     }
-    if (m.message==WM_KEYDOWN && m.wParam==kHelpKey) {
+    const bool inHelp=window_ && (m.hwnd==window_ || IsChild(window_,m.hwnd));
+    // Viewer bindings must not steal dialog navigation, text entry, editing
+    // chords or the native F4 combo dropdown. Function-key help still works
+    // from settings; all configured bindings work inside the guide/viewer.
+    if (context==MessageContext::Settings && !inHelp && shortcuts::KeyDown(m.message) &&
+        (m.wParam<VK_F1 || m.wParam>VK_F24 || m.wParam==VK_F4)) return false;
+    if (shortcuts::KeyDown(m.message) && shortcuts::Match(bindings_,shortcuts::Action::Help,static_cast<UINT>(m.wParam),modifiers)) {
         if (!(m.lParam & (LPARAM{1}<<30))) Toggle(owner,english,version,SW_SHOWNORMAL,lightTheme);
         return true;
     }
-    if (window_ && m.message==WM_KEYDOWN && m.wParam==VK_ESCAPE) { dismissEscape_=true; Close(); return true; }
-    if (window_ && (m.hwnd==window_ || IsChild(window_,m.hwnd))) {
-        if (m.message==WM_KEYDOWN && m.wParam==kScreenshotKey) return false;
+    if (window_ && shortcuts::KeyDown(m.message) &&
+        shortcuts::Match(bindings_,shortcuts::Action::Exit,static_cast<UINT>(m.wParam),modifiers)) {
+        dismissKey_=static_cast<UINT>(m.wParam); Close(); return true;
+    }
+    if (inHelp) {
+        if (shortcuts::KeyDown(m.message) && shortcuts::Match(bindings_,shortcuts::Action::Screenshot,static_cast<UINT>(m.wParam),modifiers)) return false;
+        // Do not let the native dialog manager reintroduce a remapped Esc.
+        if (shortcuts::KeyDown(m.message) && m.wParam==VK_ESCAPE) return true;
         if (m.message==WM_MOUSEWHEEL) { SendMessageW(body_,m.message,m.wParam,m.lParam); return true; }
         if (!IsDialogMessageW(window_,&m)) { TranslateMessage(&m); DispatchMessageW(&m); }
         return true;

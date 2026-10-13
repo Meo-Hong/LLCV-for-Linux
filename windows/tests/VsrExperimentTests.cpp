@@ -28,7 +28,7 @@ static void TestPolicy() {
         g_settings.audioOnly = false;
         g_settings.vsrEnabled = false;
         g_vsrMode = Mode::Disabled;
-        Require(HandleVsrTestKey(VK_F6, 0) && !g_settings.vsrEnabled &&
+        Require(HandleVsrTestKey(VK_F6, 0, 0) && !g_settings.vsrEnabled &&
             g_vsrMode.load() == Mode::Disabled &&
             g_transientHudContent.load() == TransientHudContent::VsrUnavailable,
             "Intel/AMD/unknown adapter cannot enable VSR through F6");
@@ -60,7 +60,7 @@ static void TestPolicy() {
         Require(SourcePixelPerfect() == (display.preset == capture.preset), "split display never letterboxes as 1:1");
         g_vsrMode.store(Mode::On);
         for (int toggle = 0; toggle < 20; ++toggle) {
-            HandleVsrTestKey(VK_F6, 0);
+            HandleVsrTestKey(VK_F6, 0, 0);
             Require(CurrentCapturePreset().preset == capture.preset &&
                 InitialClientPixelsForMonitor(nullptr).cx == display.width,
                 "F6 preserves latched capture and display across repeated toggles");
@@ -251,10 +251,13 @@ static void TestSettingsController() {
     g_settings.vsrEnabled = true;
     g_settings.volumePercent = 73;
     g_settings.pcmQueueTargetMs = 25;
+    g_settings.shortcuts=keys::Defaults;
+    g_settings.shortcuts[0]=VK_F9;
     auto unchanged = [&] {
         Require(g_settings.captureDeviceId == L"controller-test-sentinel" &&
             g_settings.videoPreset == VideoPreset::R2560x1440 && !g_settings.audioOnly &&
-            g_settings.vsrEnabled && g_settings.volumePercent == 73 && g_settings.pcmQueueTargetMs == 25,
+            g_settings.vsrEnabled && g_settings.volumePercent == 73 && g_settings.pcmQueueTargetMs == 25 &&
+            g_settings.shortcuts[0]==VK_F9,
             "blocked/cancelled controller action preserves settings");
     };
     WNDCLASSW wc{};
@@ -308,6 +311,11 @@ static void TestSettingsController() {
     {
         SettingsDialogState state;
         HWND hwnd = create(state);
+        state.shortcutBindings=g_settings.shortcuts;
+        SendMessageW(hwnd,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_SHORTCUT_RESET,BN_CLICKED),0);
+        Require(state.shortcutBindings==keys::Defaults && g_settings.shortcuts[0]==VK_F9,
+            "reset affects only the working shortcut copy, not saved settings");
+        state.shortcutBindings[0]=keys::Ctrl|'H';
         state.pixelFormats.push_back({VideoPixelFormat::Nv12,60});
         UpdateAdvancedControlVisibility(&state);
         Require(SettingsCanStart(&state), "valid mocked capture mode can start");
@@ -359,9 +367,20 @@ static void TestSettingsController() {
     {
         SettingsDialogState state;
         HWND hwnd = create(state);
+        state.shortcutBindings[0]=VK_F10;
         key(hwnd,state.cancelButton,VK_RETURN);
         Require(!IsWindow(hwnd) && !state.accepted, "Enter on production Cancel cancels, not starts");
         unchanged();
+    }
+    {
+        SettingsDialogState state;
+        HWND hwnd=create(state);
+        state.shortcutBindings[0]=keys::Ctrl|'H';
+        state.pixelFormats.push_back({VideoPixelFormat::Nv12,60});
+        UpdateAdvancedControlVisibility(&state);
+        FinishSettingsDialog(hwnd,&state,true);
+        Require(!IsWindow(hwnd) && state.accepted &&
+            g_settings.shortcuts==state.shortcutBindings,"Start commits the edited shortcut snapshot");
     }
     UnregisterClassW(wc.lpszClassName,wc.hInstance);
     if (IsWindow(previousForeground)) SetForegroundWindow(previousForeground);
@@ -742,24 +761,30 @@ static void TestLiveToggle(HWND window, int width, int height, const std::vector
     if (!llcv::vsr::NvidiaAdapter(g_vsrGpuVendor.load())) {
         const bool savedPreference = g_settings.vsrEnabled;
         g_settings.audioOnly = false;
-        Require(HandleVsrTestKey(VK_F6, 0) &&
+        Require(HandleVsrTestKey(VK_F6, 0, 0) &&
             g_vsrMode.load() == llcv::vsr::Mode::Disabled &&
             g_settings.vsrEnabled == savedPreference &&
             renderHash() == baseline, "actual non-NVIDIA renderer rejects F6 without changing video");
         return;
     }
-    Require(!HandleVsrTestKey(VK_F5,0), "other shortcuts untouched");
+    Require(!HandleVsrTestKey(VK_F5,0,0), "other shortcuts untouched");
     g_settings.audioOnly = true;
-    Require(HandleVsrTestKey(VK_F6,0) && g_vsrMode.load() == llcv::vsr::Mode::Disabled,
+    Require(HandleVsrTestKey(VK_F6,0,0) && g_vsrMode.load() == llcv::vsr::Mode::Disabled,
         "audio-only does not change VSR request");
+    const auto originalBindings=g_settings.shortcuts;
+    g_settings.shortcuts[static_cast<size_t>(keys::Action::Vsr)]=keys::Ctrl|'V';
+    Require(!HandleVsrTestKey(VK_F6,0,0) && !HandleVsrTestKey('V',0,0) &&
+        HandleVsrTestKey('V',0,keys::Ctrl) && g_vsrMode.load()==llcv::vsr::Mode::Disabled,
+        "custom VSR combination replaces F6 and preserves the audio-only gate");
+    g_settings.shortcuts=originalBindings;
     g_settings.audioOnly = false;
     for (int i = 0; i < 6; ++i) {
         const auto stateBeforeKey = renderer.vsrState;
-        Require(HandleVsrTestKey(VK_F6,0), "F6 handled");
+        Require(HandleVsrTestKey(VK_F6,0,0), "F6 handled");
         Require(g_settings.vsrEnabled, "F6 ON updates saved preference");
         Require(g_vsrMode.load() == llcv::vsr::Mode::On && renderer.vsrState == stateBeforeKey,
             "UI updates request only, not D3D state");
-        Require(HandleVsrTestKey(VK_F6,LPARAM{1} << 30) && g_vsrMode.load() == llcv::vsr::Mode::On,
+        Require(HandleVsrTestKey(VK_F6,LPARAM{1} << 30,0) && g_vsrMode.load() == llcv::vsr::Mode::On,
             "held F6 ignores auto-repeat");
         Check(renderer.applyVsrMode(), "ON on render thread");
         Require(renderer.cachedOverlayGeneration == 0, "applied F6 invalidates Tab status cache");
@@ -773,7 +798,7 @@ static void TestLiveToggle(HWND window, int width, int height, const std::vector
         const auto overlayGeneration = g_overlayGeneration.load();
         Check(renderer.applyVsrMode(), "unchanged mode no-op");
         Require(g_overlayGeneration.load() == overlayGeneration, "no per-frame status churn");
-        HandleVsrTestKey(VK_F6,0);
+        HandleVsrTestKey(VK_F6,0,0);
         Check(renderer.applyVsrMode(), "OFF on render thread");
         Require(!g_settings.vsrEnabled, "F6 OFF updates saved preference");
         Require(renderHash() == baseline, "live OFF restores original pixels exactly");
@@ -782,17 +807,17 @@ static void TestLiveToggle(HWND window, int width, int height, const std::vector
             renderer.outputConfigurationGeneration == originalRendererGeneration &&
             g_outputConfigurationGeneration.load() == originalGeneration, "toggle never rebuilds output");
     }
-    HandleVsrTestKey(VK_F6,0); HandleVsrTestKey(VK_F6,0);
+    HandleVsrTestKey(VK_F6,0,0); HandleVsrTestKey(VK_F6,0,0);
     Check(renderer.applyVsrMode(), "rapid toggles coalesce to last request");
     Require(g_vsrMode.load() == llcv::vsr::Mode::Off && renderHash() == baseline, "rapid OFF result");
     // Exercise actual Present/HUD path (a hidden window may be occluded).
-    HandleVsrTestKey(VK_F6,0);
+    HandleVsrTestKey(VK_F6,0,0);
     Check(renderer.presentUploaded(), "production Present handles pending toggle");
     Require(renderer.vsrAppliedMode == llcv::vsr::Mode::On, "Present consumes request");
-    HandleVsrTestKey(VK_F6,0);
+    HandleVsrTestKey(VK_F6,0,0);
     Check(renderer.presentUploaded(), "OFF while occluded is consumed");
     Require(renderer.vsrAppliedMode == llcv::vsr::Mode::Off, "occlusion does not lose request");
-    HandleVsrTestKey(VK_F6,0); // preserve ON intent through real output changes
+    HandleVsrTestKey(VK_F6,0,0); // preserve ON intent through real output changes
     Require(SetWindowPos(window,nullptr,0,0,width,height,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE) != 0,
         "hidden 1:1 output");
     Check(renderer.initialize(window,width,height,60,format), "recreate 1:1");
@@ -962,7 +987,7 @@ static void TestSplitResolutionRenderer(HWND window) {
             "split VSR display fills chosen output even with display lock");
         auto* chain = renderer.swapChain;
         for (int i = 0; i < 12; ++i) {
-            HandleVsrTestKey(VK_F6, 0);
+            HandleVsrTestKey(VK_F6, 0, 0);
             Check(renderer.applyVsrMode(false), "split F6 request");
             Require(renderer.swapChain == chain && CurrentCapturePreset().width == 1280 &&
                 renderer.outputWidth == static_cast<UINT>(size.cx) && renderer.outputHeight == static_cast<UINT>(size.cy),
@@ -1039,6 +1064,7 @@ int main(int argc, char** argv) {
         Require(InitCommonControlsEx(&controls) != FALSE, "controller common controls");
         TestPlaybackPowerBroadcastRouting();
         TestSettingsController();
+        TestSettingsShortcutStatusRefresh();
         TestSettingsAudioTransitions();
         TestSettingsBufferModeTransitions();
         TestSettingsSharedRefreshAcrossModes();

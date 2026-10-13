@@ -6,9 +6,17 @@ struct ViewerLifecycleFixture {
 };
 static ViewerLifecycleFixture* g_viewerLifecycleFixture = nullptr;
 static constexpr UINT kLifecycleEarlierMessage = WM_APP + 0x123;
+static constexpr UINT kLifecycleShortcutMessage = WM_APP + 0x124;
 
 static LRESULT CALLBACK ViewerLifecycleTestProc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
     auto& fixture = *g_viewerLifecycleFixture;
+    if (message==kLifecycleShortcutMessage) {
+        Require(HandleViewerShortcut(hwnd,w & 0xff,0,static_cast<unsigned>(w) & 0x700),
+                "configured shortcut reaches actual viewer handler");
+        Require(HandleViewerShortcut(hwnd,w & 0xff,LPARAM{1}<<30,static_cast<unsigned>(w) & 0x700),
+                "held settings or exit key is consumed without repeating shutdown");
+        return 0;
+    }
     if (message == kLifecycleEarlierMessage) {
         SetEvent(fixture.entered);
         Require(WaitForSingleObject(fixture.posted, 5000) == WAIT_OBJECT_0,
@@ -40,10 +48,10 @@ static void TestViewerLifecycle() {
     wc.lpszClassName = L"LLCV_VIEWER_LIFECYCLE_TEST";
     Require(RegisterClassW(&wc) != 0, "register lifecycle fixture");
 
-    enum class Stop { BeforeLoop, DuringMessage, NormalClose, SettingsKey, Quit, MissingClose };
+    enum class Stop { BeforeLoop, DuringMessage, NormalClose, SettingsAction, ExitShortcut, Quit, MissingClose };
     for (bool audioOnly : {false, true}) {
         for (Stop stop : {Stop::BeforeLoop, Stop::DuringMessage, Stop::NormalClose,
-                          Stop::SettingsKey, Stop::Quit, Stop::MissingClose}) {
+                          Stop::SettingsAction, Stop::ExitShortcut, Stop::Quit, Stop::MissingClose}) {
             for (bool preventSleep : {false, true}) {
                 ViewerLifecycleFixture fixture;
                 fixture.entered = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -53,11 +61,14 @@ static void TestViewerLifecycle() {
                 g_settings = {};
                 g_settings.audioOnly = audioOnly;
                 g_settings.preventSleep = preventSleep;
+                if (preventSleep) g_settings.shortcuts[static_cast<size_t>(keys::Action::Settings)]=VK_F9;
+                if (preventSleep) g_settings.shortcuts[static_cast<size_t>(keys::Action::Exit)]=keys::Ctrl|'Q';
                 g_settings.allowVolumeBoost = true;
                 g_settings.volumePercent = 20;
                 g_windowPositionPersisted = false;
                 g_exclusiveStartupFallback = false;
                 g_fullscreen = false;
+                g_autoFullscreen = false;
                 g_videoHost = nullptr;
                 g_running.store(true);
                 g_restartToSettings.store(false);
@@ -89,21 +100,27 @@ static void TestViewerLifecycle() {
                 } else if (stop == Stop::Quit) {
                     PostQuitMessage(0);
                 } else {
-                    Require(PostMessageW(hwnd, stop == Stop::SettingsKey ? WM_KEYDOWN : WM_CLOSE,
-                                         stop == Stop::SettingsKey ? VK_F2 : 0, 0) != FALSE,
+                    // Inject the complete synthetic key event into the same
+                    // handler used by both real window/message-loop routes.
+                    const bool shortcut=stop==Stop::SettingsAction || stop==Stop::ExitShortcut;
+                    const auto action=stop==Stop::SettingsAction ? keys::Action::Settings : keys::Action::Exit;
+                    if (stop==Stop::ExitShortcut && preventSleep)
+                        Require(!HandleViewerShortcut(hwnd,VK_ESCAPE,0,0),"old Esc does not close after remapping");
+                    Require(PostMessageW(hwnd,shortcut ? kLifecycleShortcutMessage : WM_CLOSE,
+                        shortcut ? g_settings.shortcuts[static_cast<size_t>(action)] : 0,0) != FALSE,
                             "queue normal viewer shutdown");
                 }
                 RunViewerMessageLoop(hwnd);
                 if (capture.joinable()) capture.join();
                 Require(!IsWindow(hwnd) && fixture.destroyed == 1 && !g_running.load(),
                         "each loop exit destroys the viewer exactly once");
-                const bool normal = stop == Stop::NormalClose || stop == Stop::SettingsKey;
+                const bool normal = stop == Stop::NormalClose || stop == Stop::SettingsAction || stop == Stop::ExitShortcut;
                 Require(fixture.closed == (normal ? 1u : 0u),
                         "fallback does not replay an already processed close");
                 Require(!g_suspendResumeNotification.Registered(),
                         "all viewer exits unregister suspend/resume notifications");
-                Require(g_restartToSettings.load() == (stop == Stop::SettingsKey),
-                        "existing F2 restart intent is preserved");
+                Require(g_restartToSettings.load() == (stop == Stop::SettingsAction),
+                        "settings restart intent is preserved");
                 const auto loaded = llcv::settings::LoadFromIni(SettingsPath()).settings;
                 Require(loaded.volumePercent == 135 && loaded.leftVolumePercent == 75 &&
                         loaded.rightVolumePercent == 65,
@@ -113,6 +130,7 @@ static void TestViewerLifecycle() {
                         "all loop exits persist the final window placement");
                 Require(loaded.preventSleep == preventSleep && loaded.audioOnly == audioOnly,
                         "shutdown preserves playback mode and sleep preference");
+                Require(loaded.shortcuts==g_settings.shortcuts,"shutdown retains custom shortcuts");
                 // Fallback WM_DESTROY posts WM_QUIT after the loop has returned.
                 MSG pending{};
                 while (PeekMessageW(&pending, nullptr, WM_QUIT, WM_QUIT, PM_REMOVE)) {}
@@ -129,5 +147,5 @@ static void TestViewerLifecycle() {
     g_testUserDataDirectory.clear();
     g_settings = savedSettings;
     g_suppressSettingsSave = savedSuppress;
-    std::puts("Viewer lifecycle: 24 hidden-window shutdown/persistence cases passed.");
+    std::puts("Viewer lifecycle: 28 hidden-window shutdown/persistence cases passed.");
 }

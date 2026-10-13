@@ -4,7 +4,10 @@
 
 [README](../README.md) · [Documentation](INDEX.md) · [한국어](TROUBLESHOOTING.ko.md)
 
-[Capture initialization fails](#capture-initialization-fails) · [40 fps startup](#40-fps-capture-will-not-start) · [Playback stops or input disappears](#playback-stops-or-input-disappears) · [Devices or supported modes look out of date](#devices-or-supported-modes-look-out-of-date) · [Video works but audio does not](#video-works-but-audio-does-not) · [The picture is soft](#the-picture-is-soft) · [MJPEG color differs from another application](#mjpeg-color-differs-from-another-application) · [Frame drops or stutter](#frame-drops-or-stutter) · [Settings window is skipped](#settings-window-is-skipped) · [Settings could not be saved](#settings-could-not-be-saved) · [Sleep or screen-off behavior](#sleep-or-screen-off-behavior) · [Collecting a useful report](#collecting-a-useful-report)
+[Capture initialization fails](#capture-initialization-fails) · [40 fps startup](#40-fps-capture-will-not-start) · [Playback stops or input disappears](#playback-stops-or-input-disappears) · [Devices or supported modes look out of date](#devices-or-supported-modes-look-out-of-date) · [Video works but audio does not](#video-works-but-audio-does-not) · [The picture is soft](#the-picture-is-soft) · [MJPEG color differs from another application](#mjpeg-color-differs-from-another-application) · [Frame drops or stutter](#frame-drops-or-stutter) · [Settings window is skipped](#settings-window-is-skipped) · [A shortcut does not work](#a-shortcut-does-not-work) · [Settings could not be saved](#settings-could-not-be-saved) · [Sleep or screen-off behavior](#sleep-or-screen-off-behavior) · [Collecting a useful report](#collecting-a-useful-report)
+
+Keys in this guide are defaults. If you [change a shortcut](USAGE.md#changing-shortcuts),
+use its assigned key instead.
 
 <br>
 
@@ -148,6 +151,19 @@ pacing. Compare Low latency and VSync on the monitor where the viewer will stay.
 
 If **Start directly next time** is enabled, hold Shift while launching. You can
 also press `F2` from the viewer to close it safely and return to settings.
+
+<br>
+
+## A shortcut does not work
+
+Click the viewer to focus LLCV, then check your bindings under **Guide & logs**.
+Choose **Start** after editing them; **Cancel** discards unapplied changes.
+Settings controls keep their normal input/navigation keys, and video-only
+actions remain unavailable in audio-only mode.
+
+If you forget the Settings shortcut, hold **Shift** while launching. Use
+**Reset defaults → Start** to restore the standard bindings.
+See [Changing shortcuts](USAGE.md#changing-shortcuts).
 
 <br>
 

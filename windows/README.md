@@ -5,7 +5,7 @@
 A low-latency Windows viewer for video and audio from HDMI capture devices.
 Use it to play console games without OBS, or listen in audio-only mode.
 
-**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.0.4.md) · [한국어](README.ko.md)
+**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.0.5.md) · [한국어](README.ko.md)
 
 <br>
 
@@ -13,17 +13,16 @@ Use it to play console games without OBS, or listen in audio-only mode.
 | --- | --- |
 | [![Video settings](docs/images/settings-video-en.png)](docs/images/settings-video-en.png) | [![Audio settings](docs/images/settings-audio-en.png)](docs/images/settings-audio-en.png) |
 
-<sub>Settings examples rendered from the 2.0.4 UI code. Click an image to view it at full resolution.</sub>
+<sub>Settings examples rendered from the 2.0.5 UI code. Click an image to view it at full resolution.</sub>
 
 <br>
 
-## What's new in 2.0.4
+## What's new in 2.0.5
 
-Added **40 fps capture** in Video settings. Enable it to request 40 fps from the
-driver; disable it to restore the normal frame-rate selection. It is off by
-default, and support is checked at startup. Enable it only when needed; normal
-viewing can keep the existing frame-rate selection. Existing settings and installation paths are retained.
-[40 fps capture guide](docs/VIDEO.md#40-fps-capture) · [Full release notes](docs/release-notes-v2.0.4.md)
+**Guide & logs** now lets you change all nine keyboard shortcuts, including Esc,
+and restore their defaults. Ctrl/Alt/Shift combinations are supported, and help,
+settings, and OSD labels follow your bindings. Existing defaults and settings are retained.
+[Changing shortcuts](docs/USAGE.md#changing-shortcuts) · [Full release notes](docs/release-notes-v2.0.5.md)
 
 <br>
 
@@ -40,6 +39,8 @@ For the portable version, extract **x64.zip** and run `LowLatencyCaptureViewer.e
 3. If audio is missing, check **Capture audio device**.
 
 <kbd>F1</kbd> Help · <kbd>F2</kbd> Settings · <kbd>F6</kbd> VSR · <kbd>F11</kbd> Fullscreen · <kbd>F12</kbd> Screenshot · <kbd>Tab</kbd> Diagnostics
+
+These are the default keys; change them under **Guide & logs**.
 
 <br>
 
