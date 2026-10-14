@@ -15,6 +15,7 @@ install it, distribution by distribution. If this is your first time, follow
 5. [Install, check, remove](#5-install-check-remove)
 6. [Building without a package (other distributions)](#6-building-without-a-package-other-distributions)
 7. [Build troubleshooting](#7-build-troubleshooting)
+8. [Translations](#8-translations)
 
 ## 1. Find the method for your distribution
 
@@ -321,6 +322,7 @@ Installed locations:
 | Menu entry | `/usr/share/applications/io.github.meo_hong.LLCV.desktop` |
 | Icons | `/usr/share/icons/hicolor/*/apps/io.github.meo_hong.LLCV.png` |
 | Fonts | `/usr/share/llcv/fonts/` |
+| Translations | `/usr/share/llcv/locale/` |
 | Manual | `man llcv` |
 
 Per-user data stays after removal. To remove it too, delete these folders:
@@ -415,3 +417,21 @@ ALSA and D-Bus development packages.
 
 If the build works but the app misbehaves, see the
 [troubleshooting section in the README](README.md#troubleshooting).
+
+## 8. Translations
+
+The code holds English text in `T("…")`; Korean, Japanese, Spanish and
+Brazilian Portuguese live in `po/*.po` and are read at run time, so a missing
+translation shows English. After changing UI text, refresh the template and
+catalogs, translate the new entries, and check them:
+
+```sh
+./tools/update-translations.sh
+python3 tools/check-translations.py
+```
+
+The update script needs gettext (`sudo apt install gettext`). The check script
+compares every translation with the English text: printf placeholders, ImGui
+`##` IDs, key names such as F1 and Tab, numbers and technical terms. Japanese
+kanji come from a JIS level 1 subset of Noto Sans JP, rebuilt with
+`tools/subset-japanese-font.sh` if new text needs other kanji.

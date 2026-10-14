@@ -23,7 +23,8 @@ struct EnumName {
 };
 
 constexpr EnumName<UiLanguage> kLanguages[] = {
-    {UiLanguage::Auto, "auto"}, {UiLanguage::Korean, "ko"}, {UiLanguage::English, "en"}};
+    {UiLanguage::Auto, "auto"}, {UiLanguage::Korean, "ko"}, {UiLanguage::English, "en"},
+    {UiLanguage::Japanese, "ja"}, {UiLanguage::Spanish, "es"}, {UiLanguage::Portuguese, "pt-BR"}};
 constexpr EnumName<DisplayBackend> kBackends[] = {
     {DisplayBackend::Auto, "auto"}, {DisplayBackend::Wayland, "wayland"}, {DisplayBackend::X11, "x11"}};
 constexpr EnumName<PixelFormatChoice> kFormats[] = {

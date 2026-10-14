@@ -3,6 +3,7 @@
 #include "diagnostics/Logger.h"
 #include "platform/Clock.h"
 #include "platform/Strings.h"
+#include "ui/Text.h"
 
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_thread.h>
@@ -40,7 +41,7 @@ std::string FourccText(uint32_t fourcc) {
 std::string DeviceError(const char* action, int error) {
     if (error == EBUSY) {
         return platform::Format("%s: %s (EBUSY)", action,
-                                "다른 앱이 캡처 장치를 사용 중입니다 · Another application is using the capture device");
+                                ui::T("Another application is using the capture device"));
     }
     return platform::Format("%s: %s", action, std::strerror(error));
 }

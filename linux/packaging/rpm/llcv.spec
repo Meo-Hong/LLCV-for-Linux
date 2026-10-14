@@ -86,6 +86,7 @@ tar -xzf %{SOURCE1} -C third_party/sdl3
 %endif
 cp -p third_party/imgui/LICENSE.txt imgui-LICENSE.txt
 cp -p third_party/pretendard/LICENSE.txt Pretendard-LICENSE.txt
+cp -p third_party/noto-sans-jp/LICENSE.txt NotoSansJP-LICENSE.txt
 
 %build
 %cmake \
@@ -99,7 +100,7 @@ cp -p third_party/pretendard/LICENSE.txt Pretendard-LICENSE.txt
 %cmake_install
 
 %files
-%license LICENSE imgui-LICENSE.txt Pretendard-LICENSE.txt
+%license LICENSE imgui-LICENSE.txt Pretendard-LICENSE.txt NotoSansJP-LICENSE.txt
 %doc README.md README.ko.md
 %{_bindir}/llcv
 %{_datadir}/applications/%{app_id}.desktop

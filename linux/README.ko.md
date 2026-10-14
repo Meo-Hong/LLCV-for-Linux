@@ -23,7 +23,7 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 | HDR10 | P010 + DXGI HDR10 | P010 + Wayland `wp_color_management_v1`, 또는 톤매핑 |
 | MJPEG | Media Foundation | libjpeg-turbo (YUV 평면으로 디코딩) |
 | 오디오 | WASAPI / ASIO | PipeWire 위의 SDL3 오디오 |
-| UI | Win32 + Direct2D | Dear ImGui 1.92 (번들), Pretendard 글꼴 |
+| UI | Win32 + Direct2D | Dear ImGui 1.92 (번들), Pretendard 글꼴, 한국어·영어·일본어·스페인어·브라질 포르투갈어 |
 | 설정 | `%LOCALAPPDATA%` | `~/.config/llcv/settings.ini` |
 | 로그 | `%LOCALAPPDATA%` | `~/.local/state/llcv/logs/` |
 | 스크린샷 | 사진 폴더 | `$XDG_PICTURES_DIR/LLCV/` |
@@ -267,5 +267,5 @@ Releases 페이지에도 파일이 올라갑니다. 배포 절차는
 ## 라이선스
 
 GPL-3.0-or-later. 원본 Windows LLCV는 seria-aa, 리눅스판은 Meo-hong이
-만들었습니다. Dear ImGui는 MIT, Pretendard는 SIL Open Font License 1.1을
-따릅니다.
+만들었습니다. Dear ImGui는 MIT, Pretendard와 Noto Sans JP 한자 서브셋은
+SIL Open Font License 1.1을 따릅니다.

@@ -1,5 +1,7 @@
 #include "video/VideoColor.h"
 
+#include "ui/Text.h"
+
 #include <linux/videodev2.h>
 
 namespace llcv::video {
@@ -194,17 +196,18 @@ const char* TransferName(Transfer transfer) {
     return transfer == Transfer::Pq ? "PQ (HDR10)" : "SDR";
 }
 
-const char* SourceName(ColorSource matrixSource, ColorSource rangeSource, bool english) {
-    if (matrixSource == ColorSource::User) return english ? "manual" : "수동";
-    if (matrixSource == ColorSource::Hdr10) return english ? "HDR10 default" : "HDR10 기본값";
-    if (matrixSource == ColorSource::Jpeg) return english ? "JPEG default" : "JPEG 기본값";
+const char* SourceName(ColorSource matrixSource, ColorSource rangeSource) {
+    using ui::T;
+    if (matrixSource == ColorSource::User) return T("manual");
+    if (matrixSource == ColorSource::Hdr10) return T("HDR10 default");
+    if (matrixSource == ColorSource::Jpeg) return T("JPEG default");
     if (matrixSource == ColorSource::Driver && rangeSource == ColorSource::Driver) {
-        return english ? "driver" : "드라이버";
+        return T("driver");
     }
     if (matrixSource == ColorSource::Driver || rangeSource == ColorSource::Driver) {
-        return english ? "driver + default" : "드라이버 + 기본값";
+        return T("driver + default");
     }
-    return english ? "default" : "기본값";
+    return T("default");
 }
 
 }

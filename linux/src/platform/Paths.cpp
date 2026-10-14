@@ -105,6 +105,20 @@ std::filesystem::path FindFont(const std::string& fileName) {
     candidates.push_back(std::filesystem::path(LLCV_DATA_DIR) / "fonts" / fileName);
 #ifdef LLCV_SOURCE_DIR
     candidates.push_back(std::filesystem::path(LLCV_SOURCE_DIR) / "third_party" / "pretendard" / fileName);
+    candidates.push_back(std::filesystem::path(LLCV_SOURCE_DIR) / "third_party" / "noto-sans-jp" / fileName);
+#endif
+    return FirstExisting(candidates);
+}
+
+std::filesystem::path FindTranslation(const std::string& fileName) {
+    std::vector<std::filesystem::path> candidates;
+    const auto executable = ExecutableDirectory();
+    if (!executable.empty()) {
+        candidates.push_back(executable.parent_path() / "share" / "llcv" / "locale" / fileName);
+    }
+    candidates.push_back(std::filesystem::path(LLCV_DATA_DIR) / "locale" / fileName);
+#ifdef LLCV_SOURCE_DIR
+    candidates.push_back(std::filesystem::path(LLCV_SOURCE_DIR) / "po" / fileName);
 #endif
     return FirstExisting(candidates);
 }

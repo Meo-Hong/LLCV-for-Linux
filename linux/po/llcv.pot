@@ -1,0 +1,1271 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the LLCV package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: LLCV\n"
+"Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
+"POT-Creation-Date: 2026-10-15 01:15+0900\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: src/app/App.cpp
+msgid ""
+"Audio device disconnected · it is restored automatically when it returns"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Audio restored."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "LLCV capture playback is active."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Capture device disconnected"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Playback resumes automatically when the device reconnects."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Waiting for signal"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Check the HDMI source and the capture device. HDR output must be off."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Path"
+msgstr ""
+
+#: src/app/App.cpp
+msgid " · fullscreen"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Device"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Input"
+msgstr ""
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Display"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Immediate"
+msgstr ""
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Sharp"
+msgstr ""
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Smooth"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Actual FPS"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "Input %.1f · Present %.1f"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "App latency"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "capture→present %s · copy/decode %s (not total HDMI latency)"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Frames"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "Input %llu · Presented %llu · Replaced %llu"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "HDR10 input · HDR10 passthrough (%d-bit buffer)"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "HDR10 input · SDR tone mapping (%d nit white)"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "SDR input"
+msgstr ""
+
+#: src/app/App.cpp
+msgid " · HDR output not supported"
+msgstr ""
+
+#: src/app/App.cpp
+msgid " · HDR input not supported"
+msgstr ""
+
+#: src/app/App.cpp
+msgid " · display HDR"
+msgstr ""
+
+#: src/app/App.cpp
+msgid " · display SDR"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Frame loss"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "Driver dropped %llu · corrupt %llu · %d buffers"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Audio output"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Capture audio"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "%s · packet %.2f ms"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Device buffer"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "output %.2f ms · input %.2f ms"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "App PCM queue"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "current %.2f ms · target %.2f ms · observed min %.2f ms%s"
+msgstr ""
+
+#: src/app/App.cpp
+msgid " · buffering"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Clock drift"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "Auto · applied %+d ppm"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Off · unaltered PCM"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Audio errors"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "underrun %llu (missing %.2f ms) · overrun %llu · latency trims %llu"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Waiting"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Disabled"
+msgstr ""
+
+#: src/app/App.cpp src/ui/ViewerOverlay.cpp
+msgid "Audio"
+msgstr ""
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Volume"
+msgstr ""
+
+#: src/app/App.cpp
+msgid " · muted in background"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "System default output"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "Audio only · %s"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Select a capture audio device."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "No capture device."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "no audio"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "with audio"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "The device does not support the selected mode."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "No capture device was found. Check the USB connection."
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "HDR input not supported: %s"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "The device does not support the selected resolution and format."
+msgstr ""
+
+#: src/app/App.cpp
+msgid ""
+"No capture audio device was found. Select one under Audio → Capture audio "
+"device."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Could not start capture: "
+msgstr ""
+
+#: src/app/App.cpp
+msgid ""
+"\n"
+"\n"
+"40 fps capture is enabled. This device, resolution or format may reject 40 "
+"fps or report a different rate. Uncheck Video → 40 fps capture to retry with "
+"the normal frame-rate selection. The diagnostic log tells a format rejection "
+"apart from other startup errors."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Could not start audio: "
+msgstr ""
+
+#: src/app/App.cpp
+msgid "No capture audio device was found; playing video only."
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "HDR output not supported: %s · showing as SDR."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Press Alt to show the menu."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "LLCV Settings"
+msgstr ""
+
+#: src/app/App.cpp
+msgid ""
+"The graphics driver (OpenGL ES) lacks 16-bit textures (EXT_texture_norm16), "
+"so P010 cannot be shown."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "P010 (10-bit HDR10) is available · select P010 as the pixel format."
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"The device offers P010 (HDR10), but uvcvideo in kernel %s does not recognize "
+"it. Linux 7.1 or newer, or a P010 DKMS module, is required."
+msgstr ""
+
+#: src/app/App.cpp
+msgid ""
+"The device offers no 10-bit HDR format. 8-bit HDR signals can use 'Force "
+"HDR10'."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "HDR output is off because LLCV was started with --sdr."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "This build lacks Wayland color management."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "HDR output is unavailable on X11. Run on Wayland."
+msgstr ""
+
+#: src/app/App.cpp
+msgid ""
+"The compositor lacks Wayland color management (wp_color_management_v1). "
+"GNOME 48 or newer, or KDE Plasma 6, is required."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "The compositor does not support PQ/BT.2020 HDR10."
+msgstr ""
+
+#: src/app/App.cpp
+msgid ""
+"The graphics driver provides no 10-bit framebuffer. 'Always HDR output' "
+"sends 8-bit HDR instead."
+msgstr ""
+
+#: src/app/App.cpp
+msgid ""
+"Supported · HDR is off on this display. Turn it on in the display settings."
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "Supported · %d-bit framebuffer · Wayland color management"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "HDR output failed; using SDR tone mapping."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Screenshot failed · no video frame yet."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Saving screenshot…"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "Screenshot failed: %s"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "Screenshot saved: %s"
+msgstr ""
+
+#: src/app/App.cpp
+msgid " (HDR converted to SDR)"
+msgstr ""
+
+#: src/app/App.cpp
+msgid " · copied to clipboard"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "Could not open the folder: %s"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "Settings could not be saved. The previous settings file is kept: %s"
+msgstr ""
+
+#: src/capture/V4l2Capture.cpp
+msgid "Another application is using the capture device"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Leave it off for normal viewing."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"When checked, 40 fps is requested instead of the frame-rate selection; "
+"unchecking restores that selection."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Support is checked on Start. If the driver rejects it or connects at another "
+"rate, LLCV shows an error instead of falling back to another FPS."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "It does not interpolate frames, lock a game to 40 fps, or replace VRR."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"A 40 fps game can also be viewed with 120 fps capture, so it is not required "
+"just for 40 fps games."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Check the measured input rate under Actual FPS in the Tab diagnostics."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "MJPEG (compressed · high resolution/refresh)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "P010 (10-bit HDR10)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid " (minimum latency)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid " (low-latency target)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid " (stability target)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid " (recommended · default)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid " (stability first)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid " (maximum stability)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid " (recommended)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "%d frames · %.1f ms%s"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Low Latency Capture Viewer"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Video##video"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Audio##audio"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Window##window"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Guide & logs##guide"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "App##app"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Quit##quit"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Start##start"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Capture"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Capture device"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto select (recommended)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid " (not connected)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Refresh##refresh"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "No capture device found. Check the USB connection and select Refresh."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "The selected device is not connected."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Capture resolution"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid " (unsupported)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Pixel format"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (NV12 first · recommended)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Frame rate"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (highest uncompressed rate)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "40 fps capture"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"40 fps is requested instead of the frame-rate selection. Uncheck to restore "
+"it."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"40 fps is not in the detected list. Start checks whether the driver accepts "
+"it; if not, LLCV shows an error instead of using another rate."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Selected mode: %d × %d · %s · %s fps"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "No supported mode: choose another resolution or format."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Presentation mode"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Immediate (minimum latency · recommended)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "VSync (reduced tearing)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Scaling mode"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Color interpretation"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (recommended)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Screenshots (F12)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Save location"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Open folder##shots"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Also copy the PNG to the clipboard"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Saved as PNG at the capture resolution."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "HDR input interpretation"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (P010 = HDR10 · recommended)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Force HDR10 (8-bit input as PQ/BT.2020)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Treat as SDR"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "HDR presentation"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (HDR output on HDR displays, else tone mapping)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Always SDR tone mapping"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Always HDR output (Wayland)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "SDR reference white"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid " (recommended · BT.2408)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Sets tone-mapping brightness and UI brightness during HDR output."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"HDR is not supported in this environment. HDR signals are converted to SDR."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Not supported"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Supported"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+msgid "HDR input"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+msgid "HDR output"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"If you switch to another mode, the 10-bit framebuffer applies from the next "
+"launch."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Capture audio device"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (same USB device as video · recommended)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Disabled (video only)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto detection failed · select the capture audio device manually."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Detected: "
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Output"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Audio output device"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Follow the system default output (recommended)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Audio output buffer"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid ""
+"Audio server: %s · the buffer is requested as the PipeWire graph quantum."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Sync & stability"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "PCM buffer target"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Clock-drift correction"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (recommended · correct only when needed)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Off (unaltered PCM · quality first)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "If sound breaks up occasionally, raise the PCM target in 5 ms steps."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Playback & convenience"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Left / right volume"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Left %d%%"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Right %d%%"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Allow volume boost above 100% (up to 200%)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Mute automatically in background"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Volume indicator position"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Top-left (default)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Top-right"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Bottom-left"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Bottom-right"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Audio-only mode (sound without video)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Window size & display"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Pixel-perfect (1:1 source size · locked)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"When off, the window can be resized freely while keeping the aspect ratio. "
+"F5 restores 1:1."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+msgid "Borderless window"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Start in fullscreen"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Fullscreen cursor"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto-hide (recommended)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Always visible"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Monitor"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Startup monitor"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (last position)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"On Wayland the compositor places windows. The selected monitor applies to "
+"fullscreen. Choose X11 under App → Display backend to position windows."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "X11 mode: the startup monitor and last window position are restored."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Keyboard shortcuts"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+msgid " (video mode)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid " (fixed)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Click a key to change it · Ctrl / Alt / Shift combinations are supported"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Reserved or unsupported key. Try another."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Already assigned. Try another key."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Press a key, optionally with Ctrl / Alt / Shift · click the key button again "
+"to cancel."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Reset defaults##shortcuts"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Mouse"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Diagnostic logs"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Save diagnostic log"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Log location"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Open logs folder##logs"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Troubleshooting"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"If there is no picture, close OBS or any other app that uses the capture "
+"device."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "High-bandwidth modes such as 4K 60 fps may only be offered as MJPEG."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "If video works but audio does not, check Audio → Capture audio device."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "The Tab diagnostics overlay shows dropped frames and audio underruns."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Language"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Display language"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (system)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "App theme"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Theme"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Dark"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Light"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Overlays drawn over video stay dark for contrast."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Display backend"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Backend"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (Wayland first)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid ""
+"Current: %s · changes apply on the next launch. You can also run llcv --x11."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Startup"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Skip this settings screen on next launch (F2 reopens it)###skip"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Power"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Prevent sleep during playback"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Video keeps the screen on. Audio-only allows the screen to turn off. "
+"Released when playback stops or the capture device disconnects; system power "
+"settings are not changed."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"This build lacks D-Bus, so it only keeps the screen on during video and "
+"cannot block automatic suspend."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "About"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Version"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Components"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "License"
+msgstr ""
+
+#: src/ui/Shortcuts.h src/ui/ViewerOverlay.cpp
+msgid "App information & shortcuts"
+msgstr ""
+
+#: src/ui/Shortcuts.h src/ui/ViewerOverlay.cpp
+msgid "Open settings"
+msgstr ""
+
+#: src/ui/Shortcuts.h src/ui/ViewerOverlay.cpp
+msgid "Audio OSD"
+msgstr ""
+
+#: src/ui/Shortcuts.h
+msgid "Restore Pixel-perfect size"
+msgstr ""
+
+#: src/ui/Shortcuts.h
+msgid "Fullscreen (Alt+Enter)"
+msgstr ""
+
+#: src/ui/Shortcuts.h src/ui/ViewerOverlay.cpp
+msgid "Save screenshot"
+msgstr ""
+
+#: src/ui/Shortcuts.h src/ui/ViewerOverlay.cpp
+msgid "Live diagnostics"
+msgstr ""
+
+#: src/ui/Shortcuts.h
+msgid "Leave fullscreen / exit"
+msgstr ""
+
+#: src/ui/Shortcuts.h
+msgid "Show / hide the menu bar"
+msgstr ""
+
+#: src/ui/Shortcuts.h
+msgid "Volume ±5%"
+msgstr ""
+
+#: src/ui/Shortcuts.h
+msgid "Wheel"
+msgstr ""
+
+#: src/ui/Shortcuts.h
+msgid "Double-click"
+msgstr ""
+
+#: src/ui/Shortcuts.h
+msgid "Toggle fullscreen"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "No capture audio"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Clipping active (%llu events)"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Clipping recorded (%llu events)"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "No clipping"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Volume %d%%"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Muted in background"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Capture diagnostics"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "[Tab close]"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Volume  %d%% · muted"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Volume  %d%%"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "[F3 close]"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Audio only"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "F2 settings · Tab diagnostics · F1 help · wheel volume"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Low Latency Capture Viewer · Linux (V4L2 · OpenGL · SDL3)"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "not supported"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "supported"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Close (F1 / Esc)###close"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "View"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Fullscreen"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Original size (1:1)"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Smooth scaling"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Sharp scaling"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Immediate presentation"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Volume up (now %d%%)"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Wheel up"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Volume down"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Wheel down"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Mute in background"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Tools"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Open screenshots folder"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Open logs folder"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Settings"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Help"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Quit"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Alt · Esc: close menu"
+msgstr ""
+
+#: src/video/VideoColor.cpp
+msgid "manual"
+msgstr ""
+
+#: src/video/VideoColor.cpp
+msgid "HDR10 default"
+msgstr ""
+
+#: src/video/VideoColor.cpp
+msgid "JPEG default"
+msgstr ""
+
+#: src/video/VideoColor.cpp
+msgid "driver"
+msgstr ""
+
+#: src/video/VideoColor.cpp
+msgid "driver + default"
+msgstr ""
+
+#: src/video/VideoColor.cpp
+msgid "default"
+msgstr ""

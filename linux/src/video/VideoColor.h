@@ -41,6 +41,6 @@ YuvTransform BuildYuvTransform(const ColorSpec& spec, int bitDepth, bool msbAlig
 const char* MatrixName(Matrix matrix);
 const char* RangeName(Range range);
 const char* TransferName(Transfer transfer);
-const char* SourceName(ColorSource matrixSource, ColorSource rangeSource, bool english);
+const char* SourceName(ColorSource matrixSource, ColorSource rangeSource);
 
 }

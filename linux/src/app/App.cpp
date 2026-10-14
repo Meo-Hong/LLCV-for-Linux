@@ -512,8 +512,7 @@ void App::HandleAudioDeviceRemoved(const SDL_AudioDeviceEvent& event) {
     if (!audio_.Running() || !audio_.OwnsDevice(event.which)) return;
     Log("[audio] device %u removed during playback", static_cast<unsigned>(event.which));
     audio_.Stop();
-    audioError_ = T("오디오 장치 연결이 끊겼습니다 · 다시 연결되면 자동으로 복구합니다",
-                    "Audio device disconnected · it is restored automatically when it returns");
+    audioError_ = T("Audio device disconnected · it is restored automatically when it returns");
     ShowToast(audioError_, true);
     audioRetryMs_ = platform::MonotonicMs() + 1000;
 }
@@ -533,7 +532,7 @@ void App::Update() {
         if (StartAudio(error)) {
             audioError_.clear();
             audioRetryMs_ = 0;
-            ShowToast(T("오디오가 복구되었습니다.", "Audio restored."));
+            ShowToast(T("Audio restored."));
         } else {
             audioError_ = error;
             audioRetryMs_ = now + 2000;
@@ -612,7 +611,7 @@ void App::UpdateSleepPrevention() {
         return;
     }
     sleepInhibitor_.Acquire(screen_ == Screen::Video,
-                            T("LLCV에서 캡처를 재생 중입니다.", "LLCV capture playback is active."));
+                            T("LLCV capture playback is active."));
 }
 
 void App::UpdateCursor(uint64_t now) {
@@ -716,14 +715,12 @@ void App::DrawSettings() {
 
 void App::DrawVideoOverlays() {
     if (capture_.State() == capture::CaptureState::Reconnecting) {
-        ui::DrawCenterNotice(T("캡처 장치 연결 끊김", "Capture device disconnected"),
-                             T("장치가 다시 연결되면 자동으로 재생합니다.",
-                               "Playback resumes automatically when the device reconnects."),
+        ui::DrawCenterNotice(T("Capture device disconnected"),
+                             T("Playback resumes automatically when the device reconnects."),
                              fonts_, scale_);
     } else if (noSignalShown_) {
-        ui::DrawCenterNotice(T("신호 대기 중", "Waiting for signal"),
-                             T("HDMI 입력 기기와 캡처 장치 상태를 확인하세요. HDR 출력은 꺼야 합니다.",
-                               "Check the HDMI source and the capture device. HDR output must be off."),
+        ui::DrawCenterNotice(T("Waiting for signal"),
+                             T("Check the HDMI source and the capture device. HDR output must be off."),
                              fonts_, scale_);
     }
     if (audioOsdVisible_) {
@@ -758,99 +755,99 @@ void App::DrawCommonOverlays() {
 
 std::vector<ui::DiagnosticsLine> App::BuildDiagnostics() const {
     std::vector<ui::DiagnosticsLine> lines;
-    const bool english = ui::IsEnglish();
-    lines.push_back({T("경로", "Path"), Format("V4L2 · %s · %s%s", glEs_ ? "OpenGL ES" : "OpenGL", videoDriver_.c_str(),
-                                              fullscreen_ ? T(" · 전체화면", " · fullscreen") : "")});
+    lines.push_back({T("Path"),
+                     Format("V4L2 · %s · %s%s", glEs_ ? "OpenGL ES" : "OpenGL", videoDriver_.c_str(),
+                            fullscreen_ ? T(" · fullscreen") : "")});
     if (screen_ == Screen::Video && activeMode_) {
         const auto negotiated = capture_.Negotiated();
         const auto& color = negotiated.color;
-        lines.push_back({T("장치", "Device"), activeDeviceName_});
-        lines.push_back({T("입력", "Input"),
+        lines.push_back({T("Device"), activeDeviceName_});
+        lines.push_back({T("Input"),
                          Format("%d × %d @ %s fps · %s · %s %s (%s)", negotiated.width, negotiated.height,
                                 capture::FormatRate(negotiated.rate).c_str(),
                                 capture::PixelFormatName(negotiated.format), video::MatrixName(color.matrix),
                                 video::RangeName(color.range),
-                                video::SourceName(color.matrixSource, color.rangeSource, english))});
+                                video::SourceName(color.matrixSource, color.rangeSource))});
         const auto rect = renderer_.LastVideoRect();
         const double ratio = negotiated.width ? static_cast<double>(rect.width) / negotiated.width : 0.0;
-        lines.push_back({T("표시", "Display"),
+        lines.push_back({T("Display"),
                          Format("%d × %d · %.2fx · %s · %s", rect.width, rect.height, ratio,
                                 settings_.presentationMode == settings::PresentationMode::Immediate
-                                    ? T("저지연", "Immediate")
+                                    ? T("Immediate")
                                     : "VSync",
-                                settings_.scalingMode == settings::ScalingMode::Sharp ? T("선명하게", "Sharp")
-                                                                                       : T("부드럽게", "Smooth"))});
-        lines.push_back({T("실제 FPS", "Actual FPS"),
-                         Format(T("입력 %.1f · 표시 %.1f", "Input %.1f · Present %.1f"), inputFps_, presentFps_)});
-        lines.push_back({T("앱 처리 지연", "App latency"),
-                         Format(T("수신→표시 %s · 복사/디코드 %s (총 HDMI 지연 아님)",
-                                  "capture→present %s · copy/decode %s (not total HDMI latency)"),
+                                settings_.scalingMode == settings::ScalingMode::Sharp
+                                    ? T("Sharp")
+                                    : T("Smooth"))});
+        lines.push_back({T("Actual FPS"),
+                         Format(T("Input %.1f · Present %.1f"), inputFps_, presentFps_)});
+        lines.push_back({T("App latency"),
+                         Format(T("capture→present %s · copy/decode %s (not total HDMI latency)"),
                                 Ms(averageLatencyMs_).c_str(), Ms(averageProcessingMs_).c_str())});
         const auto& counters = capture_.Counters();
-        lines.push_back({T("프레임", "Frames"),
-                         Format(T("입력 %llu · 표시 %llu · 최신화 건너뜀 %llu", "Input %llu · Presented %llu · Replaced %llu"),
+        lines.push_back({T("Frames"),
+                         Format(T("Input %llu · Presented %llu · Replaced %llu"),
                                 U(counters.frames.load()), U(presentedFrames_),
                                 U(counters.replaced.load() + counters.skippedInQueue.load()))});
         std::string hdrText;
         if (color.transfer == video::Transfer::Pq) {
             hdrText = hdrActive_
-                          ? Format(T("입력 HDR10 · HDR10 패스스루 (%d비트 버퍼)", "HDR10 input · HDR10 passthrough (%d-bit buffer)"),
+                          ? Format(T("HDR10 input · HDR10 passthrough (%d-bit buffer)"),
                                    framebufferBits_)
-                          : Format(T("입력 HDR10 · SDR 톤매핑 (기준 흰색 %d nit)", "HDR10 input · SDR tone mapping (%d nit white)"),
+                          : Format(T("HDR10 input · SDR tone mapping (%d nit white)"),
                                    settings_.sdrWhiteNits);
         } else {
-            hdrText = T("SDR 입력", "SDR input");
+            hdrText = T("SDR input");
         }
         const ui::HdrSupport support = SessionHdrSupport();
         if (color.transfer == video::Transfer::Pq && !hdrActive_ && !support.output) {
-            hdrText += T(" · HDR 출력 미지원", " · HDR output not supported");
+            hdrText += T(" · HDR output not supported");
         } else if (color.transfer != video::Transfer::Pq && !support.input) {
-            hdrText += T(" · HDR 입력 미지원", " · HDR input not supported");
+            hdrText += T(" · HDR input not supported");
         }
         if (preferredColor_.known) {
-            hdrText += preferredColor_.hdr ? T(" · 모니터 HDR", " · display HDR") : T(" · 모니터 SDR", " · display SDR");
+            hdrText += preferredColor_.hdr ? T(" · display HDR")
+                                           : T(" · display SDR");
         }
         lines.push_back({"HDR", hdrText});
-        lines.push_back({T("프레임 손실", "Frame loss"),
-                         Format(T("드라이버 누락 %llu · 손상 %llu · 버퍼 %d개", "Driver dropped %llu · corrupt %llu · %d buffers"),
+        lines.push_back({T("Frame loss"),
+                         Format(T("Driver dropped %llu · corrupt %llu · %d buffers"),
                                 U(counters.driverDropped.load()), U(counters.corrupt.load()), negotiated.bufferCount)});
     }
 
     const audio::AudioStatus status = audio_.Status();
     if (status.running) {
-        lines.push_back({T("오디오 출력", "Audio output"),
+        lines.push_back({T("Audio output"),
                          Format("SDL3 %s · %s", status.driver.c_str(), status.outputName.c_str())});
-        lines.push_back({T("캡처 오디오", "Capture audio"),
-                         Format(T("%s · 패킷 %.2f ms", "%s · packet %.2f ms"), status.captureName.c_str(),
+        lines.push_back({T("Capture audio"),
+                         Format(T("%s · packet %.2f ms"), status.captureName.c_str(),
                                 FramesToMs(status.lastCapturePacketFrames))});
-        lines.push_back({T("장치 버퍼", "Device buffer"),
-                         Format(T("출력 %.2f ms · 입력 %.2f ms", "output %.2f ms · input %.2f ms"),
+        lines.push_back({T("Device buffer"),
+                         Format(T("output %.2f ms · input %.2f ms"),
                                 FramesToMs(static_cast<uint64_t>(std::max(status.outputDeviceFrames, 0))),
                                 FramesToMs(static_cast<uint64_t>(std::max(status.captureDeviceFrames, 0))))});
-        lines.push_back({T("앱 PCM 버퍼", "App PCM queue"),
-                         Format(T("현재 %.2f ms · 목표 %.2f ms · 관측 최저 %.2f ms%s",
-                                  "current %.2f ms · target %.2f ms · observed min %.2f ms%s"),
+        lines.push_back({T("App PCM queue"),
+                         Format(T("current %.2f ms · target %.2f ms · observed min %.2f ms%s"),
                                 FramesToMs(status.ringFrames + status.resamplerFrames), FramesToMs(status.targetFrames),
                                 FramesToMs(status.minimumQueueFrames),
-                                status.prefilling ? T(" · 버퍼링", " · buffering") : "")});
-        lines.push_back({T("클록 보정", "Clock drift"),
+                                status.prefilling ? T(" · buffering") : "")});
+        lines.push_back({T("Clock drift"),
                          status.driftCorrection
-                             ? Format(T("자동 · 적용 %+d ppm", "Auto · applied %+d ppm"), status.appliedPpm)
-                             : std::string(T("끔 · 원본 PCM", "Off · unaltered PCM"))});
-        lines.push_back({T("오디오 오류", "Audio errors"),
-                         Format(T("underrun %llu회 (누락 %.2f ms) · overrun %llu회 · 지연 트림 %llu회",
-                                  "underrun %llu (missing %.2f ms) · overrun %llu · latency trims %llu"),
+                             ? Format(T("Auto · applied %+d ppm"), status.appliedPpm)
+                             : std::string(T("Off · unaltered PCM"))});
+        lines.push_back({T("Audio errors"),
+                         Format(T("underrun %llu (missing %.2f ms) · overrun %llu · latency trims %llu"),
                                 U(status.underrunEvents), FramesToMs(status.underrunFrames), U(status.overrunEvents),
                                 U(status.trimEvents))});
     } else {
-        std::string text = audioWanted_ ? (audioError_.empty() ? std::string(T("시작 대기", "Waiting")) : audioError_)
-                                        : std::string(T("사용 안 함", "Disabled"));
-        lines.push_back({T("오디오", "Audio"), text});
+        std::string text = audioWanted_
+                               ? (audioError_.empty() ? std::string(T("Waiting")) : audioError_)
+                               : std::string(T("Disabled"));
+        lines.push_back({T("Audio"), text});
     }
-    lines.push_back({T("음량", "Volume"),
+    lines.push_back({T("Volume"),
                      Format("%d%% · L %d%% · R %d%%%s", settings_.volumePercent, settings_.leftVolumePercent,
                             settings_.rightVolumePercent,
-                            settings_.muteWhenBackground && !focused_ ? T(" · 백그라운드 음소거", " · muted in background")
+                            settings_.muteWhenBackground && !focused_ ? T(" · muted in background")
                                                                       : "")});
     return lines;
 }
@@ -873,7 +870,7 @@ ui::AudioMeterState App::BuildAudioState() const {
     if (status.running) {
         state.outputName = status.outputName;
     } else {
-        state.outputName = settings_.audioOutputDevice.empty() ? T("시스템 기본 출력", "System default output")
+        state.outputName = settings_.audioOutputDevice.empty() ? T("System default output")
                                                                : settings_.audioOutputDevice;
     }
     state.status = audioError_;
@@ -917,18 +914,19 @@ ui::SettingsContext App::BuildSettingsContext() {
     if (settings_.audioOnly) {
         context.canStart = !audioName.empty();
         context.startSummary = context.canStart
-                                   ? Format(T("오디오 전용 · %s", "Audio only · %s"), audioName.c_str())
-                                   : std::string(T("캡처 오디오 장치를 선택하세요.", "Select a capture audio device."));
+                                   ? Format(T("Audio only · %s"), audioName.c_str())
+                                   : std::string(T("Select a capture audio device."));
     } else if (!device) {
-        context.startSummary = T("캡처 장치가 없습니다.", "No capture device.");
+        context.startSummary = T("No capture device.");
     } else if (const auto mode = capture::ResolveMode(*device, RequestFromSettings(settings_))) {
         context.canStart = true;
         context.startSummary =
             Format("%s · %d × %d · %s · %s fps · %s", device->Name().c_str(), mode->width, mode->height,
                    capture::PixelFormatName(mode->format), capture::FormatRate(mode->rate).c_str(),
-                   audioName.empty() ? T("오디오 없음", "no audio") : T("오디오 사용", "with audio"));
+                   audioName.empty() ? T("no audio")
+                                     : T("with audio"));
     } else {
-        context.startSummary = T("선택한 모드를 장치가 지원하지 않습니다.", "The device does not support the selected mode.");
+        context.startSummary = T("The device does not support the selected mode.");
     }
     return context;
 }
@@ -975,14 +973,13 @@ bool App::StartSession(std::string& error) {
     activeMode_.reset();
     if (!settings_.audioOnly) {
         if (!device) {
-            error = T("캡처 장치를 찾지 못했습니다. USB 연결을 확인하세요.",
-                      "No capture device was found. Check the USB connection.");
+            error = T("No capture device was found. Check the USB connection.");
             return false;
         }
         activeMode_ = capture::ResolveMode(*device, RequestFromSettings(settings_));
         if (activeMode_ && activeMode_->format == capture::PixelFormat::P010 &&
             !renderer_.SupportsSixteenBitTextures()) {
-            error = Format(T("HDR 입력 미지원: %s", "HDR input not supported: %s"),
+            error = Format(T("HDR input not supported: %s"),
                            EvaluateHdrSupport(device).inputText.c_str());
             activeMode_.reset();
             return false;
@@ -990,11 +987,10 @@ bool App::StartSession(std::string& error) {
         if (!activeMode_) {
             if (settings_.pixelFormat == settings::PixelFormatChoice::P010 &&
                 !device->Supports(capture::PixelFormat::P010)) {
-                error = Format(T("HDR 입력 미지원: %s", "HDR input not supported: %s"),
+                error = Format(T("HDR input not supported: %s"),
                                EvaluateHdrSupport(device).inputText.c_str());
             } else {
-                error = T("선택한 해상도·형식을 장치가 지원하지 않습니다.",
-                          "The device does not support the selected resolution and format.");
+                error = T("The device does not support the selected resolution and format.");
             }
             return false;
         }
@@ -1002,8 +998,7 @@ bool App::StartSession(std::string& error) {
     captureAudioName_ = ResolveCaptureAudio(device);
     audioWanted_ = !captureAudioName_.empty();
     if (settings_.audioOnly && !audioWanted_) {
-        error = T("캡처 오디오 장치를 찾지 못했습니다. 오디오 → 캡처 오디오 장치를 선택하세요.",
-                  "No capture audio device was found. Select one under Audio → Capture audio device.");
+        error = T("No capture audio device was found. Select one under Audio → Capture audio device.");
         return false;
     }
 
@@ -1019,12 +1014,9 @@ bool App::StartSession(std::string& error) {
         config.hdrInput = settings_.hdrInput;
         std::string captureError;
         if (!capture_.Start(config, mailbox_, [this] { NotifyFrame(); }, captureError)) {
-            error = std::string(T("캡처를 시작하지 못했습니다: ", "Could not start capture: ")) + captureError;
+            error = std::string(T("Could not start capture: ")) + captureError;
             if (settings_.capture40Fps) {
-                error += T("\n\n40fps 캡처가 켜져 있습니다. 이 장치·해상도·형식이 40fps를 거부하거나 다른 FPS를 "
-                           "보고할 수 있습니다. 영상 → 40fps 캡처를 해제하면 기존 프레임 선택으로 다시 시도할 수 있습니다. "
-                           "형식 거부인지 다른 시작 오류인지는 진단 로그에서 확인하세요.",
-                           "\n\n40 fps capture is enabled. This device, resolution or format may reject 40 fps or "
+                error += T("\n\n40 fps capture is enabled. This device, resolution or format may reject 40 fps or "
                            "report a different rate. Uncheck Video → 40 fps capture to retry with the normal frame-rate "
                            "selection. The diagnostic log tells a format rejection apart from other startup errors.");
             }
@@ -1044,15 +1036,15 @@ bool App::StartSession(std::string& error) {
         if (!StartAudio(audioError)) {
             if (settings_.audioOnly) {
                 capture_.Stop();
-                error = std::string(T("오디오를 시작하지 못했습니다: ", "Could not start audio: ")) + audioError;
+                error = std::string(T("Could not start audio: ")) + audioError;
                 return false;
             }
             audioError_ = audioError;
             audioRetryMs_ = platform::MonotonicMs() + 2000;
-            ShowToast(std::string(T("오디오를 시작하지 못했습니다: ", "Could not start audio: ")) + audioError, true);
+            ShowToast(std::string(T("Could not start audio: ")) + audioError, true);
         }
     } else if (!settings_.audioOnly && settings_.captureAudioDevice != settings::kCaptureAudioDisabled) {
-        ShowToast(T("캡처 오디오 장치를 찾지 못해 영상만 재생합니다.", "No capture audio device was found; playing video only."),
+        ShowToast(T("No capture audio device was found; playing video only."),
                   true);
     }
 
@@ -1083,12 +1075,12 @@ bool App::StartSession(std::string& error) {
     if (activeMode_ && capture_.Negotiated().color.transfer == video::Transfer::Pq && !hdrActive_) {
         const ui::HdrSupport support = SessionHdrSupport();
         if (!support.output) {
-            ShowToast(Format(T("HDR 출력 미지원: %s · SDR로 변환해 표시합니다.", "HDR output not supported: %s · showing as SDR."),
+            ShowToast(Format(T("HDR output not supported: %s · showing as SDR."),
                              support.outputText.c_str()),
                       true);
         }
     } else if (toastUntilMs_ < platform::MonotonicMs()) {
-        ShowToast(T("Alt 키를 누르면 메뉴가 나타납니다.", "Press Alt to show the menu."));
+        ShowToast(T("Press Alt to show the menu."));
     }
     UpdateBackgroundMute();
     UpdateSleepPrevention();
@@ -1137,7 +1129,7 @@ void App::EnterSettings() {
     SDL_SetWindowResizable(window_, true);
     SDL_SetWindowMinimumSize(window_, 760, 520);
     SDL_SetWindowSize(window_, kSettingsWidth, kSettingsHeight);
-    SDL_SetWindowTitle(window_, T("LLCV 설정", "LLCV Settings"));
+    SDL_SetWindowTitle(window_, T("LLCV Settings"));
     SDL_ShowWindow(window_);
     SDL_RaiseWindow(window_);
     ApplySwapInterval();
@@ -1265,52 +1257,40 @@ void App::RefreshPreferredColor() {
 ui::HdrSupport App::EvaluateHdrSupport(const capture::CaptureDevice* device) const {
     ui::HdrSupport support;
     if (!device) {
-        support.inputText = T("캡처 장치가 없습니다.", "No capture device.");
+        support.inputText = T("No capture device.");
     } else if (device->Supports(capture::PixelFormat::P010) && !renderer_.SupportsSixteenBitTextures()) {
-        support.inputText = T("그래픽 드라이버(OpenGL ES)가 16비트 텍스처(EXT_texture_norm16)를 지원하지 않아 P010을 표시할 수 없습니다.",
-                              "The graphics driver (OpenGL ES) lacks 16-bit textures (EXT_texture_norm16), so P010 cannot be shown.");
+        support.inputText = T("The graphics driver (OpenGL ES) lacks 16-bit textures (EXT_texture_norm16), so P010 cannot be shown.");
     } else if (device->Supports(capture::PixelFormat::P010)) {
         support.input = true;
-        support.inputText = T("P010 (10비트 HDR10) 사용 가능 · 픽셀 형식에서 P010을 선택하세요.",
-                              "P010 (10-bit HDR10) is available · select P010 as the pixel format.");
+        support.inputText = T("P010 (10-bit HDR10) is available · select P010 as the pixel format.");
     } else if (device->advertisesP010) {
-        support.inputText = Format(T("장치는 P010(HDR10)을 제공하지만 커널 %s의 uvcvideo가 인식하지 못합니다. "
-                                     "리눅스 7.1 이상 또는 P010 DKMS 모듈이 필요합니다.",
-                                     "The device offers P010 (HDR10), but uvcvideo in kernel %s does not recognize it. "
+        support.inputText = Format(T("The device offers P010 (HDR10), but uvcvideo in kernel %s does not recognize it. "
                                      "Linux 7.1 or newer, or a P010 DKMS module, is required."),
                                    kernelRelease_.c_str());
     } else {
-        support.inputText = T("장치가 10비트 HDR 형식을 제공하지 않습니다. 8비트 HDR 신호는 'HDR10 강제'로 해석할 수 있습니다.",
-                              "The device offers no 10-bit HDR format. 8-bit HDR signals can use 'Force HDR10'.");
+        support.inputText = T("The device offers no 10-bit HDR format. 8-bit HDR signals can use 'Force HDR10'.");
     }
 
     if (forceSdr_) {
-        support.outputText = T("--sdr 옵션으로 실행 중이라 HDR 출력을 끕니다.", "HDR output is off because LLCV was started with --sdr.");
+        support.outputText = T("HDR output is off because LLCV was started with --sdr.");
     } else if (!video::HdrOutput::Compiled()) {
-        support.outputText = T("이 빌드에는 Wayland 색 관리가 없습니다.", "This build lacks Wayland color management.");
+        support.outputText = T("This build lacks Wayland color management.");
     } else if (!IsWayland()) {
-        support.outputText = T("X11에서는 HDR 출력을 할 수 없습니다. Wayland로 실행하세요.",
-                               "HDR output is unavailable on X11. Run on Wayland.");
+        support.outputText = T("HDR output is unavailable on X11. Run on Wayland.");
     } else if (!hdrOutput_.Connected()) {
-        support.outputText = T("컴포지터가 Wayland 색 관리(wp_color_management_v1)를 지원하지 않습니다. "
-                               "GNOME 48 이상 또는 KDE Plasma 6이 필요합니다.",
-                               "The compositor lacks Wayland color management (wp_color_management_v1). "
+        support.outputText = T("The compositor lacks Wayland color management (wp_color_management_v1). "
                                "GNOME 48 or newer, or KDE Plasma 6, is required.");
     } else if (!hdrOutput_.Supported()) {
-        support.outputText = T("컴포지터가 PQ/BT.2020 HDR10을 지원하지 않습니다.",
-                               "The compositor does not support PQ/BT.2020 HDR10.");
+        support.outputText = T("The compositor does not support PQ/BT.2020 HDR10.");
     } else if (framebufferBits_ < 10) {
-        support.outputText = T("그래픽 드라이버가 10비트 화면 버퍼를 제공하지 않습니다. "
-                               "'항상 HDR 출력'을 선택하면 8비트로 출력합니다.",
-                               "The graphics driver provides no 10-bit framebuffer. "
+        support.outputText = T("The graphics driver provides no 10-bit framebuffer. "
                                "'Always HDR output' sends 8-bit HDR instead.");
     } else if (preferredColor_.known && !preferredColor_.hdr) {
         support.output = true;
-        support.outputText = T("지원 · 현재 모니터의 HDR이 꺼져 있습니다. 디스플레이 설정에서 HDR을 켜세요.",
-                               "Supported · HDR is off on this display. Turn it on in the display settings.");
+        support.outputText = T("Supported · HDR is off on this display. Turn it on in the display settings.");
     } else {
         support.output = true;
-        support.outputText = Format(T("지원 · %d비트 화면 버퍼 · Wayland 색 관리", "Supported · %d-bit framebuffer · Wayland color management"),
+        support.outputText = Format(T("Supported · %d-bit framebuffer · Wayland color management"),
                                     framebufferBits_);
     }
     return support;
@@ -1333,7 +1313,7 @@ void App::UpdateHdrState() {
     }
     if (wanted && !hdrActive_) {
         hdrActive_ = hdrOutput_.Enable();
-        if (!hdrActive_) ShowToast(T("HDR 출력을 켜지 못해 SDR 톤매핑으로 표시합니다.", "HDR output failed; using SDR tone mapping."), true);
+        if (!hdrActive_) ShowToast(T("HDR output failed; using SDR tone mapping."), true);
     } else if (!wanted && hdrActive_) {
         hdrOutput_.Disable();
         hdrActive_ = false;
@@ -1345,11 +1325,16 @@ void App::UpdateHdrState() {
 
 void App::ApplyLanguage() {
     switch (settings_.uiLanguage) {
-    case settings::UiLanguage::Korean: ui::SetEnglish(false); break;
-    case settings::UiLanguage::English: ui::SetEnglish(true); break;
-    case settings::UiLanguage::Auto: ui::SetEnglish(!ui::SystemPrefersKorean()); break;
+    case settings::UiLanguage::Korean: ui::SetLanguage(ui::Language::Korean); break;
+    case settings::UiLanguage::English: ui::SetLanguage(ui::Language::English); break;
+    case settings::UiLanguage::Japanese: ui::SetLanguage(ui::Language::Japanese); break;
+    case settings::UiLanguage::Spanish: ui::SetLanguage(ui::Language::Spanish); break;
+    case settings::UiLanguage::Portuguese: ui::SetLanguage(ui::Language::Portuguese); break;
+    case settings::UiLanguage::Auto: ui::SetLanguage(ui::SystemLanguage()); break;
     }
-    if (window_ && screen_ == Screen::Settings) SDL_SetWindowTitle(window_, T("LLCV 설정", "LLCV Settings"));
+    if (window_ && screen_ == Screen::Settings) {
+        SDL_SetWindowTitle(window_, T("LLCV Settings"));
+    }
 }
 
 void App::ApplyStyle() {
@@ -1416,27 +1401,27 @@ void App::RequestScreenshot() {
     int width = 0;
     int height = 0;
     if (!renderer_.ReadImage(rgba, width, height)) {
-        ShowToast(T("스크린샷 실패 · 표시 중인 영상이 없습니다.", "Screenshot failed · no video frame yet."), true);
+        ShowToast(T("Screenshot failed · no video frame yet."), true);
         return;
     }
     screenshots_.Request(std::move(rgba), width, height, platform::ScreenshotDirectory(),
                          settings_.screenshotClipboard);
-    ShowToast(T("스크린샷 저장 중…", "Saving screenshot…"));
+    ShowToast(T("Saving screenshot…"));
 }
 
 void App::PollScreenshots() {
     while (auto result = screenshots_.Poll()) {
         if (!result->ok) {
             Log("[screenshot] failed: %s", result->error.c_str());
-            ShowToast(Format(T("스크린샷 실패: %s", "Screenshot failed: %s"), result->error.c_str()), true);
+            ShowToast(Format(T("Screenshot failed: %s"), result->error.c_str()), true);
             continue;
         }
         Log("[screenshot] saved %s", result->path.c_str());
-        std::string message = Format(T("스크린샷 저장: %s", "Screenshot saved: %s"), result->path.filename().c_str());
-        if (renderer_.SourceIsPq()) message += T(" (HDR→SDR 변환)", " (HDR converted to SDR)");
+        std::string message = Format(T("Screenshot saved: %s"), result->path.filename().c_str());
+        if (renderer_.SourceIsPq()) message += T(" (HDR converted to SDR)");
         if (!result->png.empty()) {
             CopyPngToClipboard(std::move(result->png));
-            message += T(" · 클립보드 복사됨", " · copied to clipboard");
+            message += T(" · copied to clipboard");
         }
         ShowToast(message);
     }
@@ -1460,7 +1445,7 @@ void App::ShowToast(std::string text, bool error) {
 void App::OpenFolder(const std::filesystem::path& path) {
     platform::EnsureDirectory(path);
     if (SDL_OpenURL(platform::FileUrl(path).c_str())) return;
-    const std::string message = Format(T("폴더를 열지 못했습니다: %s", "Could not open the folder: %s"), path.c_str());
+    const std::string message = Format(T("Could not open the folder: %s"), path.c_str());
     if (screen_ == Screen::Settings) {
         errorMessage_ = message;
     } else {
@@ -1561,8 +1546,7 @@ void App::SaveSettings() {
         return;
     }
     Log("[settings] could not save %s", settingsPath_.c_str());
-    settingsSaveError_ = Format(T("설정을 저장하지 못했습니다. 기존 설정 파일은 그대로 유지됩니다: %s",
-                                  "Settings could not be saved. The previous settings file is kept: %s"),
+    settingsSaveError_ = Format(T("Settings could not be saved. The previous settings file is kept: %s"),
                                 settingsPath_.c_str());
     if (screen_ != Screen::Settings) ShowToast(settingsSaveError_, true);
 }

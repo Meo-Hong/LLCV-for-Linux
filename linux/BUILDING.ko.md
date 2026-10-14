@@ -15,6 +15,7 @@
 5. [설치, 확인, 제거](#5-설치-확인-제거)
 6. [패키지 없이 직접 빌드 (그 밖의 배포판)](#6-패키지-없이-직접-빌드-그-밖의-배포판)
 7. [빌드 문제 해결](#7-빌드-문제-해결)
+8. [번역](#8-번역)
 
 ## 1. 내 배포판에 맞는 방법 찾기
 
@@ -315,6 +316,7 @@ llcv --version
 | 앱 메뉴 항목 | `/usr/share/applications/io.github.meo_hong.LLCV.desktop` |
 | 아이콘 | `/usr/share/icons/hicolor/*/apps/io.github.meo_hong.LLCV.png` |
 | 글꼴 | `/usr/share/llcv/fonts/` |
+| 번역 | `/usr/share/llcv/locale/` |
 | 설명서 | `man llcv` |
 
 사용자별 데이터는 제거해도 남습니다. 완전히 지우려면 아래 폴더를 지우세요.
@@ -408,3 +410,21 @@ ALSA, D-Bus 개발 패키지가 필요합니다.
 
 빌드에 성공했는데 앱이 이상하게 동작하면 [README의 문제 해결](README.ko.md#문제-해결)을
 보세요.
+
+## 8. 번역
+
+코드에는 영어 문장만 `T("…")`로 들어 있습니다. 한국어·일본어·스페인어·브라질
+포르투갈어는 `po/*.po`에 있고 실행할 때 읽기 때문에, 번역이 빠진 문장은 영어로
+표시됩니다. UI 문장을 바꿨다면 템플릿과 번역 파일을 갱신하고, 새 항목을 번역한
+뒤 검사하세요.
+
+```sh
+./tools/update-translations.sh
+python3 tools/check-translations.py
+```
+
+갱신 스크립트에는 gettext가 필요합니다(`sudo apt install gettext`). 검사
+스크립트는 모든 번역을 영어 원문과 비교합니다. printf 자리표시자, ImGui `##` ID,
+F1·Tab 같은 키 이름, 숫자와 기술 용어가 대상입니다. 일본어 한자는 Noto Sans JP의
+JIS 제1수준 서브셋에서 가져오며, 새 문장에 다른 한자가 필요하면
+`tools/subset-japanese-font.sh`로 다시 만드세요.

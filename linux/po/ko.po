@@ -1,0 +1,1311 @@
+# Korean translation of LLCV for Linux.
+# This file is distributed under the same license as the LLCV package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: LLCV\n"
+"Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
+"POT-Creation-Date: 2026-10-15 01:15+0900\n"
+"PO-Revision-Date: 2026-10-15 00:00+0900\n"
+"Last-Translator: Meo-hong\n"
+"Language-Team: none\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: src/app/App.cpp
+msgid ""
+"Audio device disconnected · it is restored automatically when it returns"
+msgstr "오디오 장치 연결이 끊겼습니다 · 다시 연결되면 자동으로 복구합니다"
+
+#: src/app/App.cpp
+msgid "Audio restored."
+msgstr "오디오가 복구되었습니다."
+
+#: src/app/App.cpp
+msgid "LLCV capture playback is active."
+msgstr "LLCV에서 캡처를 재생 중입니다."
+
+#: src/app/App.cpp
+msgid "Capture device disconnected"
+msgstr "캡처 장치 연결 끊김"
+
+#: src/app/App.cpp
+msgid "Playback resumes automatically when the device reconnects."
+msgstr "장치가 다시 연결되면 자동으로 재생합니다."
+
+#: src/app/App.cpp
+msgid "Waiting for signal"
+msgstr "신호 대기 중"
+
+#: src/app/App.cpp
+msgid "Check the HDMI source and the capture device. HDR output must be off."
+msgstr "HDMI 입력 기기와 캡처 장치 상태를 확인하세요. HDR 출력은 꺼야 합니다."
+
+#: src/app/App.cpp
+msgid "Path"
+msgstr "경로"
+
+#: src/app/App.cpp
+msgid " · fullscreen"
+msgstr " · 전체화면"
+
+#: src/app/App.cpp
+msgid "Device"
+msgstr "장치"
+
+#: src/app/App.cpp
+msgid "Input"
+msgstr "입력"
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Display"
+msgstr "표시"
+
+#: src/app/App.cpp
+msgid "Immediate"
+msgstr "저지연"
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Sharp"
+msgstr "선명하게"
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Smooth"
+msgstr "부드럽게"
+
+#: src/app/App.cpp
+msgid "Actual FPS"
+msgstr "실제 FPS"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Input %.1f · Present %.1f"
+msgstr "입력 %.1f · 표시 %.1f"
+
+#: src/app/App.cpp
+msgid "App latency"
+msgstr "앱 처리 지연"
+
+#: src/app/App.cpp
+#, c-format
+msgid "capture→present %s · copy/decode %s (not total HDMI latency)"
+msgstr "수신→표시 %s · 복사/디코드 %s (총 HDMI 지연 아님)"
+
+#: src/app/App.cpp
+msgid "Frames"
+msgstr "프레임"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Input %llu · Presented %llu · Replaced %llu"
+msgstr "입력 %llu · 표시 %llu · 최신화 건너뜀 %llu"
+
+#: src/app/App.cpp
+#, c-format
+msgid "HDR10 input · HDR10 passthrough (%d-bit buffer)"
+msgstr "입력 HDR10 · HDR10 패스스루 (%d비트 버퍼)"
+
+#: src/app/App.cpp
+#, c-format
+msgid "HDR10 input · SDR tone mapping (%d nit white)"
+msgstr "입력 HDR10 · SDR 톤매핑 (기준 흰색 %d nit)"
+
+#: src/app/App.cpp
+msgid "SDR input"
+msgstr "SDR 입력"
+
+#: src/app/App.cpp
+msgid " · HDR output not supported"
+msgstr " · HDR 출력 미지원"
+
+#: src/app/App.cpp
+msgid " · HDR input not supported"
+msgstr " · HDR 입력 미지원"
+
+#: src/app/App.cpp
+msgid " · display HDR"
+msgstr " · 모니터 HDR"
+
+#: src/app/App.cpp
+msgid " · display SDR"
+msgstr " · 모니터 SDR"
+
+#: src/app/App.cpp
+msgid "Frame loss"
+msgstr "프레임 손실"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Driver dropped %llu · corrupt %llu · %d buffers"
+msgstr "드라이버 누락 %llu · 손상 %llu · 버퍼 %d개"
+
+#: src/app/App.cpp
+msgid "Audio output"
+msgstr "오디오 출력"
+
+#: src/app/App.cpp
+msgid "Capture audio"
+msgstr "캡처 오디오"
+
+#: src/app/App.cpp
+#, c-format
+msgid "%s · packet %.2f ms"
+msgstr "%s · 패킷 %.2f ms"
+
+#: src/app/App.cpp
+msgid "Device buffer"
+msgstr "장치 버퍼"
+
+#: src/app/App.cpp
+#, c-format
+msgid "output %.2f ms · input %.2f ms"
+msgstr "출력 %.2f ms · 입력 %.2f ms"
+
+#: src/app/App.cpp
+msgid "App PCM queue"
+msgstr "앱 PCM 버퍼"
+
+#: src/app/App.cpp
+#, c-format
+msgid "current %.2f ms · target %.2f ms · observed min %.2f ms%s"
+msgstr "현재 %.2f ms · 목표 %.2f ms · 관측 최저 %.2f ms%s"
+
+#: src/app/App.cpp
+msgid " · buffering"
+msgstr " · 버퍼링"
+
+#: src/app/App.cpp
+msgid "Clock drift"
+msgstr "클록 보정"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Auto · applied %+d ppm"
+msgstr "자동 · 적용 %+d ppm"
+
+#: src/app/App.cpp
+msgid "Off · unaltered PCM"
+msgstr "끔 · 원본 PCM"
+
+#: src/app/App.cpp
+msgid "Audio errors"
+msgstr "오디오 오류"
+
+#: src/app/App.cpp
+#, c-format
+msgid "underrun %llu (missing %.2f ms) · overrun %llu · latency trims %llu"
+msgstr "underrun %llu회 (누락 %.2f ms) · overrun %llu회 · 지연 트림 %llu회"
+
+#: src/app/App.cpp
+msgid "Waiting"
+msgstr "시작 대기"
+
+#: src/app/App.cpp
+msgid "Disabled"
+msgstr "사용 안 함"
+
+#: src/app/App.cpp src/ui/ViewerOverlay.cpp
+msgid "Audio"
+msgstr "오디오"
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Volume"
+msgstr "음량"
+
+#: src/app/App.cpp
+msgid " · muted in background"
+msgstr " · 백그라운드 음소거"
+
+#: src/app/App.cpp
+msgid "System default output"
+msgstr "시스템 기본 출력"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Audio only · %s"
+msgstr "오디오 전용 · %s"
+
+#: src/app/App.cpp
+msgid "Select a capture audio device."
+msgstr "캡처 오디오 장치를 선택하세요."
+
+#: src/app/App.cpp
+msgid "No capture device."
+msgstr "캡처 장치가 없습니다."
+
+#: src/app/App.cpp
+msgid "no audio"
+msgstr "오디오 없음"
+
+#: src/app/App.cpp
+msgid "with audio"
+msgstr "오디오 사용"
+
+#: src/app/App.cpp
+msgid "The device does not support the selected mode."
+msgstr "선택한 모드를 장치가 지원하지 않습니다."
+
+#: src/app/App.cpp
+msgid "No capture device was found. Check the USB connection."
+msgstr "캡처 장치를 찾지 못했습니다. USB 연결을 확인하세요."
+
+#: src/app/App.cpp
+#, c-format
+msgid "HDR input not supported: %s"
+msgstr "HDR 입력 미지원: %s"
+
+#: src/app/App.cpp
+msgid "The device does not support the selected resolution and format."
+msgstr "선택한 해상도·형식을 장치가 지원하지 않습니다."
+
+#: src/app/App.cpp
+msgid ""
+"No capture audio device was found. Select one under Audio → Capture audio "
+"device."
+msgstr ""
+"캡처 오디오 장치를 찾지 못했습니다. 오디오 → 캡처 오디오 장치를 선택하세요."
+
+#: src/app/App.cpp
+msgid "Could not start capture: "
+msgstr "캡처를 시작하지 못했습니다: "
+
+#: src/app/App.cpp
+msgid ""
+"\n"
+"\n"
+"40 fps capture is enabled. This device, resolution or format may reject 40 "
+"fps or report a different rate. Uncheck Video → 40 fps capture to retry with "
+"the normal frame-rate selection. The diagnostic log tells a format rejection "
+"apart from other startup errors."
+msgstr ""
+"\n"
+"\n"
+"40fps 캡처가 켜져 있습니다. 이 장치·해상도·형식이 40fps를 거부하거나 다른 FPS"
+"를 보고할 수 있습니다. 영상 → 40fps 캡처를 해제하면 기존 프레임 선택으로 다"
+"시 시도할 수 있습니다. 형식 거부인지 다른 시작 오류인지는 진단 로그에서 확인"
+"하세요."
+
+#: src/app/App.cpp
+msgid "Could not start audio: "
+msgstr "오디오를 시작하지 못했습니다: "
+
+#: src/app/App.cpp
+msgid "No capture audio device was found; playing video only."
+msgstr "캡처 오디오 장치를 찾지 못해 영상만 재생합니다."
+
+#: src/app/App.cpp
+#, c-format
+msgid "HDR output not supported: %s · showing as SDR."
+msgstr "HDR 출력 미지원: %s · SDR로 변환해 표시합니다."
+
+#: src/app/App.cpp
+msgid "Press Alt to show the menu."
+msgstr "Alt 키를 누르면 메뉴가 나타납니다."
+
+#: src/app/App.cpp
+msgid "LLCV Settings"
+msgstr "LLCV 설정"
+
+#: src/app/App.cpp
+msgid ""
+"The graphics driver (OpenGL ES) lacks 16-bit textures (EXT_texture_norm16), "
+"so P010 cannot be shown."
+msgstr ""
+"그래픽 드라이버(OpenGL ES)가 16비트 텍스처(EXT_texture_norm16)를 지원하지 않"
+"아 P010을 표시할 수 없습니다."
+
+#: src/app/App.cpp
+msgid "P010 (10-bit HDR10) is available · select P010 as the pixel format."
+msgstr "P010 (10비트 HDR10) 사용 가능 · 픽셀 형식에서 P010을 선택하세요."
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"The device offers P010 (HDR10), but uvcvideo in kernel %s does not recognize "
+"it. Linux 7.1 or newer, or a P010 DKMS module, is required."
+msgstr ""
+"장치는 P010(HDR10)을 제공하지만 커널 %s의 uvcvideo가 인식하지 못합니다. 리눅"
+"스 7.1 이상 또는 P010 DKMS 모듈이 필요합니다."
+
+#: src/app/App.cpp
+msgid ""
+"The device offers no 10-bit HDR format. 8-bit HDR signals can use 'Force "
+"HDR10'."
+msgstr ""
+"장치가 10비트 HDR 형식을 제공하지 않습니다. 8비트 HDR 신호는 'HDR10 강제'로 "
+"해석할 수 있습니다."
+
+#: src/app/App.cpp
+msgid "HDR output is off because LLCV was started with --sdr."
+msgstr "--sdr 옵션으로 실행 중이라 HDR 출력을 끕니다."
+
+#: src/app/App.cpp
+msgid "This build lacks Wayland color management."
+msgstr "이 빌드에는 Wayland 색 관리가 없습니다."
+
+#: src/app/App.cpp
+msgid "HDR output is unavailable on X11. Run on Wayland."
+msgstr "X11에서는 HDR 출력을 할 수 없습니다. Wayland로 실행하세요."
+
+#: src/app/App.cpp
+msgid ""
+"The compositor lacks Wayland color management (wp_color_management_v1). "
+"GNOME 48 or newer, or KDE Plasma 6, is required."
+msgstr ""
+"컴포지터가 Wayland 색 관리(wp_color_management_v1)를 지원하지 않습니다. "
+"GNOME 48 이상 또는 KDE Plasma 6이 필요합니다."
+
+#: src/app/App.cpp
+msgid "The compositor does not support PQ/BT.2020 HDR10."
+msgstr "컴포지터가 PQ/BT.2020 HDR10을 지원하지 않습니다."
+
+#: src/app/App.cpp
+msgid ""
+"The graphics driver provides no 10-bit framebuffer. 'Always HDR output' "
+"sends 8-bit HDR instead."
+msgstr ""
+"그래픽 드라이버가 10비트 화면 버퍼를 제공하지 않습니다. '항상 HDR 출력'을 선"
+"택하면 8비트 HDR로 출력합니다."
+
+#: src/app/App.cpp
+msgid ""
+"Supported · HDR is off on this display. Turn it on in the display settings."
+msgstr ""
+"지원 · 현재 모니터의 HDR이 꺼져 있습니다. 디스플레이 설정에서 HDR을 켜세요."
+
+#: src/app/App.cpp
+#, c-format
+msgid "Supported · %d-bit framebuffer · Wayland color management"
+msgstr "지원 · %d비트 화면 버퍼 · Wayland 색 관리"
+
+#: src/app/App.cpp
+msgid "HDR output failed; using SDR tone mapping."
+msgstr "HDR 출력을 켜지 못해 SDR 톤매핑으로 표시합니다."
+
+#: src/app/App.cpp
+msgid "Screenshot failed · no video frame yet."
+msgstr "스크린샷 실패 · 표시 중인 영상이 없습니다."
+
+#: src/app/App.cpp
+msgid "Saving screenshot…"
+msgstr "스크린샷 저장 중…"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Screenshot failed: %s"
+msgstr "스크린샷 실패: %s"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Screenshot saved: %s"
+msgstr "스크린샷 저장: %s"
+
+#: src/app/App.cpp
+msgid " (HDR converted to SDR)"
+msgstr " (HDR→SDR 변환)"
+
+#: src/app/App.cpp
+msgid " · copied to clipboard"
+msgstr " · 클립보드 복사됨"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Could not open the folder: %s"
+msgstr "폴더를 열지 못했습니다: %s"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Settings could not be saved. The previous settings file is kept: %s"
+msgstr "설정을 저장하지 못했습니다. 기존 설정 파일은 그대로 유지됩니다: %s"
+
+#: src/capture/V4l2Capture.cpp
+msgid "Another application is using the capture device"
+msgstr "다른 앱이 캡처 장치를 사용 중입니다"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Leave it off for normal viewing."
+msgstr "일반적인 시청에는 끈 채 사용하세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"When checked, 40 fps is requested instead of the frame-rate selection; "
+"unchecking restores that selection."
+msgstr ""
+"체크하면 기존 프레임 선택 대신 40fps를 요청하고, 해제하면 기존 선택으로 돌아"
+"갑니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Support is checked on Start. If the driver rejects it or connects at another "
+"rate, LLCV shows an error instead of falling back to another FPS."
+msgstr ""
+"지원 여부는 시작할 때 확인합니다. 드라이버가 거부하거나 다른 FPS로 연결하면 "
+"다른 FPS로 대체하지 않고 오류를 표시합니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "It does not interpolate frames, lock a game to 40 fps, or replace VRR."
+msgstr ""
+"프레임을 보간하거나 게임을 40fps로 고정하는 기능이 아니며 VRR을 대체하지 않습"
+"니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"A 40 fps game can also be viewed with 120 fps capture, so it is not required "
+"just for 40 fps games."
+msgstr ""
+"40fps 게임도 120 fps 캡처로 볼 수 있으므로, 40fps 게임이라는 이유만으로 켤 필"
+"요는 없습니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Check the measured input rate under Actual FPS in the Tab diagnostics."
+msgstr "실제 수신 속도는 Tab 진단 화면의 실제 FPS에서 확인하세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid "MJPEG (compressed · high resolution/refresh)"
+msgstr "MJPEG (압축 · 고해상도/고주사율)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "P010 (10-bit HDR10)"
+msgstr "P010 (10비트 HDR10)"
+
+#: src/ui/SettingsScreen.cpp
+msgid " (minimum latency)"
+msgstr " (최저 지연)"
+
+#: src/ui/SettingsScreen.cpp
+msgid " (low-latency target)"
+msgstr " (저지연 목표)"
+
+#: src/ui/SettingsScreen.cpp
+msgid " (stability target)"
+msgstr " (안정 목표)"
+
+#: src/ui/SettingsScreen.cpp
+msgid " (recommended · default)"
+msgstr " (권장 · 기본)"
+
+#: src/ui/SettingsScreen.cpp
+msgid " (stability first)"
+msgstr " (안정성 우선)"
+
+#: src/ui/SettingsScreen.cpp
+msgid " (maximum stability)"
+msgstr " (최대 안정)"
+
+#: src/ui/SettingsScreen.cpp
+msgid " (recommended)"
+msgstr " (권장)"
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "%d frames · %.1f ms%s"
+msgstr "%d 프레임 · %.1f ms%s"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Low Latency Capture Viewer"
+msgstr "저지연 캡처 뷰어"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Video##video"
+msgstr "영상##video"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Audio##audio"
+msgstr "오디오##audio"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Window##window"
+msgstr "창##window"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Guide & logs##guide"
+msgstr "안내 · 로그##guide"
+
+#: src/ui/SettingsScreen.cpp
+msgid "App##app"
+msgstr "앱##app"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Quit##quit"
+msgstr "종료##quit"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Start##start"
+msgstr "시작##start"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Capture"
+msgstr "캡처"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Capture device"
+msgstr "캡처 장치"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto select (recommended)"
+msgstr "자동 선택 (권장)"
+
+#: src/ui/SettingsScreen.cpp
+msgid " (not connected)"
+msgstr " (연결 안 됨)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Refresh##refresh"
+msgstr "새로고침##refresh"
+
+#: src/ui/SettingsScreen.cpp
+msgid "No capture device found. Check the USB connection and select Refresh."
+msgstr "캡처 장치가 없습니다. USB 연결을 확인하고 새로고침을 누르세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid "The selected device is not connected."
+msgstr "선택한 장치가 연결되어 있지 않습니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Capture resolution"
+msgstr "캡처 해상도"
+
+#: src/ui/SettingsScreen.cpp
+msgid " (unsupported)"
+msgstr " (지원 안 함)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Pixel format"
+msgstr "픽셀 형식"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (NV12 first · recommended)"
+msgstr "자동 (NV12 우선 · 권장)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Frame rate"
+msgstr "프레임레이트"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (highest uncompressed rate)"
+msgstr "자동 (최고 비압축 프레임레이트)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "40 fps capture"
+msgstr "40fps 캡처"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"40 fps is requested instead of the frame-rate selection. Uncheck to restore "
+"it."
+msgstr ""
+"기존 프레임 선택 대신 40fps를 요청합니다. 해제하면 기존 선택으로 돌아갑니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"40 fps is not in the detected list. Start checks whether the driver accepts "
+"it; if not, LLCV shows an error instead of using another rate."
+msgstr ""
+"자동 인식 목록에 40fps가 없습니다. 시작할 때 드라이버가 수락하는지 확인하며, "
+"거부하면 다른 FPS로 대체하지 않고 오류를 표시합니다."
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Selected mode: %d × %d · %s · %s fps"
+msgstr "적용 모드: %d × %d · %s · %s fps"
+
+#: src/ui/SettingsScreen.cpp
+msgid "No supported mode: choose another resolution or format."
+msgstr "지원 모드 없음: 다른 해상도나 형식을 선택하세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Presentation mode"
+msgstr "화면 표시 방식"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Immediate (minimum latency · recommended)"
+msgstr "저지연 (즉시 표시 · 권장)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "VSync (reduced tearing)"
+msgstr "VSync (티어링 감소)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Scaling mode"
+msgstr "화면 확대 방식"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Color interpretation"
+msgstr "색상 해석"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (recommended)"
+msgstr "자동 (권장)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Screenshots (F12)"
+msgstr "스크린샷 (F12)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Save location"
+msgstr "저장 위치"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Open folder##shots"
+msgstr "폴더 열기##shots"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Also copy the PNG to the clipboard"
+msgstr "클립보드에도 PNG 복사"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Saved as PNG at the capture resolution."
+msgstr "입력 해상도 그대로 PNG로 저장합니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "HDR input interpretation"
+msgstr "HDR 입력 해석"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (P010 = HDR10 · recommended)"
+msgstr "자동 (P010 = HDR10 · 권장)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Force HDR10 (8-bit input as PQ/BT.2020)"
+msgstr "HDR10 강제 (8비트 입력도 PQ/BT.2020)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Treat as SDR"
+msgstr "SDR로 해석"
+
+#: src/ui/SettingsScreen.cpp
+msgid "HDR presentation"
+msgstr "HDR 표시 방식"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (HDR output on HDR displays, else tone mapping)"
+msgstr "자동 (HDR 모니터면 HDR 출력, 아니면 톤매핑)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Always SDR tone mapping"
+msgstr "항상 SDR 톤매핑"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Always HDR output (Wayland)"
+msgstr "항상 HDR 출력 (Wayland)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "SDR reference white"
+msgstr "SDR 기준 흰색"
+
+#: src/ui/SettingsScreen.cpp
+msgid " (recommended · BT.2408)"
+msgstr " (권장 · BT.2408)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Sets tone-mapping brightness and UI brightness during HDR output."
+msgstr "톤매핑 밝기와 HDR 출력 중 UI 밝기의 기준입니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"HDR is not supported in this environment. HDR signals are converted to SDR."
+msgstr "이 환경은 HDR을 지원하지 않습니다. HDR 신호는 SDR로 변환해 표시합니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Not supported"
+msgstr "미지원"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Supported"
+msgstr "지원"
+
+#: src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+msgid "HDR input"
+msgstr "HDR 입력"
+
+#: src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+msgid "HDR output"
+msgstr "HDR 출력"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"If you switch to another mode, the 10-bit framebuffer applies from the next "
+"launch."
+msgstr "다른 값으로 바꾸면 10비트 화면 버퍼는 다음 실행부터 적용됩니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Capture audio device"
+msgstr "캡처 오디오 장치"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (same USB device as video · recommended)"
+msgstr "자동 (영상 장치와 같은 USB 장치 · 권장)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Disabled (video only)"
+msgstr "사용 안 함 (영상만)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto detection failed · select the capture audio device manually."
+msgstr "자동 감지 실패 · 캡처 오디오 장치를 직접 선택하세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Detected: "
+msgstr "자동 감지: "
+
+#: src/ui/SettingsScreen.cpp
+msgid "Output"
+msgstr "출력"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Audio output device"
+msgstr "오디오 출력 장치"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Follow the system default output (recommended)"
+msgstr "시스템 기본 출력 따라가기 (권장)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Audio output buffer"
+msgstr "오디오 출력 버퍼"
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid ""
+"Audio server: %s · the buffer is requested as the PipeWire graph quantum."
+msgstr "오디오 서버: %s · 장치 버퍼는 PipeWire 그래프 quantum으로 요청됩니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Sync & stability"
+msgstr "동기화 · 안정성"
+
+#: src/ui/SettingsScreen.cpp
+msgid "PCM buffer target"
+msgstr "PCM 버퍼 목표"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Clock-drift correction"
+msgstr "클록 드리프트 보정"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (recommended · correct only when needed)"
+msgstr "자동 (권장 · 필요 시 보정)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Off (unaltered PCM · quality first)"
+msgstr "끔 (원본 PCM · 음질 우선)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "If sound breaks up occasionally, raise the PCM target in 5 ms steps."
+msgstr "소리가 가끔 끊기면 PCM 버퍼 목표를 5 ms씩 올려 보세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Playback & convenience"
+msgstr "재생 · 편의"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Left / right volume"
+msgstr "좌 / 우 음량"
+
+#: src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Left %d%%"
+msgstr "왼쪽 %d%%"
+
+#: src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Right %d%%"
+msgstr "오른쪽 %d%%"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Allow volume boost above 100% (up to 200%)"
+msgstr "100% 이상 볼륨 증폭 허용 (최대 200%)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Mute automatically in background"
+msgstr "백그라운드에서 자동 음소거"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Volume indicator position"
+msgstr "음량 표시 위치"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Top-left (default)"
+msgstr "좌측 상단 (기본)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Top-right"
+msgstr "우측 상단"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Bottom-left"
+msgstr "좌측 하단"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Bottom-right"
+msgstr "우측 하단"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Audio-only mode (sound without video)"
+msgstr "오디오 전용 모드 (영상 없이 소리만 재생)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Window size & display"
+msgstr "창 크기 · 표시"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Pixel-perfect (1:1 source size · locked)"
+msgstr "Pixel-perfect (원본 크기 1:1 · 크기 고정)"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"When off, the window can be resized freely while keeping the aspect ratio. "
+"F5 restores 1:1."
+msgstr ""
+"끄면 창 크기를 자유롭게 바꿀 수 있고 영상 비율은 유지됩니다. F5로 1:1 크기로 "
+"돌아갑니다."
+
+#: src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+msgid "Borderless window"
+msgstr "테두리 없는 창"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Start in fullscreen"
+msgstr "전체화면으로 시작"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Fullscreen cursor"
+msgstr "전체화면 커서"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto-hide (recommended)"
+msgstr "자동 숨김 (권장)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Always visible"
+msgstr "항상 표시"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Monitor"
+msgstr "모니터"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Startup monitor"
+msgstr "시작 모니터"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (last position)"
+msgstr "자동 (마지막 위치)"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"On Wayland the compositor places windows. The selected monitor applies to "
+"fullscreen. Choose X11 under App → Display backend to position windows."
+msgstr ""
+"Wayland에서는 창 위치를 컴포지터가 정합니다. 선택한 모니터는 전체화면에서 적"
+"용됩니다. 창 위치 지정이 필요하면 앱 → 디스플레이 백엔드에서 X11을 선택하세"
+"요."
+
+#: src/ui/SettingsScreen.cpp
+msgid "X11 mode: the startup monitor and last window position are restored."
+msgstr "X11 모드: 시작 모니터와 마지막 창 위치를 복원합니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Keyboard shortcuts"
+msgstr "단축키"
+
+#: src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+msgid " (video mode)"
+msgstr " (영상 모드)"
+
+#: src/ui/SettingsScreen.cpp
+msgid " (fixed)"
+msgstr " (고정)"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Click a key to change it · Ctrl / Alt / Shift combinations are supported"
+msgstr "키 버튼을 눌러 변경 · Ctrl / Alt / Shift 조합 가능"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Reserved or unsupported key. Try another."
+msgstr "예약되었거나 지원하지 않는 키입니다. 다른 키를 입력하세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Already assigned. Try another key."
+msgstr "이미 사용 중인 키입니다. 다른 키를 입력하세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Press a key, optionally with Ctrl / Alt / Shift · click the key button again "
+"to cancel."
+msgstr ""
+"키 입력 (Ctrl / Alt / Shift 조합 가능) · 취소하려면 키 버튼을 다시 누르세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Reset defaults##shortcuts"
+msgstr "기본값 복원##shortcuts"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Mouse"
+msgstr "마우스"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Diagnostic logs"
+msgstr "진단 로그"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Save diagnostic log"
+msgstr "진단 로그 저장"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Log location"
+msgstr "로그 위치"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Open logs folder##logs"
+msgstr "로그 폴더 열기##logs"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Troubleshooting"
+msgstr "문제 해결"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"If there is no picture, close OBS or any other app that uses the capture "
+"device."
+msgstr "영상이 나오지 않으면 OBS 등 같은 캡처 장치를 쓰는 앱을 종료하세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid "High-bandwidth modes such as 4K 60 fps may only be offered as MJPEG."
+msgstr "4K 60 fps 같은 고대역 모드는 장치가 MJPEG로만 제공할 수 있습니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "If video works but audio does not, check Audio → Capture audio device."
+msgstr "영상은 나오는데 소리가 없으면 오디오 → 캡처 오디오 장치를 확인하세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid "The Tab diagnostics overlay shows dropped frames and audio underruns."
+msgstr "Tab 진단 화면에서 프레임 손실과 오디오 underrun을 확인할 수 있습니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Language"
+msgstr "언어"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Display language"
+msgstr "표시 언어"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (system)"
+msgstr "자동 (시스템)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "App theme"
+msgstr "앱 테마"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Theme"
+msgstr "테마"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Dark"
+msgstr "다크"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Light"
+msgstr "라이트"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Overlays drawn over video stay dark for contrast."
+msgstr "영상 위 오버레이는 대비를 위해 항상 어둡게 표시됩니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Display backend"
+msgstr "디스플레이 백엔드"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Backend"
+msgstr "백엔드"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (Wayland first)"
+msgstr "자동 (Wayland 우선)"
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid ""
+"Current: %s · changes apply on the next launch. You can also run llcv --x11."
+msgstr ""
+"현재: %s · 변경 사항은 다음 실행부터 적용됩니다. llcv --x11 로도 실행할 수 있"
+"습니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Startup"
+msgstr "시작"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Skip this settings screen on next launch (F2 reopens it)###skip"
+msgstr "다음 실행부터 설정 화면 건너뛰기 (F2로 다시 열기)###skip"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Power"
+msgstr "전원"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Prevent sleep during playback"
+msgstr "재생 중 자동 절전 방지"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Video keeps the screen on. Audio-only allows the screen to turn off. "
+"Released when playback stops or the capture device disconnects; system power "
+"settings are not changed."
+msgstr ""
+"영상 재생 중에는 화면도 켜둡니다. 오디오 전용 모드에서는 화면 꺼짐을 허용합니"
+"다. 재생을 멈추거나 캡처 장치 연결이 끊기면 해제하며, 시스템 전원 설정은 바꾸"
+"지 않습니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"This build lacks D-Bus, so it only keeps the screen on during video and "
+"cannot block automatic suspend."
+msgstr ""
+"이 빌드는 D-Bus 없이 빌드되어 영상 재생 중 화면 꺼짐만 막고, 시스템 자동 절전"
+"은 막지 못합니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "About"
+msgstr "정보"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Version"
+msgstr "버전"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Components"
+msgstr "구성"
+
+#: src/ui/SettingsScreen.cpp
+msgid "License"
+msgstr "라이선스"
+
+#: src/ui/Shortcuts.h src/ui/ViewerOverlay.cpp
+msgid "App information & shortcuts"
+msgstr "앱 정보 · 단축키"
+
+#: src/ui/Shortcuts.h src/ui/ViewerOverlay.cpp
+msgid "Open settings"
+msgstr "설정 열기"
+
+#: src/ui/Shortcuts.h src/ui/ViewerOverlay.cpp
+msgid "Audio OSD"
+msgstr "오디오 OSD"
+
+#: src/ui/Shortcuts.h
+msgid "Restore Pixel-perfect size"
+msgstr "Pixel-perfect 크기 복원"
+
+#: src/ui/Shortcuts.h
+msgid "Fullscreen (Alt+Enter)"
+msgstr "전체화면 (Alt+Enter)"
+
+#: src/ui/Shortcuts.h src/ui/ViewerOverlay.cpp
+msgid "Save screenshot"
+msgstr "스크린샷 저장"
+
+#: src/ui/Shortcuts.h src/ui/ViewerOverlay.cpp
+msgid "Live diagnostics"
+msgstr "실시간 진단"
+
+#: src/ui/Shortcuts.h
+msgid "Leave fullscreen / exit"
+msgstr "전체화면 해제 / 종료"
+
+#: src/ui/Shortcuts.h
+msgid "Show / hide the menu bar"
+msgstr "메뉴 막대 표시 / 숨기기"
+
+#: src/ui/Shortcuts.h
+msgid "Volume ±5%"
+msgstr "음량 ±5%"
+
+#: src/ui/Shortcuts.h
+msgid "Wheel"
+msgstr "휠"
+
+#: src/ui/Shortcuts.h
+msgid "Double-click"
+msgstr "더블 클릭"
+
+#: src/ui/Shortcuts.h
+msgid "Toggle fullscreen"
+msgstr "전체화면 전환"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "No capture audio"
+msgstr "캡처 오디오 없음"
+
+#: src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Clipping active (%llu events)"
+msgstr "클리핑 감지 중 (%llu회)"
+
+#: src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Clipping recorded (%llu events)"
+msgstr "클리핑 기록 (%llu회)"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "No clipping"
+msgstr "클리핑 없음"
+
+#: src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Volume %d%%"
+msgstr "음량 %d%%"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Muted in background"
+msgstr "백그라운드 음소거 중"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Capture diagnostics"
+msgstr "캡처 실시간 정보"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "[Tab close]"
+msgstr "[Tab 닫기]"
+
+#: src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Volume  %d%% · muted"
+msgstr "음량  %d%% · 음소거"
+
+#: src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Volume  %d%%"
+msgstr "음량  %d%%"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "[F3 close]"
+msgstr "[F3 닫기]"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Audio only"
+msgstr "오디오 전용"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "F2 settings · Tab diagnostics · F1 help · wheel volume"
+msgstr "F2 설정 · Tab 진단 · F1 도움말 · 휠 음량"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Low Latency Capture Viewer · Linux (V4L2 · OpenGL · SDL3)"
+msgstr "저지연 캡처 뷰어 · Linux (V4L2 · OpenGL · SDL3)"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "not supported"
+msgstr "미지원"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "supported"
+msgstr "지원"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Close (F1 / Esc)###close"
+msgstr "닫기 (F1 / Esc)###close"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "View"
+msgstr "보기"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Fullscreen"
+msgstr "전체화면"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Original size (1:1)"
+msgstr "원본 크기 (1:1)"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Smooth scaling"
+msgstr "부드럽게 확대"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Sharp scaling"
+msgstr "선명하게 확대"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Immediate presentation"
+msgstr "저지연 표시"
+
+#: src/ui/ViewerOverlay.cpp
+#, c-format
+msgid "Volume up (now %d%%)"
+msgstr "음량 올리기 (현재 %d%%)"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Wheel up"
+msgstr "휠 위"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Volume down"
+msgstr "음량 내리기"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Wheel down"
+msgstr "휠 아래"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Mute in background"
+msgstr "백그라운드에서 자동 음소거"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Tools"
+msgstr "도구"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Open screenshots folder"
+msgstr "스크린샷 폴더 열기"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Open logs folder"
+msgstr "로그 폴더 열기"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Settings"
+msgstr "설정"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Help"
+msgstr "도움말"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Quit"
+msgstr "종료"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Alt · Esc: close menu"
+msgstr "Alt · Esc: 메뉴 닫기"
+
+#: src/video/VideoColor.cpp
+msgid "manual"
+msgstr "수동"
+
+#: src/video/VideoColor.cpp
+msgid "HDR10 default"
+msgstr "HDR10 기본값"
+
+#: src/video/VideoColor.cpp
+msgid "JPEG default"
+msgstr "JPEG 기본값"
+
+#: src/video/VideoColor.cpp
+msgid "driver"
+msgstr "드라이버"
+
+#: src/video/VideoColor.cpp
+msgid "driver + default"
+msgstr "드라이버 + 기본값"
+
+#: src/video/VideoColor.cpp
+msgid "default"
+msgstr "기본값"

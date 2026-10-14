@@ -24,7 +24,7 @@ desktop is Ubuntu 26.04 (GNOME, Wayland).
 | HDR10 | P010 + DXGI HDR10 | P010 + Wayland `wp_color_management_v1`, or tone mapping |
 | MJPEG | Media Foundation | libjpeg-turbo (decoded to YUV planes) |
 | Audio | WASAPI / ASIO | SDL3 audio on PipeWire |
-| UI | Win32 + Direct2D | Dear ImGui 1.92 (bundled), Pretendard font |
+| UI | Win32 + Direct2D | Dear ImGui 1.92 (bundled), Pretendard font; Korean, English, Japanese, Spanish and Brazilian Portuguese |
 | Settings | `%LOCALAPPDATA%` | `~/.config/llcv/settings.ini` |
 | Logs | `%LOCALAPPDATA%` | `~/.local/state/llcv/logs/` |
 | Screenshots | Pictures | `$XDG_PICTURES_DIR/LLCV/` |
@@ -283,5 +283,5 @@ the regular system updates. Each release is built by GitHub Actions from a
 ## License
 
 GPL-3.0-or-later. The original Windows LLCV is by seria-aa; the Linux port is
-by Meo-hong. Dear ImGui is MIT licensed. Pretendard is licensed under the SIL
-Open Font License 1.1.
+by Meo-hong. Dear ImGui is MIT licensed. Pretendard and the Noto Sans JP kanji
+subset are licensed under the SIL Open Font License 1.1.

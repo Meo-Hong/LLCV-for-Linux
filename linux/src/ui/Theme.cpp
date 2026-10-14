@@ -31,6 +31,10 @@ constexpr Palette kLight{
 
 const Palette* g_current = &kDark;
 
+constexpr float kPretendardHeightPerEm = (1950.0f + 494.0f) / 2048.0f;
+constexpr float kNotoSansJpHeightPerEm = (1160.0f + 288.0f) / 1000.0f;
+constexpr float kKanjiFontSize = kBaseFontSize * kNotoSansJpHeightPerEm / kPretendardHeightPerEm;
+
 struct SystemFont {
     std::filesystem::path path;
     int index = 0;
@@ -57,6 +61,15 @@ ImFont* AddFont(const std::filesystem::path& path, int index) {
     return ImGui::GetIO().Fonts->AddFontFromFileTTF(path.c_str(), kBaseFontSize, &config);
 }
 
+void MergeKanjiFont(const char* fileName) {
+    const std::filesystem::path path = platform::FindFont(fileName);
+    ImFontConfig config;
+    config.MergeMode = true;
+    if (path.empty() || !ImGui::GetIO().Fonts->AddFontFromFileTTF(path.c_str(), kKanjiFontSize, &config)) {
+        diagnostics::Log("[ui] %s not found; kanji are not available", fileName);
+    }
+}
+
 }
 
 const Palette& PaletteFor(bool light) {
@@ -74,13 +87,15 @@ ImVec4 ToVec4(ImU32 color) {
 FontSet LoadFonts() {
     FontSet fonts;
     fonts.regular = AddFont(platform::FindFont("Pretendard-Regular.ttf"), 0);
-    fonts.semibold = AddFont(platform::FindFont("Pretendard-SemiBold.ttf"), 0);
     if (!fonts.regular) {
         const SystemFont system = FindSystemKoreanFont();
         fonts.regular = AddFont(system.path, system.index);
         diagnostics::Log("[ui] Pretendard not found; fallback font %s",
                          system.path.empty() ? "(built-in)" : system.path.c_str());
     }
+    if (fonts.regular) MergeKanjiFont("NotoSansJP-Kanji-Regular.otf");
+    fonts.semibold = AddFont(platform::FindFont("Pretendard-SemiBold.ttf"), 0);
+    if (fonts.semibold) MergeKanjiFont("NotoSansJP-Kanji-Bold.otf");
     if (!fonts.regular) fonts.regular = ImGui::GetIO().Fonts->AddFontDefault();
     if (!fonts.semibold) fonts.semibold = fonts.regular;
     ImGui::GetIO().FontDefault = fonts.regular;

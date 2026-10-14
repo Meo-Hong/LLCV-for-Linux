@@ -30,4 +30,5 @@ package() {
     DESTDIR="$pkgdir" cmake --install build
     install -Dm644 "$_srcroot/third_party/imgui/LICENSE.txt" "$pkgdir/usr/share/licenses/$pkgname/imgui-MIT.txt"
     install -Dm644 "$_srcroot/third_party/pretendard/LICENSE.txt" "$pkgdir/usr/share/licenses/$pkgname/Pretendard-OFL.txt"
+    install -Dm644 "$_srcroot/third_party/noto-sans-jp/LICENSE.txt" "$pkgdir/usr/share/licenses/$pkgname/NotoSansJP-OFL.txt"
 }

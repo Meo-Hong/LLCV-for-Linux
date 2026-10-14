@@ -14,6 +14,7 @@ std::filesystem::path ScreenshotDirectory();
 std::filesystem::path ExecutableDirectory();
 std::filesystem::path SettingsFilePath();
 std::filesystem::path FindFont(const std::string& fileName);
+std::filesystem::path FindTranslation(const std::string& fileName);
 std::filesystem::path FindAppIcon();
 bool EnsureDirectory(const std::filesystem::path& path);
 std::string FileUrl(const std::filesystem::path& path);

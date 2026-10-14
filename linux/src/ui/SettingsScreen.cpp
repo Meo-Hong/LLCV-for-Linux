@@ -130,33 +130,22 @@ void PathRow(const char* label, const std::string& path, const char* buttonLabel
     clicked = ImGui::Button(buttonLabel);
 }
 
-struct GuideLine {
-    const char* korean;
-    const char* english;
+constexpr const char* kCapture40Guide[] = {
+    N_("Leave it off for normal viewing."),
+    N_("When checked, 40 fps is requested instead of the frame-rate selection; unchecking restores that selection."),
+    N_("Support is checked on Start. If the driver rejects it or connects at another rate, LLCV shows an error "
+       "instead of falling back to another FPS."),
+    N_("It does not interpolate frames, lock a game to 40 fps, or replace VRR."),
+    N_("A 40 fps game can also be viewed with 120 fps capture, so it is not required just for 40 fps games."),
+    N_("Check the measured input rate under Actual FPS in the Tab diagnostics."),
 };
 
-constexpr GuideLine kCapture40Guide[] = {
-    {"일반적인 시청에는 끈 채 사용하세요.", "Leave it off for normal viewing."},
-    {"체크하면 기존 프레임 선택 대신 40fps를 요청하고, 해제하면 기존 선택으로 돌아갑니다.",
-     "When checked, 40 fps is requested instead of the frame-rate selection; unchecking restores that selection."},
-    {"지원 여부는 시작할 때 확인합니다. 드라이버가 거부하거나 다른 FPS로 연결하면 다른 FPS로 대체하지 않고 오류를 표시합니다.",
-     "Support is checked on Start. If the driver rejects it or connects at another rate, LLCV shows an error "
-     "instead of falling back to another FPS."},
-    {"프레임을 보간하거나 게임을 40fps로 고정하는 기능이 아니며 VRR을 대체하지 않습니다.",
-     "It does not interpolate frames, lock a game to 40 fps, or replace VRR."},
-    {"40fps 게임도 120 fps 캡처로 볼 수 있으므로, 40fps 게임이라는 이유만으로 켤 필요는 없습니다.",
-     "A 40 fps game can also be viewed with 120 fps capture, so it is not required just for 40 fps games."},
-    {"실제 수신 속도는 Tab 진단 화면의 실제 FPS에서 확인하세요.",
-     "Check the measured input rate under Actual FPS in the Tab diagnostics."},
-};
-
-void HelpMarker(const GuideLine* lines, size_t count) {
+void HelpMarker(const char* const* lines, size_t count) {
     ImGui::TextDisabled("(?)");
     if (!ImGui::BeginItemTooltip()) return;
     ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.0f);
-    const bool english = IsEnglish();
     for (size_t i = 0; i < count; ++i) {
-        ImGui::BulletText("%s", Keys(english ? lines[i].english : lines[i].korean).c_str());
+        ImGui::BulletText("%s", Keys(T(lines[i])).c_str());
     }
     ImGui::PopTextWrapPos();
     ImGui::EndTooltip();
@@ -167,9 +156,9 @@ std::string FormatLabel(capture::PixelFormat format) {
     case capture::PixelFormat::Nv12: return "NV12 (4:2:0)";
     case capture::PixelFormat::Yuyv: return "YUY2 (4:2:2)";
     case capture::PixelFormat::Mjpeg:
-        return T("MJPEG (압축 · 고해상도/고주사율)", "MJPEG (compressed · high resolution/refresh)");
+        return T("MJPEG (compressed · high resolution/refresh)");
     case capture::PixelFormat::Bgr24: return "BGR24 (RGB)";
-    case capture::PixelFormat::P010: return T("P010 (10비트 HDR10)", "P010 (10-bit HDR10)");
+    case capture::PixelFormat::P010: return T("P010 (10-bit HDR10)");
     }
     return "?";
 }
@@ -177,12 +166,12 @@ std::string FormatLabel(capture::PixelFormat format) {
 std::string PcmTargetLabel(int ms) {
     const char* suffix = "";
     switch (ms) {
-    case 10: suffix = T(" (최저 지연)", " (minimum latency)"); break;
-    case 15: suffix = T(" (저지연 목표)", " (low-latency target)"); break;
-    case 20: suffix = T(" (안정 목표)", " (stability target)"); break;
-    case 25: suffix = T(" (권장 · 기본)", " (recommended · default)"); break;
-    case 30: suffix = T(" (안정성 우선)", " (stability first)"); break;
-    case 40: suffix = T(" (최대 안정)", " (maximum stability)"); break;
+    case 10: suffix = T(" (minimum latency)"); break;
+    case 15: suffix = T(" (low-latency target)"); break;
+    case 20: suffix = T(" (stability target)"); break;
+    case 25: suffix = T(" (recommended · default)"); break;
+    case 30: suffix = T(" (stability first)"); break;
+    case 40: suffix = T(" (maximum stability)"); break;
     default: break;
     }
     return platform::Format("%d ms%s", ms, suffix);
@@ -190,8 +179,8 @@ std::string PcmTargetLabel(int ms) {
 
 std::string DeviceFramesLabel(int frames) {
     const double ms = frames * 1000.0 / 48000.0;
-    const char* suffix = frames == 256 ? T(" (권장)", " (recommended)") : "";
-    return platform::Format(T("%d 프레임 · %.1f ms%s", "%d frames · %.1f ms%s"), frames, ms, suffix);
+    const char* suffix = frames == 256 ? T(" (recommended)") : "";
+    return platform::Format(T("%d frames · %.1f ms%s"), frames, ms, suffix);
 }
 
 }
@@ -275,7 +264,7 @@ void SettingsScreen::DrawSidebar(const SettingsContext& context, float height) {
     ImGui::PushFont(context.fonts.semibold, 24.0f);
     ImGui::TextUnformatted(app::kAppName);
     ImGui::PopFont();
-    Note(T("저지연 캡처 뷰어", "Low Latency Capture Viewer"));
+    Note(T("Low Latency Capture Viewer"));
     ImGui::Dummy(ImVec2(0.0f, 14.0f * g_scale));
 
     struct Item {
@@ -283,11 +272,11 @@ void SettingsScreen::DrawSidebar(const SettingsContext& context, float height) {
         const char* label;
     };
     const Item items[] = {
-        {Page::Video, T("영상##video", "Video##video")},
-        {Page::Audio, T("오디오##audio", "Audio##audio")},
-        {Page::Window, T("창##window", "Window##window")},
-        {Page::Guide, T("안내 · 로그##guide", "Guide & logs##guide")},
-        {Page::App, T("앱##app", "App##app")},
+        {Page::Video, T("Video##video")},
+        {Page::Audio, T("Audio##audio")},
+        {Page::Window, T("Window##window")},
+        {Page::Guide, T("Guide & logs##guide")},
+        {Page::App, T("App##app")},
     };
     ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
     for (const auto& item : items) {
@@ -318,7 +307,7 @@ void SettingsScreen::DrawFooter(const SettingsContext& context) {
     ImGui::PopClipRect();
 
     ImGui::SameLine(rightEdge - buttonsWidth);
-    if (ImGui::Button(T("종료##quit", "Quit##quit"), ImVec2(buttonWidth, 0.0f))) {
+    if (ImGui::Button(T("Quit##quit"), ImVec2(buttonWidth, 0.0f))) {
         action_ = SettingsAction::Quit;
     }
     ImGui::SameLine();
@@ -327,7 +316,7 @@ void SettingsScreen::DrawFooter(const SettingsContext& context) {
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, palette.primaryHover);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, palette.primaryPressed);
     ImGui::PushStyleColor(ImGuiCol_Text, palette.onAccent);
-    if (ImGui::Button(T("시작##start", "Start##start"), ImVec2(buttonWidth, 0.0f))) {
+    if (ImGui::Button(T("Start##start"), ImVec2(buttonWidth, 0.0f))) {
         action_ = SettingsAction::Start;
     }
     ImGui::PopStyleColor(4);
@@ -338,10 +327,10 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
     const Palette& palette = CurrentPalette();
     const auto& devices = *context.captureDevices;
 
-    bool table = BeginCard("##capture", T("캡처", "Capture"));
+    bool table = BeginCard("##capture", T("Capture"));
     if (table) {
-        Row(T("캡처 장치", "Capture device"));
-        std::vector<std::string> names{T("자동 선택 (권장)", "Auto select (recommended)")};
+        Row(T("Capture device"));
+        std::vector<std::string> names{T("Auto select (recommended)")};
         int index = 0;
         for (size_t i = 0; i < devices.size(); ++i) {
             names.push_back(devices[i].DisplayName());
@@ -351,10 +340,10 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
             }
         }
         if (!s.captureDevice.empty() && index == 0) {
-            names.push_back(s.captureDevice + T(" (연결 안 됨)", " (not connected)"));
+            names.push_back(s.captureDevice + T(" (not connected)"));
             index = static_cast<int>(names.size()) - 1;
         }
-        const char* refresh = T("새로고침##refresh", "Refresh##refresh");
+        const char* refresh = T("Refresh##refresh");
         const float refreshWidth = ButtonWidth(refresh);
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - refreshWidth - ImGui::GetStyle().ItemSpacing.x);
         if (Combo("##captureDevice", index, names)) {
@@ -371,13 +360,12 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
         if (!device) {
             ValueRow();
             Note(devices.empty()
-                     ? T("캡처 장치가 없습니다. USB 연결을 확인하고 새로고침을 누르세요.",
-                         "No capture device found. Check the USB connection and select Refresh.")
-                     : T("선택한 장치가 연결되어 있지 않습니다.", "The selected device is not connected."),
+                     ? T("No capture device found. Check the USB connection and select Refresh.")
+                     : T("The selected device is not connected."),
                  palette.warning);
         } else {
             const auto resolutions = capture::Resolutions(*device);
-            Row(T("캡처 해상도", "Capture resolution"));
+            Row(T("Capture resolution"));
             std::vector<std::string> sizeItems;
             int sizeIndex = -1;
             for (size_t i = 0; i < resolutions.size(); ++i) {
@@ -388,7 +376,7 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
             }
             if (sizeIndex < 0) {
                 sizeItems.push_back(platform::Format("%d × %d%s", s.videoWidth, s.videoHeight,
-                                                     T(" (지원 안 함)", " (unsupported)")));
+                                                     T(" (unsupported)")));
                 sizeIndex = static_cast<int>(sizeItems.size()) - 1;
             }
             if (Combo("##resolution", sizeIndex, sizeItems) &&
@@ -397,9 +385,9 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
                 s.videoHeight = resolutions[static_cast<size_t>(sizeIndex)].second;
             }
 
-            Row(T("픽셀 형식", "Pixel format"));
+            Row(T("Pixel format"));
             const auto formats = capture::FormatsAt(*device, s.videoWidth, s.videoHeight);
-            std::vector<std::string> formatItems{T("자동 (NV12 우선 · 권장)", "Auto (NV12 first · recommended)")};
+            std::vector<std::string> formatItems{T("Auto (NV12 first · recommended)")};
             std::vector<settings::PixelFormatChoice> formatChoices{settings::PixelFormatChoice::Auto};
             for (const auto format : formats) {
                 formatItems.push_back(FormatLabel(format));
@@ -412,7 +400,7 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
             if (formatIndex < 0) {
                 const auto format = app::FormatFromChoice(s.pixelFormat);
                 formatItems.push_back(std::string(format ? capture::PixelFormatName(*format) : "?") +
-                                      T(" (지원 안 함)", " (unsupported)"));
+                                      T(" (unsupported)"));
                 formatChoices.push_back(s.pixelFormat);
                 formatIndex = static_cast<int>(formatItems.size()) - 1;
             }
@@ -420,11 +408,11 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
                 s.pixelFormat = formatChoices[static_cast<size_t>(formatIndex)];
             }
 
-            Row(T("프레임레이트", "Frame rate"));
+            Row(T("Frame rate"));
             const auto rates = capture::RatesAt(*device, s.videoWidth, s.videoHeight,
                                                 app::FormatFromChoice(s.pixelFormat));
             ImGui::BeginDisabled(s.capture40Fps);
-            std::vector<std::string> rateItems{T("자동 (최고 비압축 프레임레이트)", "Auto (highest uncompressed rate)")};
+            std::vector<std::string> rateItems{T("Auto (highest uncompressed rate)")};
             std::vector<int> rateValues{0};
             int rateIndex = s.frameRateMilli == 0 ? 0 : -1;
             for (const auto& rate : rates) {
@@ -436,7 +424,7 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
             }
             if (rateIndex < 0) {
                 rateItems.push_back(platform::Format("%.2f fps%s", s.frameRateMilli / 1000.0,
-                                                     T(" (지원 안 함)", " (unsupported)")));
+                                                     T(" (unsupported)")));
                 rateValues.push_back(s.frameRateMilli);
                 rateIndex = static_cast<int>(rateItems.size()) - 1;
             }
@@ -446,19 +434,16 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
             ImGui::EndDisabled();
 
             ValueRow();
-            ImGui::Checkbox(T("40fps 캡처", "40 fps capture"), &s.capture40Fps);
+            ImGui::Checkbox(T("40 fps capture"), &s.capture40Fps);
             ImGui::SameLine();
             HelpMarker(kCapture40Guide, std::size(kCapture40Guide));
             if (s.capture40Fps) {
                 const bool listed = std::any_of(rates.begin(), rates.end(), capture::IsFortyFps);
                 ValueRow();
                 if (listed) {
-                    Note(T("기존 프레임 선택 대신 40fps를 요청합니다. 해제하면 기존 선택으로 돌아갑니다.",
-                           "40 fps is requested instead of the frame-rate selection. Uncheck to restore it."));
+                    Note(T("40 fps is requested instead of the frame-rate selection. Uncheck to restore it."));
                 } else {
-                    Note(T("자동 인식 목록에 40fps가 없습니다. 시작할 때 드라이버가 수락하는지 확인하며, "
-                           "거부하면 다른 FPS로 대체하지 않고 오류를 표시합니다.",
-                           "40 fps is not in the detected list. Start checks whether the driver accepts it; "
+                    Note(T("40 fps is not in the detected list. Start checks whether the driver accepts it; "
                            "if not, LLCV shows an error instead of using another rate."),
                          palette.warning);
                 }
@@ -466,32 +451,31 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
 
             ValueRow();
             if (const auto mode = capture::ResolveMode(*device, app::RequestFromSettings(s))) {
-                Note(platform::Format(T("적용 모드: %d × %d · %s · %s fps", "Selected mode: %d × %d · %s · %s fps"),
+                Note(platform::Format(T("Selected mode: %d × %d · %s · %s fps"),
                                       mode->width, mode->height, capture::PixelFormatName(mode->format),
                                       capture::FormatRate(mode->rate).c_str()));
             } else {
-                Note(T("지원 모드 없음: 다른 해상도나 형식을 선택하세요.",
-                       "No supported mode: choose another resolution or format."),
+                Note(T("No supported mode: choose another resolution or format."),
                      palette.warning);
             }
         }
     }
     EndCard(table);
 
-    table = BeginCard("##display", T("표시", "Display"));
+    table = BeginCard("##display", T("Display"));
     if (table) {
-        Row(T("화면 표시 방식", "Presentation mode"));
+        Row(T("Presentation mode"));
         EnumCombo<settings::PresentationMode>(
             "##presentation", s.presentationMode,
-            {{settings::PresentationMode::Immediate, T("저지연 (즉시 표시 · 권장)", "Immediate (minimum latency · recommended)")},
-             {settings::PresentationMode::VSync, T("VSync (티어링 감소)", "VSync (reduced tearing)")}});
-        Row(T("화면 확대 방식", "Scaling mode"));
+            {{settings::PresentationMode::Immediate, T("Immediate (minimum latency · recommended)")},
+             {settings::PresentationMode::VSync, T("VSync (reduced tearing)")}});
+        Row(T("Scaling mode"));
         EnumCombo<settings::ScalingMode>("##scaling", s.scalingMode,
-                                         {{settings::ScalingMode::Smooth, T("부드럽게", "Smooth")},
-                                          {settings::ScalingMode::Sharp, T("선명하게", "Sharp")}});
-        Row(T("색상 해석", "Color interpretation"));
+                                         {{settings::ScalingMode::Smooth, T("Smooth")},
+                                          {settings::ScalingMode::Sharp, T("Sharp")}});
+        Row(T("Color interpretation"));
         EnumCombo<video::ColorOverride>("##color", s.colorOverride,
-                                        {{video::ColorOverride::Auto, T("자동 (권장)", "Auto (recommended)")},
+                                        {{video::ColorOverride::Auto, T("Auto (recommended)")},
                                          {video::ColorOverride::Bt709Limited, "BT.709 Limited"},
                                          {video::ColorOverride::Bt709Full, "BT.709 Full"},
                                          {video::ColorOverride::Bt601Limited, "BT.601 Limited"},
@@ -501,16 +485,16 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
 
     DrawHdr(s, context);
 
-    table = BeginCard("##screenshot", Keys(T("스크린샷 (F12)", "Screenshots (F12)")).c_str());
+    table = BeginCard("##screenshot", Keys(T("Screenshots (F12)")).c_str());
     if (table) {
         bool open = false;
-        PathRow(T("저장 위치", "Save location"), context.screenshotDirectory,
-                T("폴더 열기##shots", "Open folder##shots"), open);
+        PathRow(T("Save location"), context.screenshotDirectory,
+                T("Open folder##shots"), open);
         if (open) action_ = SettingsAction::OpenScreenshotFolder;
         ValueRow();
-        ImGui::Checkbox(T("클립보드에도 PNG 복사", "Also copy the PNG to the clipboard"), &s.screenshotClipboard);
+        ImGui::Checkbox(T("Also copy the PNG to the clipboard"), &s.screenshotClipboard);
         ValueRow();
-        Note(T("입력 해상도 그대로 PNG로 저장합니다.", "Saved as PNG at the capture resolution."));
+        Note(T("Saved as PNG at the capture resolution."));
     }
     EndCard(table);
 }
@@ -519,51 +503,48 @@ void SettingsScreen::DrawHdr(AppSettings& s, const SettingsContext& context) {
     const Palette& palette = CurrentPalette();
     const bool table = BeginCard("##hdr", "HDR");
     if (table) {
-        Row(T("HDR 입력 해석", "HDR input"));
+        Row(T("HDR input interpretation"));
         EnumCombo<video::HdrInput>(
             "##hdrInput", s.hdrInput,
-            {{video::HdrInput::Auto, T("자동 (P010 = HDR10 · 권장)", "Auto (P010 = HDR10 · recommended)")},
-             {video::HdrInput::ForceHdr10, T("HDR10 강제 (8비트 입력도 PQ/BT.2020)", "Force HDR10 (8-bit input as PQ/BT.2020)")},
-             {video::HdrInput::ForceSdr, T("SDR로 해석", "Treat as SDR")}});
-        Row(T("HDR 표시 방식", "HDR presentation"));
+            {{video::HdrInput::Auto, T("Auto (P010 = HDR10 · recommended)")},
+             {video::HdrInput::ForceHdr10, T("Force HDR10 (8-bit input as PQ/BT.2020)")},
+             {video::HdrInput::ForceSdr, T("Treat as SDR")}});
+        Row(T("HDR presentation"));
         EnumCombo<settings::HdrOutputMode>(
             "##hdrOutput", s.hdrOutput,
-            {{settings::HdrOutputMode::Auto, T("자동 (HDR 모니터면 HDR 출력, 아니면 톤매핑)", "Auto (HDR output on HDR displays, else tone mapping)")},
-             {settings::HdrOutputMode::ToneMap, T("항상 SDR 톤매핑", "Always SDR tone mapping")},
-             {settings::HdrOutputMode::Hdr, T("항상 HDR 출력 (Wayland)", "Always HDR output (Wayland)")}});
-        Row(T("SDR 기준 흰색", "SDR reference white"));
+            {{settings::HdrOutputMode::Auto, T("Auto (HDR output on HDR displays, else tone mapping)")},
+             {settings::HdrOutputMode::ToneMap, T("Always SDR tone mapping")},
+             {settings::HdrOutputMode::Hdr, T("Always HDR output (Wayland)")}});
+        Row(T("SDR reference white"));
         std::vector<std::pair<int, std::string>> whiteOptions;
         for (const int nits : settings::kSdrWhiteOptions) {
             whiteOptions.emplace_back(nits, platform::Format("%d nit%s", nits,
-                                                             nits == 203 ? T(" (권장 · BT.2408)", " (recommended · BT.2408)") : ""));
+                                                             nits == 203 ? T(" (recommended · BT.2408)") : ""));
         }
         EnumCombo<int>("##sdrWhite", s.sdrWhiteNits, whiteOptions);
         ValueRow();
-        Note(T("톤매핑 밝기와 HDR 출력 중 UI 밝기의 기준입니다.",
-               "Sets tone-mapping brightness and UI brightness during HDR output."));
+        Note(T("Sets tone-mapping brightness and UI brightness during HDR output."));
 
         const HdrSupport& hdr = context.hdr;
         if (!hdr.input && !hdr.output) {
             ValueRow();
-            Note(T("이 환경은 HDR을 지원하지 않습니다. HDR 신호는 SDR로 변환해 표시합니다.",
-                   "HDR is not supported in this environment. HDR signals are converted to SDR."),
+            Note(T("HDR is not supported in this environment. HDR signals are converted to SDR."),
                  palette.warning);
         }
         const auto status = [&](const char* label, bool supported, const std::string& detail) {
             Row(label);
             ImGui::AlignTextToFramePadding();
             ImGui::PushStyleColor(ImGuiCol_Text, supported ? palette.text : palette.warning);
-            ImGui::TextUnformatted(supported ? T("지원", "Supported") : T("미지원", "Not supported"));
+            ImGui::TextUnformatted(supported ? T("Supported") : T("Not supported"));
             ImGui::PopStyleColor();
             ValueRow();
             Note(detail, supported ? palette.secondary : palette.warning);
         };
-        status(T("HDR 입력", "HDR input"), hdr.input, hdr.inputText);
-        status(T("HDR 출력", "HDR output"), hdr.output, hdr.outputText);
+        status(T("HDR input"), hdr.input, hdr.inputText);
+        status(T("HDR output"), hdr.output, hdr.outputText);
         if (s.hdrOutput == settings::HdrOutputMode::ToneMap) {
             ValueRow();
-            Note(T("다른 값으로 바꾸면 10비트 화면 버퍼는 다음 실행부터 적용됩니다.",
-                   "If you switch to another mode, the 10-bit framebuffer applies from the next launch."));
+            Note(T("If you switch to another mode, the 10-bit framebuffer applies from the next launch."));
         }
     }
     EndCard(table);
@@ -574,12 +555,12 @@ void SettingsScreen::DrawAudio(AppSettings& s, const SettingsContext& context) {
     const auto& recording = *context.recordingDevices;
     const auto& playback = *context.playbackDevices;
 
-    bool table = BeginCard("##audioCapture", T("캡처", "Capture"));
+    bool table = BeginCard("##audioCapture", T("Capture"));
     if (table) {
-        Row(T("캡처 오디오 장치", "Capture audio device"));
+        Row(T("Capture audio device"));
         std::vector<std::string> items{
-            T("자동 (영상 장치와 같은 USB 장치 · 권장)", "Auto (same USB device as video · recommended)"),
-            T("사용 안 함 (영상만)", "Disabled (video only)")};
+            T("Auto (same USB device as video · recommended)"),
+            T("Disabled (video only)")};
         int index = 0;
         if (s.captureAudioDevice == settings::kCaptureAudioDisabled) index = 1;
         for (size_t i = 0; i < recording.size(); ++i) {
@@ -588,7 +569,7 @@ void SettingsScreen::DrawAudio(AppSettings& s, const SettingsContext& context) {
         }
         if (!s.captureAudioDevice.empty() && s.captureAudioDevice != settings::kCaptureAudioDisabled &&
             index == 0) {
-            items.push_back(s.captureAudioDevice + T(" (연결 안 됨)", " (not connected)"));
+            items.push_back(s.captureAudioDevice + T(" (not connected)"));
             index = static_cast<int>(items.size()) - 1;
         }
         if (Combo("##captureAudio", index, items)) {
@@ -603,27 +584,26 @@ void SettingsScreen::DrawAudio(AppSettings& s, const SettingsContext& context) {
         if (s.captureAudioDevice.empty()) {
             ValueRow();
             if (context.autoCaptureAudio.empty()) {
-                Note(T("자동 감지 실패 · 캡처 오디오 장치를 직접 선택하세요.",
-                       "Auto detection failed · select the capture audio device manually."),
+                Note(T("Auto detection failed · select the capture audio device manually."),
                      palette.warning);
             } else {
-                Note(std::string(T("자동 감지: ", "Detected: ")) + context.autoCaptureAudio);
+                Note(std::string(T("Detected: ")) + context.autoCaptureAudio);
             }
         }
     }
     EndCard(table);
 
-    table = BeginCard("##audioOutput", T("출력", "Output"));
+    table = BeginCard("##audioOutput", T("Output"));
     if (table) {
-        Row(T("오디오 출력 장치", "Audio output device"));
-        std::vector<std::string> items{T("시스템 기본 출력 따라가기 (권장)", "Follow the system default output (recommended)")};
+        Row(T("Audio output device"));
+        std::vector<std::string> items{T("Follow the system default output (recommended)")};
         int index = 0;
         for (size_t i = 0; i < playback.size(); ++i) {
             items.push_back(playback[i].name);
             if (s.audioOutputDevice == playback[i].name) index = static_cast<int>(i) + 1;
         }
         if (!s.audioOutputDevice.empty() && index == 0) {
-            items.push_back(s.audioOutputDevice + T(" (연결 안 됨)", " (not connected)"));
+            items.push_back(s.audioOutputDevice + T(" (not connected)"));
             index = static_cast<int>(items.size()) - 1;
         }
         if (Combo("##audioOutput", index, items)) {
@@ -634,99 +614,96 @@ void SettingsScreen::DrawAudio(AppSettings& s, const SettingsContext& context) {
             }
         }
 
-        Row(T("오디오 출력 버퍼", "Audio output buffer"));
+        Row(T("Audio output buffer"));
         std::vector<std::pair<int, std::string>> frameOptions;
         for (const int frames : settings::kDeviceFrameOptions) frameOptions.emplace_back(frames, DeviceFramesLabel(frames));
         EnumCombo<int>("##deviceFrames", s.audioDeviceFrames, frameOptions);
         ValueRow();
-        Note(platform::Format(T("오디오 서버: %s · 장치 버퍼는 PipeWire 그래프 quantum으로 요청됩니다.",
-                                "Audio server: %s · the buffer is requested as the PipeWire graph quantum."),
+        Note(platform::Format(T("Audio server: %s · the buffer is requested as the PipeWire graph quantum."),
                               context.audioDriver.empty() ? "?" : context.audioDriver.c_str()));
     }
     EndCard(table);
 
-    table = BeginCard("##audioSync", T("동기화 · 안정성", "Sync & stability"));
+    table = BeginCard("##audioSync", T("Sync & stability"));
     if (table) {
-        Row(T("PCM 버퍼 목표", "PCM buffer target"));
+        Row(T("PCM buffer target"));
         std::vector<std::pair<int, std::string>> targetOptions;
         for (const int ms : settings::kPcmTargetOptions) targetOptions.emplace_back(ms, PcmTargetLabel(ms));
         EnumCombo<int>("##pcmTarget", s.pcmQueueTargetMs, targetOptions);
-        Row(T("클록 드리프트 보정", "Clock-drift correction"));
+        Row(T("Clock-drift correction"));
         EnumCombo<settings::DriftCorrection>(
             "##drift", s.driftCorrection,
-            {{settings::DriftCorrection::Auto, T("자동 (권장 · 필요 시 보정)", "Auto (recommended · correct only when needed)")},
-             {settings::DriftCorrection::Off, T("끔 (원본 PCM · 음질 우선)", "Off (unaltered PCM · quality first)")}});
+            {{settings::DriftCorrection::Auto, T("Auto (recommended · correct only when needed)")},
+             {settings::DriftCorrection::Off, T("Off (unaltered PCM · quality first)")}});
         ValueRow();
-        Note(T("소리가 가끔 끊기면 PCM 버퍼 목표를 5 ms씩 올려 보세요.",
-               "If sound breaks up occasionally, raise the PCM target in 5 ms steps."));
+        Note(T("If sound breaks up occasionally, raise the PCM target in 5 ms steps."));
     }
     EndCard(table);
 
-    table = BeginCard("##audioPlayback", T("재생 · 편의", "Playback & convenience"));
+    table = BeginCard("##audioPlayback", T("Playback & convenience"));
     if (table) {
-        Row(T("음량", "Volume"));
+        Row(T("Volume"));
         ImGui::SliderInt("##volume", &s.volumePercent, 0, s.allowVolumeBoost ? 200 : 100, "%d%%");
-        Row(T("좌 / 우 음량", "Left / right volume"));
+        Row(T("Left / right volume"));
         const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
         ImGui::SetNextItemWidth(half);
-        ImGui::SliderInt("##left", &s.leftVolumePercent, 0, 100, T("왼쪽 %d%%", "Left %d%%"));
+        ImGui::SliderInt("##left", &s.leftVolumePercent, 0, 100, T("Left %d%%"));
         ImGui::SameLine();
         ImGui::SetNextItemWidth(half);
-        ImGui::SliderInt("##right", &s.rightVolumePercent, 0, 100, T("오른쪽 %d%%", "Right %d%%"));
+        ImGui::SliderInt("##right", &s.rightVolumePercent, 0, 100, T("Right %d%%"));
         ValueRow();
-        if (ImGui::Checkbox(T("100% 이상 볼륨 증폭 허용 (최대 200%)", "Allow volume boost above 100% (up to 200%)"),
+        if (ImGui::Checkbox(T("Allow volume boost above 100% (up to 200%)"),
                             &s.allowVolumeBoost) &&
             !s.allowVolumeBoost) {
             s.volumePercent = std::min(s.volumePercent, 100);
         }
         ValueRow();
-        ImGui::Checkbox(T("백그라운드에서 자동 음소거", "Mute automatically in background"), &s.muteWhenBackground);
-        Row(T("음량 표시 위치", "Volume indicator position"));
+        ImGui::Checkbox(T("Mute automatically in background"), &s.muteWhenBackground);
+        Row(T("Volume indicator position"));
         EnumCombo<settings::VolumeHudPosition>(
             "##hud", s.volumeHudPosition,
-            {{settings::VolumeHudPosition::TopLeft, T("좌측 상단 (기본)", "Top-left (default)")},
-             {settings::VolumeHudPosition::TopRight, T("우측 상단", "Top-right")},
-             {settings::VolumeHudPosition::BottomLeft, T("좌측 하단", "Bottom-left")},
-             {settings::VolumeHudPosition::BottomRight, T("우측 하단", "Bottom-right")}});
+            {{settings::VolumeHudPosition::TopLeft, T("Top-left (default)")},
+             {settings::VolumeHudPosition::TopRight, T("Top-right")},
+             {settings::VolumeHudPosition::BottomLeft, T("Bottom-left")},
+             {settings::VolumeHudPosition::BottomRight, T("Bottom-right")}});
         ValueRow();
-        ImGui::Checkbox(T("오디오 전용 모드 (영상 없이 소리만 재생)", "Audio-only mode (sound without video)"), &s.audioOnly);
+        ImGui::Checkbox(T("Audio-only mode (sound without video)"), &s.audioOnly);
     }
     EndCard(table);
 }
 
 void SettingsScreen::DrawWindow(AppSettings& s, const SettingsContext& context) {
-    bool table = BeginCard("##windowSize", T("창 크기 · 표시", "Window size & display"));
+    bool table = BeginCard("##windowSize", T("Window size & display"));
     if (table) {
         ValueRow();
-        ImGui::Checkbox(T("Pixel-perfect (원본 크기 1:1 · 크기 고정)", "Pixel-perfect (1:1 source size · locked)"),
+        ImGui::Checkbox(T("Pixel-perfect (1:1 source size · locked)"),
                         &s.pixelPerfect);
         ValueRow();
-        Note(Keys(T("끄면 창 크기를 자유롭게 바꿀 수 있고 영상 비율은 유지됩니다. F5로 1:1 크기로 돌아갑니다.",
-                    "When off, the window can be resized freely while keeping the aspect ratio. F5 restores 1:1.")));
+        Note(Keys(T("When off, the window can be resized freely while keeping the aspect ratio. F5 restores 1:1.")));
         ValueRow();
-        ImGui::Checkbox(T("테두리 없는 창", "Borderless window"), &s.borderlessWindow);
+        ImGui::Checkbox(T("Borderless window"), &s.borderlessWindow);
         ValueRow();
-        ImGui::Checkbox(T("전체화면으로 시작", "Start in fullscreen"), &s.startFullscreen);
-        Row(T("전체화면 커서", "Fullscreen cursor"));
+        ImGui::Checkbox(T("Start in fullscreen"), &s.startFullscreen);
+        Row(T("Fullscreen cursor"));
         EnumCombo<settings::FullscreenCursor>(
             "##cursor", s.fullscreenCursor,
-            {{settings::FullscreenCursor::AutoHide, T("자동 숨김 (권장)", "Auto-hide (recommended)")},
-             {settings::FullscreenCursor::AlwaysVisible, T("항상 표시", "Always visible")}});
+            {{settings::FullscreenCursor::AutoHide, T("Auto-hide (recommended)")},
+             {settings::FullscreenCursor::AlwaysVisible, T("Always visible")}});
     }
     EndCard(table);
 
-    table = BeginCard("##monitor", T("모니터", "Monitor"));
+    table = BeginCard("##monitor", T("Monitor"));
     if (table) {
-        Row(T("시작 모니터", "Startup monitor"));
+        Row(T("Startup monitor"));
         const auto& displays = *context.displays;
-        std::vector<std::string> items{T("자동 (마지막 위치)", "Auto (last position)")};
+        std::vector<std::string> items{T("Auto (last position)")};
         int index = 0;
         for (size_t i = 0; i < displays.size(); ++i) {
             items.push_back(displays[i].name);
             if (s.preferredDisplay == displays[i].name) index = static_cast<int>(i) + 1;
         }
         if (!s.preferredDisplay.empty() && index == 0) {
-            items.push_back(s.preferredDisplay + T(" (연결 안 됨)", " (not connected)"));
+            items.push_back(s.preferredDisplay + T(" (not connected)"));
             index = static_cast<int>(items.size()) - 1;
         }
         if (Combo("##display", index, items)) {
@@ -738,13 +715,10 @@ void SettingsScreen::DrawWindow(AppSettings& s, const SettingsContext& context) 
         }
         ValueRow();
         if (context.videoDriver == "wayland") {
-            Note(T("Wayland에서는 창 위치를 컴포지터가 정합니다. 선택한 모니터는 전체화면에서 적용됩니다. "
-                   "창 위치 지정이 필요하면 앱 → 디스플레이 백엔드에서 X11을 선택하세요.",
-                   "On Wayland the compositor places windows. The selected monitor applies to fullscreen. "
+            Note(T("On Wayland the compositor places windows. The selected monitor applies to fullscreen. "
                    "Choose X11 under App → Display backend to position windows."));
         } else {
-            Note(T("X11 모드: 시작 모니터와 마지막 창 위치를 복원합니다.",
-                   "X11 mode: the startup monitor and last window position are restored."));
+            Note(T("X11 mode: the startup monitor and last window position are restored."));
         }
     }
     EndCard(table);
@@ -775,8 +749,7 @@ bool SettingsScreen::CaptureShortcut(AppSettings& settings, input::Binding bindi
 
 void SettingsScreen::DrawShortcuts(AppSettings& s) {
     const Palette& palette = CurrentPalette();
-    const bool english = IsEnglish();
-    const bool table = BeginCard("##shortcuts", T("단축키", "Keyboard shortcuts"));
+    const bool table = BeginCard("##shortcuts", T("Keyboard shortcuts"));
     if (!table) {
         EndCard(table);
         return;
@@ -816,32 +789,31 @@ void SettingsScreen::DrawShortcuts(AppSettings& s) {
         if (editing) ImGui::PopStyleColor(4);
         ImGui::PopID();
         ImGui::TableSetColumnIndex(1);
-        std::string text = english ? shortcut.english : shortcut.korean;
-        if (shortcut.videoOnly) text += T(" (영상 모드)", " (video mode)");
+        std::string text = T(shortcut.text);
+        if (shortcut.videoOnly) text += T(" (video mode)");
         ImGui::AlignTextToFramePadding();
         ImGui::TextWrapped("%s", text.c_str());
     }
 
     Row(kMenuShortcut.key);
     ImGui::AlignTextToFramePadding();
-    ImGui::TextWrapped("%s%s", english ? kMenuShortcut.english : kMenuShortcut.korean, T(" (고정)", " (fixed)"));
+    ImGui::TextWrapped("%s%s", T(kMenuShortcut.text),
+                       T(" (fixed)"));
 
     ValueRow();
     if (editingShortcut_ < 0) {
-        Note(T("키 버튼을 눌러 변경 · Ctrl / Alt / Shift 조합 가능",
-               "Click a key to change it · Ctrl / Alt / Shift combinations are supported"));
+        Note(T("Click a key to change it · Ctrl / Alt / Shift combinations are supported"));
     } else if (shortcutNotice_ == ShortcutNotice::Reserved) {
-        Note(T("예약되었거나 지원하지 않는 키입니다. 다른 키를 입력하세요.", "Reserved or unsupported key. Try another."),
+        Note(T("Reserved or unsupported key. Try another."),
              palette.warning);
     } else if (shortcutNotice_ == ShortcutNotice::Duplicate) {
-        Note(T("이미 사용 중인 키입니다. 다른 키를 입력하세요.", "Already assigned. Try another key."), palette.warning);
+        Note(T("Already assigned. Try another key."), palette.warning);
     } else {
-        Note(T("키 입력 (Ctrl / Alt / Shift 조합 가능) · 취소하려면 키 버튼을 다시 누르세요.",
-               "Press a key, optionally with Ctrl / Alt / Shift · click the key button again to cancel."),
+        Note(T("Press a key, optionally with Ctrl / Alt / Shift · click the key button again to cancel."),
              palette.accent);
     }
     ValueRow();
-    if (ImGui::Button(T("기본값 복원##shortcuts", "Reset defaults##shortcuts"))) {
+    if (ImGui::Button(T("Reset defaults##shortcuts"))) {
         CancelShortcutCapture();
         s.shortcuts = input::kDefaultBindings;
     }
@@ -851,52 +823,47 @@ void SettingsScreen::DrawShortcuts(AppSettings& s) {
 }
 
 void SettingsScreen::DrawGuide(AppSettings& s, const SettingsContext& context) {
-    const bool english = IsEnglish();
     DrawShortcuts(s);
 
-    bool table = BeginCard("##mouse", T("마우스", "Mouse"));
+    bool table = BeginCard("##mouse", T("Mouse"));
     if (table) {
         for (const auto& hint : kMouseHints) {
-            Row(english ? hint.englishGesture : hint.koreanGesture);
+            Row(T(hint.gesture));
             ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(english ? hint.english : hint.korean);
+            ImGui::TextUnformatted(T(hint.text));
         }
     }
     EndCard(table);
 
-    table = BeginCard("##logs", T("진단 로그", "Diagnostic logs"));
+    table = BeginCard("##logs", T("Diagnostic logs"));
     if (table) {
         ValueRow();
-        if (ImGui::Checkbox(T("진단 로그 저장", "Save diagnostic log"), &s.saveLog)) {
+        if (ImGui::Checkbox(T("Save diagnostic log"), &s.saveLog)) {
             action_ = SettingsAction::LogToggled;
         }
         bool open = false;
-        PathRow(T("로그 위치", "Log location"), context.logDirectory,
-                T("로그 폴더 열기##logs", "Open logs folder##logs"), open);
+        PathRow(T("Log location"), context.logDirectory,
+                T("Open logs folder##logs"), open);
         if (open) action_ = SettingsAction::OpenLogFolder;
     }
     EndCard(table);
 
-    table = BeginCard("##capture40", T("40fps 캡처", "40 fps capture"));
+    table = BeginCard("##capture40", T("40 fps capture"));
     if (table) {
         for (const auto& line : kCapture40Guide) {
             ValueRow();
-            Note(Keys(english ? line.english : line.korean));
+            Note(Keys(T(line)));
         }
     }
     EndCard(table);
 
-    table = BeginCard("##troubleshooting", T("문제 해결", "Troubleshooting"));
+    table = BeginCard("##troubleshooting", T("Troubleshooting"));
     if (table) {
         const char* notes[] = {
-            T("영상이 나오지 않으면 OBS 등 같은 캡처 장치를 쓰는 앱을 종료하세요.",
-              "If there is no picture, close OBS or any other app that uses the capture device."),
-            T("4K 60 fps 같은 고대역 모드는 장치가 MJPEG로만 제공할 수 있습니다.",
-              "High-bandwidth modes such as 4K 60 fps may only be offered as MJPEG."),
-            T("영상은 나오는데 소리가 없으면 오디오 → 캡처 오디오 장치를 확인하세요.",
-              "If video works but audio does not, check Audio → Capture audio device."),
-            T("Tab 진단 화면에서 프레임 손실과 오디오 underrun을 확인할 수 있습니다.",
-              "The Tab diagnostics overlay shows dropped frames and audio underruns."),
+            T("If there is no picture, close OBS or any other app that uses the capture device."),
+            T("High-bandwidth modes such as 4K 60 fps may only be offered as MJPEG."),
+            T("If video works but audio does not, check Audio → Capture audio device."),
+            T("The Tab diagnostics overlay shows dropped frames and audio underruns."),
         };
         for (const char* note : notes) {
             ValueRow();
@@ -907,86 +874,83 @@ void SettingsScreen::DrawGuide(AppSettings& s, const SettingsContext& context) {
 }
 
 void SettingsScreen::DrawApp(AppSettings& s, const SettingsContext& context) {
-    bool table = BeginCard("##language", T("언어", "Language"));
+    bool table = BeginCard("##language", T("Language"));
     if (table) {
-        Row(T("표시 언어", "Display language"));
+        Row(T("Display language"));
         if (EnumCombo<settings::UiLanguage>("##uiLanguage", s.uiLanguage,
-                                            {{settings::UiLanguage::Auto, T("자동 (시스템)", "Auto (system)")},
+                                            {{settings::UiLanguage::Auto, T("Auto (system)")},
                                              {settings::UiLanguage::Korean, "한국어"},
-                                             {settings::UiLanguage::English, "English"}})) {
+                                             {settings::UiLanguage::English, "English"},
+                                             {settings::UiLanguage::Japanese, "日本語"},
+                                             {settings::UiLanguage::Spanish, "Español"},
+                                             {settings::UiLanguage::Portuguese, "Português (Brasil)"}})) {
             action_ = SettingsAction::LanguageChanged;
         }
     }
     EndCard(table);
 
-    table = BeginCard("##theme", T("앱 테마", "App theme"));
+    table = BeginCard("##theme", T("App theme"));
     if (table) {
-        Row(T("테마", "Theme"));
+        Row(T("Theme"));
         bool light = s.lightTheme;
-        if (EnumCombo<bool>("##themeCombo", light, {{false, T("다크", "Dark")}, {true, T("라이트", "Light")}})) {
+        if (EnumCombo<bool>("##themeCombo", light, {{false, T("Dark")}, {true, T("Light")}})) {
             s.lightTheme = light;
             action_ = SettingsAction::ThemeChanged;
         }
         ValueRow();
-        Note(T("영상 위 오버레이는 대비를 위해 항상 어둡게 표시됩니다.",
-               "Overlays drawn over video stay dark for contrast."));
+        Note(T("Overlays drawn over video stay dark for contrast."));
     }
     EndCard(table);
 
-    table = BeginCard("##backend", T("디스플레이 백엔드", "Display backend"));
+    table = BeginCard("##backend", T("Display backend"));
     if (table) {
-        Row(T("백엔드", "Backend"));
+        Row(T("Backend"));
         EnumCombo<settings::DisplayBackend>(
             "##displayBackend", s.displayBackend,
-            {{settings::DisplayBackend::Auto, T("자동 (Wayland 우선)", "Auto (Wayland first)")},
+            {{settings::DisplayBackend::Auto, T("Auto (Wayland first)")},
              {settings::DisplayBackend::Wayland, "Wayland"},
              {settings::DisplayBackend::X11, "X11 (XWayland)"}});
         ValueRow();
-        Note(platform::Format(T("현재: %s · 변경 사항은 다음 실행부터 적용됩니다. llcv --x11 로도 실행할 수 있습니다.",
-                                "Current: %s · changes apply on the next launch. You can also run llcv --x11."),
+        Note(platform::Format(T("Current: %s · changes apply on the next launch. You can also run llcv --x11."),
                               context.videoDriver.c_str()));
     }
     EndCard(table);
 
-    table = BeginCard("##startup", T("시작", "Startup"));
+    table = BeginCard("##startup", T("Startup"));
     if (table) {
         ValueRow();
-        ImGui::Checkbox(Keys(T("다음 실행부터 설정 화면 건너뛰기 (F2로 다시 열기)###skip",
-                               "Skip this settings screen on next launch (F2 reopens it)###skip"))
+        ImGui::Checkbox(Keys(T("Skip this settings screen on next launch (F2 reopens it)###skip"))
                             .c_str(),
                         &s.skipStartupSettings);
     }
     EndCard(table);
 
-    table = BeginCard("##power", T("전원", "Power"));
+    table = BeginCard("##power", T("Power"));
     if (table) {
         ValueRow();
-        ImGui::Checkbox(T("재생 중 자동 절전 방지", "Prevent sleep during playback"), &s.preventSleep);
+        ImGui::Checkbox(T("Prevent sleep during playback"), &s.preventSleep);
         ValueRow();
-        Note(T("영상 재생 중에는 화면도 켜둡니다. 오디오 전용 모드에서는 화면 꺼짐을 허용합니다. "
-               "재생을 멈추거나 캡처 장치 연결이 끊기면 해제하며, 시스템 전원 설정은 바꾸지 않습니다.",
-               "Video keeps the screen on. Audio-only allows the screen to turn off. "
+        Note(T("Video keeps the screen on. Audio-only allows the screen to turn off. "
                "Released when playback stops or the capture device disconnects; system power settings are not changed."));
         if (!platform::SleepInhibitor::BlocksSuspend()) {
             ValueRow();
-            Note(T("이 빌드는 D-Bus 없이 빌드되어 영상 재생 중 화면 꺼짐만 막고, 시스템 자동 절전은 막지 못합니다.",
-                   "This build lacks D-Bus, so it only keeps the screen on during video and cannot block automatic suspend."),
+            Note(T("This build lacks D-Bus, so it only keeps the screen on during video and cannot block automatic suspend."),
                  CurrentPalette().warning);
         }
     }
     EndCard(table);
 
-    table = BeginCard("##about", T("정보", "About"));
+    table = BeginCard("##about", T("About"));
     if (table) {
-        Row(T("버전", "Version"));
+        Row(T("Version"));
         ImGui::AlignTextToFramePadding();
         ImGui::Text("%s %s · Linux", app::kAppName, app::kVersion);
-        Row(T("구성", "Components"));
+        Row(T("Components"));
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("V4L2 · OpenGL 3.3 · SDL3 · Dear ImGui · libjpeg-turbo");
-        Row(T("라이선스", "License"));
+        Row(T("License"));
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("GPL-3.0-or-later · Pretendard (OFL-1.1)");
+        ImGui::TextUnformatted("GPL-3.0-or-later · Pretendard, Noto Sans JP (OFL-1.1)");
     }
     EndCard(table);
 }

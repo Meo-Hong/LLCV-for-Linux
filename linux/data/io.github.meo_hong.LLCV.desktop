@@ -3,13 +3,22 @@ Type=Application
 Name=LLCV
 GenericName=Low Latency Capture Viewer
 GenericName[ko]=저지연 캡처 뷰어
+GenericName[ja]=低遅延キャプチャビューアー
+GenericName[es]=Visor de captura de baja latencia
+GenericName[pt_BR]=Visualizador de captura de baixa latência
 Comment=Show HDMI capture device video and audio with low latency
 Comment[ko]=HDMI 캡처 장치의 영상과 소리를 낮은 지연으로 표시합니다
+Comment[ja]=HDMIキャプチャデバイスの映像と音声を低遅延で表示します
+Comment[es]=Muestra el video y el audio de dispositivos de captura HDMI con baja latencia
+Comment[pt_BR]=Mostra o vídeo e o áudio de dispositivos de captura HDMI com baixa latência
 Exec=llcv
 Icon=io.github.meo_hong.LLCV
 Terminal=false
 Categories=AudioVideo;Video;Player;
 Keywords=capture;hdmi;uvc;v4l2;game;console;viewer;캡처;
+Keywords[ja]=capture;hdmi;uvc;v4l2;game;console;viewer;キャプチャ;キャプチャボード;ゲーム;
+Keywords[es]=capture;hdmi;uvc;v4l2;game;console;viewer;captura;capturadora;juego;consola;visor;
+Keywords[pt_BR]=capture;hdmi;uvc;v4l2;game;console;viewer;captura;placa de captura;jogo;visualizador;
 StartupWMClass=io.github.meo_hong.LLCV
 StartupNotify=true
 SingleMainWindow=true
@@ -18,14 +27,23 @@ Actions=settings;x11;sdr;
 [Desktop Action settings]
 Name=Open settings first
 Name[ko]=설정 화면으로 시작
+Name[ja]=設定画面から起動
+Name[es]=Abrir primero la configuración
+Name[pt_BR]=Abrir as configurações primeiro
 Exec=llcv --settings
 
 [Desktop Action x11]
 Name=Start in X11 mode (XWayland)
 Name[ko]=X11 모드로 시작 (XWayland)
+Name[ja]=X11モードで起動（XWayland）
+Name[es]=Iniciar en modo X11 (XWayland)
+Name[pt_BR]=Iniciar no modo X11 (XWayland)
 Exec=llcv --x11
 
 [Desktop Action sdr]
 Name=Start without HDR (8-bit)
 Name[ko]=HDR 없이 시작 (8비트)
+Name[ja]=HDRなしで起動（8ビット）
+Name[es]=Iniciar sin HDR (8 bits)
+Name[pt_BR]=Iniciar sem HDR (8 bits)
 Exec=llcv --sdr

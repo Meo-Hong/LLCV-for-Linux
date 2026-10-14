@@ -44,6 +44,13 @@ License: OFL-1.1
 Comment: Pretendard 1.3.9, unchanged upstream TrueType fonts. Reserved Font
  Name "Pretendard". See third_party/pretendard/SOURCE.txt for hashes.
 
+Files: third_party/noto-sans-jp/*
+Copyright: 2014-2021 Adobe (http://www.adobe.com/)
+License: OFL-1.1
+Comment: Noto Sans JP 2.004 Regular and Bold, subset to the JIS X 0208 level 1
+ kanji by tools/subset-japanese-font.sh for the Japanese interface. See
+ third_party/noto-sans-jp/SOURCE.txt for the upstream archive and hashes.
+
 License: GPL-3+
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by

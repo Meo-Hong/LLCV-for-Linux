@@ -199,7 +199,16 @@ install(TARGETS llcv RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES
     third_party/pretendard/Pretendard-Regular.ttf
     third_party/pretendard/Pretendard-SemiBold.ttf
+    third_party/noto-sans-jp/NotoSansJP-Kanji-Regular.otf
+    third_party/noto-sans-jp/NotoSansJP-Kanji-Bold.otf
     DESTINATION ${CMAKE_INSTALL_DATADIR}/llcv/fonts)
+
+install(FILES
+    po/ko.po
+    po/ja.po
+    po/es.po
+    po/pt_BR.po
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/llcv/locale)
 
 install(FILES data/${LLCV_APP_ID}.desktop
     DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)

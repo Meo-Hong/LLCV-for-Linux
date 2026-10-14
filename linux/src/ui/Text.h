@@ -2,12 +2,16 @@
 
 namespace llcv::ui {
 
-void SetEnglish(bool english);
-bool IsEnglish();
-bool SystemPrefersKorean();
+enum class Language { Korean, English, Japanese, Spanish, Portuguese };
 
-inline const char* T(const char* korean, const char* english) {
-    return IsEnglish() ? english : korean;
+void SetLanguage(Language language);
+Language CurrentLanguage();
+Language SystemLanguage();
+
+const char* T(const char* text);
+
+constexpr const char* N_(const char* text) {
+    return text;
 }
 
 }

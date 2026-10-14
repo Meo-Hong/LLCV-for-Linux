@@ -6,6 +6,9 @@
   <name>LLCV</name>
   <summary>Low-latency viewer for HDMI capture devices</summary>
   <summary xml:lang="ko">HDMI 캡처 장치용 저지연 뷰어</summary>
+  <summary xml:lang="ja">HDMIキャプチャデバイス向けの低遅延ビューアー</summary>
+  <summary xml:lang="es">Visor de baja latencia para dispositivos de captura HDMI</summary>
+  <summary xml:lang="pt_BR">Visualizador de baixa latência para dispositivos de captura HDMI</summary>
   <description>
     <p>
       LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices,
