@@ -1,5 +1,6 @@
 #pragma once
 
+#include "input/Shortcuts.h"
 #include "video/VideoColor.h"
 
 #include <string>
@@ -22,6 +23,7 @@ inline constexpr int kPcmTargetOptions[] = {10, 15, 20, 25, 30, 40};
 inline constexpr int kSdrWhiteOptions[] = {100, 160, 203, 250, 300};
 
 struct AppSettings {
+    input::Bindings shortcuts = input::kDefaultBindings;
     UiLanguage uiLanguage = UiLanguage::Auto;
     bool lightTheme = false;
     DisplayBackend displayBackend = DisplayBackend::Auto;

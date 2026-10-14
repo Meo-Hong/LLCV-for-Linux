@@ -1,5 +1,6 @@
 #pragma once
 
+#include "input/Shortcuts.h"
 #include "settings/AppSettings.h"
 #include "ui/HdrSupport.h"
 #include "ui/Theme.h"
@@ -31,13 +32,15 @@ struct AudioMeterState {
     std::string status;
 };
 
-void DrawDiagnostics(const std::vector<DiagnosticsLine>& lines, const FontSet& fonts, float scale);
+void DrawDiagnostics(const std::vector<DiagnosticsLine>& lines, const input::Bindings& shortcuts, const FontSet& fonts,
+                     float scale);
 void DrawVolumeHud(int volume, bool muted, settings::VolumeHudPosition position, float alpha, float scale);
 void DrawToast(const std::string& text, bool error, float alpha, float scale);
 void DrawCenterNotice(const std::string& title, const std::string& detail, const FontSet& fonts, float scale);
-bool DrawAudioOsd(AudioMeterState& state, const FontSet& fonts, float scale);
-bool DrawAudioOnlyView(AudioMeterState& state, const FontSet& fonts, float scale);
-void DrawHelp(bool* open, bool audioOnly, const HdrSupport& hdr, const FontSet& fonts, float scale);
+bool DrawAudioOsd(AudioMeterState& state, const input::Bindings& shortcuts, const FontSet& fonts, float scale);
+bool DrawAudioOnlyView(AudioMeterState& state, const input::Bindings& shortcuts, const FontSet& fonts, float scale);
+void DrawHelp(bool* open, bool audioOnly, const HdrSupport& hdr, const input::Bindings& shortcuts, const FontSet& fonts,
+              float scale);
 
 enum class MenuCommand {
     None,
@@ -73,6 +76,6 @@ struct MenuState {
     int volume = 100;
 };
 
-MenuCommand DrawMenuBar(const MenuState& state, float scale);
+MenuCommand DrawMenuBar(const MenuState& state, const input::Bindings& shortcuts, float scale);
 
 }

@@ -2,6 +2,7 @@
 
 #include "audio/AudioEngine.h"
 #include "capture/V4l2Devices.h"
+#include "input/Shortcuts.h"
 #include "settings/AppSettings.h"
 #include "ui/HdrSupport.h"
 #include "ui/Theme.h"
@@ -51,9 +52,13 @@ enum class SettingsAction {
 class SettingsScreen {
 public:
     SettingsAction Draw(settings::AppSettings& settings, const SettingsContext& context);
+    bool CapturingShortcut() const { return editingShortcut_ >= 0; }
+    bool CaptureShortcut(settings::AppSettings& settings, input::Binding binding);
+    void CancelShortcutCapture();
 
 private:
     enum class Page { Video, Audio, Window, Guide, App };
+    enum class ShortcutNotice { None, Reserved, Duplicate };
 
     void DrawSidebar(const SettingsContext& context, float height);
     void DrawFooter(const SettingsContext& context);
@@ -61,11 +66,14 @@ private:
     void DrawHdr(settings::AppSettings& settings, const SettingsContext& context);
     void DrawAudio(settings::AppSettings& settings, const SettingsContext& context);
     void DrawWindow(settings::AppSettings& settings, const SettingsContext& context);
+    void DrawShortcuts(settings::AppSettings& settings);
     void DrawGuide(settings::AppSettings& settings, const SettingsContext& context);
     void DrawApp(settings::AppSettings& settings, const SettingsContext& context);
 
     Page page_ = Page::Video;
     SettingsAction action_ = SettingsAction::None;
+    int editingShortcut_ = -1;
+    ShortcutNotice shortcutNotice_ = ShortcutNotice::None;
 };
 
 }

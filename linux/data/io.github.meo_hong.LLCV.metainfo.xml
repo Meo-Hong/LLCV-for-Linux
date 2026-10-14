@@ -37,6 +37,16 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="2.0.5" date="2026-10-14">
+      <description>
+        <p>Follows the Windows LLCV 2.0.5 update.</p>
+        <ul>
+          <li>Keyboard shortcuts can be changed under Settings, Guide and logs, including Esc.</li>
+          <li>Ctrl, Alt and Shift combinations are supported. Reset defaults restores all keys.</li>
+          <li>Help, menu bar, overlays and settings show the assigned keys.</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.0.4" date="2026-10-14">
       <description>
         <p>Follows the Windows LLCV 2.0.3 and 2.0.4 updates.</p>

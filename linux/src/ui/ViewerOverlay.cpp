@@ -132,7 +132,8 @@ bool AudioControls(AudioMeterState& state, float scale) {
 
 }
 
-void DrawDiagnostics(const std::vector<DiagnosticsLine>& lines, const FontSet& fonts, float scale) {
+void DrawDiagnostics(const std::vector<DiagnosticsLine>& lines, const input::Bindings& shortcuts, const FontSet& fonts,
+                     float scale) {
     OverlayStyle style(scale);
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 12.0f * scale, viewport->WorkPos.y + 12.0f * scale),
@@ -143,7 +144,7 @@ void DrawDiagnostics(const std::vector<DiagnosticsLine>& lines, const FontSet& f
         ImGui::TextUnformatted(T("캡처 실시간 정보", "Capture diagnostics"));
         ImGui::PopFont();
         ImGui::SameLine();
-        ImGui::TextDisabled("%s", T("[Tab 닫기]", "[Tab close]"));
+        ImGui::TextDisabled("%s", input::ExpandKeyLabels(T("[Tab 닫기]", "[Tab close]"), shortcuts).c_str());
         ImGui::Separator();
         if (ImGui::BeginTable("##diagnosticsTable", 2, ImGuiTableFlags_SizingFixedFit)) {
             for (const auto& line : lines) {
@@ -223,7 +224,7 @@ void DrawCenterNotice(const std::string& title, const std::string& detail, const
     ImGui::End();
 }
 
-bool DrawAudioOsd(AudioMeterState& state, const FontSet& fonts, float scale) {
+bool DrawAudioOsd(AudioMeterState& state, const input::Bindings& shortcuts, const FontSet& fonts, float scale) {
     OverlayStyle style(scale);
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - 12.0f * scale,
@@ -236,7 +237,7 @@ bool DrawAudioOsd(AudioMeterState& state, const FontSet& fonts, float scale) {
         ImGui::TextUnformatted(T("오디오", "Audio"));
         ImGui::PopFont();
         ImGui::SameLine();
-        ImGui::TextDisabled("%s", T("[F3 닫기]", "[F3 close]"));
+        ImGui::TextDisabled("%s", input::ExpandKeyLabels(T("[F3 닫기]", "[F3 close]"), shortcuts).c_str());
         ImGui::Separator();
         changed = AudioControls(state, scale);
     }
@@ -244,7 +245,7 @@ bool DrawAudioOsd(AudioMeterState& state, const FontSet& fonts, float scale) {
     return changed;
 }
 
-bool DrawAudioOnlyView(AudioMeterState& state, const FontSet& fonts, float scale) {
+bool DrawAudioOnlyView(AudioMeterState& state, const input::Bindings& shortcuts, const FontSet& fonts, float scale) {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -266,7 +267,11 @@ bool DrawAudioOnlyView(AudioMeterState& state, const FontSet& fonts, float scale
         ImGui::Separator();
         changed = AudioControls(state, scale);
         ImGui::Spacing();
-        ImGui::TextDisabled("%s", T("F2 설정 · Tab 진단 · F1 도움말 · 휠 음량", "F2 settings · Tab diagnostics · F1 help · wheel volume"));
+        const std::string hint = input::ExpandKeyLabels(
+            T("F2 설정 · Tab 진단 · F1 도움말 · 휠 음량", "F2 settings · Tab diagnostics · F1 help · wheel volume"), shortcuts);
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", hint.c_str());
+        ImGui::PopTextWrapPos();
     }
     ImGui::End();
     ImGui::PopStyleColor(3);
@@ -274,7 +279,8 @@ bool DrawAudioOnlyView(AudioMeterState& state, const FontSet& fonts, float scale
     return changed;
 }
 
-void DrawHelp(bool* open, bool audioOnly, const HdrSupport& hdr, const FontSet& fonts, float scale) {
+void DrawHelp(bool* open, bool audioOnly, const HdrSupport& hdr, const input::Bindings& shortcuts, const FontSet& fonts,
+              float scale) {
     OverlayStyle style(scale);
     const bool english = IsEnglish();
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -290,10 +296,15 @@ void DrawHelp(bool* open, bool audioOnly, const HdrSupport& hdr, const FontSet& 
                                     "Low Latency Capture Viewer · Linux (V4L2 · OpenGL · SDL3)"));
         ImGui::Separator();
         if (ImGui::BeginTable("##helpShortcuts", 2, ImGuiTableFlags_SizingFixedFit)) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted(kMenuShortcut.key);
+            ImGui::TableSetColumnIndex(1);
+            ImGui::TextUnformatted(english ? kMenuShortcut.english : kMenuShortcut.korean);
             for (const auto& shortcut : kShortcuts) {
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
-                ImGui::TextUnformatted(shortcut.key);
+                ImGui::TextUnformatted(input::Label(input::BindingFor(shortcuts, shortcut.action)).c_str());
                 ImGui::TableSetColumnIndex(1);
                 const char* text = english ? shortcut.english : shortcut.korean;
                 if (shortcut.videoOnly && audioOnly) {
@@ -324,13 +335,15 @@ void DrawHelp(bool* open, bool audioOnly, const HdrSupport& hdr, const FontSet& 
         status(T("HDR 입력", "HDR input"), hdr.input, hdr.inputText);
         status(T("HDR 출력", "HDR output"), hdr.output, hdr.outputText);
         ImGui::Spacing();
-        if (ImGui::Button(T("닫기 (F1 / Esc)", "Close (F1 / Esc)"))) *open = false;
+        const std::string closeLabel =
+            input::ExpandKeyLabels(T("닫기 (F1 / Esc)###close", "Close (F1 / Esc)###close"), shortcuts);
+        if (ImGui::Button(closeLabel.c_str())) *open = false;
     }
     ImGui::End();
 }
 
 
-MenuCommand DrawMenuBar(const MenuState& state, float scale) {
+MenuCommand DrawMenuBar(const MenuState& state, const input::Bindings& shortcuts, float scale) {
     MenuCommand command = MenuCommand::None;
     ImGui::PushStyleColor(ImGuiCol_MenuBarBg, IM_COL32(17, 17, 17, 238));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, IM_COL32(24, 24, 24, 246));
@@ -351,12 +364,15 @@ MenuCommand DrawMenuBar(const MenuState& state, float scale) {
                           bool enabled = true) {
         if (ImGui::MenuItem(label, shortcut, selected, enabled)) command = value;
     };
+    const auto key = [&](input::Action action) { return input::Label(input::BindingFor(shortcuts, action)); };
 
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu(T("보기", "View"))) {
-            item(T("전체화면", "Fullscreen"), "F11", state.fullscreen, MenuCommand::Fullscreen);
+            item(T("전체화면", "Fullscreen"), key(input::Action::Fullscreen).c_str(), state.fullscreen,
+                 MenuCommand::Fullscreen);
             if (!state.audioOnly) {
-                item(T("원본 크기 (1:1)", "Original size (1:1)"), "F5", false, MenuCommand::RestoreSize);
+                item(T("원본 크기 (1:1)", "Original size (1:1)"), key(input::Action::PixelPerfect).c_str(), false,
+                     MenuCommand::RestoreSize);
             }
             item(T("테두리 없는 창", "Borderless window"), nullptr, state.borderless, MenuCommand::Borderless);
             ImGui::Separator();
@@ -368,12 +384,14 @@ MenuCommand DrawMenuBar(const MenuState& state, float scale) {
                 item("VSync", nullptr, state.vsync, MenuCommand::PresentVSync);
                 ImGui::Separator();
             }
-            item(T("실시간 진단", "Live diagnostics"), "Tab", state.diagnostics, MenuCommand::Diagnostics);
+            item(T("실시간 진단", "Live diagnostics"), key(input::Action::Diagnostics).c_str(), state.diagnostics,
+                 MenuCommand::Diagnostics);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu(T("오디오", "Audio"))) {
             if (!state.audioOnly) {
-                item(T("오디오 OSD", "Audio OSD"), "F3", state.audioOsd, MenuCommand::AudioOsd);
+                item(T("오디오 OSD", "Audio OSD"), key(input::Action::AudioOsd).c_str(), state.audioOsd,
+                     MenuCommand::AudioOsd);
                 ImGui::Separator();
             }
             const std::string up = platform::Format(T("음량 올리기 (현재 %d%%)", "Volume up (now %d%%)"), state.volume);
@@ -385,22 +403,25 @@ MenuCommand DrawMenuBar(const MenuState& state, float scale) {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu(T("도구", "Tools"))) {
-            item(T("스크린샷 저장", "Save screenshot"), "F12", false, MenuCommand::Screenshot, !state.audioOnly);
+            item(T("스크린샷 저장", "Save screenshot"), key(input::Action::Screenshot).c_str(), false,
+                 MenuCommand::Screenshot, !state.audioOnly);
             item(T("스크린샷 폴더 열기", "Open screenshots folder"), nullptr, false, MenuCommand::OpenScreenshots);
             item(T("로그 폴더 열기", "Open logs folder"), nullptr, false, MenuCommand::OpenLogs);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu(T("설정", "Settings"))) {
-            item(T("설정 열기", "Open settings"), "F2", false, MenuCommand::Settings);
+            item(T("설정 열기", "Open settings"), key(input::Action::Settings).c_str(), false, MenuCommand::Settings);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu(T("도움말", "Help"))) {
-            item(T("앱 정보 · 단축키", "App information & shortcuts"), "F1", false, MenuCommand::Help);
+            item(T("앱 정보 · 단축키", "App information & shortcuts"), key(input::Action::Help).c_str(), false,
+                 MenuCommand::Help);
             ImGui::Separator();
-            item(T("종료", "Quit"), "Esc", false, MenuCommand::Quit);
+            item(T("종료", "Quit"), key(input::Action::Exit).c_str(), false, MenuCommand::Quit);
             ImGui::EndMenu();
         }
-        const char* hint = T("Alt · Esc: 메뉴 닫기", "Alt · Esc: close menu");
+        const std::string hintText = input::ExpandKeyLabels(T("Alt · Esc: 메뉴 닫기", "Alt · Esc: close menu"), shortcuts);
+        const char* hint = hintText.c_str();
         const float hintWidth = ImGui::CalcTextSize(hint).x + ImGui::GetStyle().FramePadding.x * 2.0f;
         const float available = ImGui::GetContentRegionAvail().x;
         if (available > hintWidth) {

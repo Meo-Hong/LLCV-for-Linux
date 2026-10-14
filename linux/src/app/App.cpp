@@ -4,6 +4,7 @@
 #include "app/ModeSelection.h"
 #include "capture/UvcDescriptors.h"
 #include "diagnostics/Logger.h"
+#include "input/Shortcuts.h"
 #include "platform/Clock.h"
 #include "platform/Paths.h"
 #include "platform/PngImage.h"
@@ -333,6 +334,10 @@ void App::HandleEvent(const SDL_Event& event) {
         newVideoFrame_ = true;
         return;
     }
+    if ((event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP) && CaptureShortcutKey(event.key)) {
+        redrawFrames_ = std::max(redrawFrames_, 2);
+        return;
+    }
     if (imguiInitialized_) platform_.ProcessEvent(event);
     redrawFrames_ = std::max(redrawFrames_, 2);
 
@@ -352,6 +357,7 @@ void App::HandleEvent(const SDL_Event& event) {
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         focused_ = false;
         altTapPending_ = false;
+        settingsScreen_.CancelShortcutCapture();
         UpdateBackgroundMute();
         break;
     case SDL_EVENT_WINDOW_MOVED:
@@ -422,41 +428,56 @@ void App::HandleEvent(const SDL_Event& event) {
     }
 }
 
+bool App::CaptureShortcutKey(const SDL_KeyboardEvent& key) {
+    if (shortcutKeyToRelease_ != SDL_SCANCODE_UNKNOWN && key.scancode == shortcutKeyToRelease_) {
+        if (!key.down || key.repeat) {
+            if (!key.down) shortcutKeyToRelease_ = SDL_SCANCODE_UNKNOWN;
+            return true;
+        }
+        shortcutKeyToRelease_ = SDL_SCANCODE_UNKNOWN;
+    }
+    if (screen_ != Screen::Settings || !settingsScreen_.CapturingShortcut()) return false;
+    if (!key.down || key.repeat || input::IsModifierKey(key.scancode)) return true;
+    if (settingsScreen_.CaptureShortcut(settings_, input::FromKeyEvent(key))) shortcutKeyToRelease_ = key.scancode;
+    return true;
+}
+
 void App::HandleKey(const SDL_KeyboardEvent& key) {
     if (key.repeat || screen_ == Screen::Settings) return;
-    const bool alt = (key.mod & SDL_KMOD_ALT) != 0;
-    switch (key.key) {
-    case SDLK_F1:
+    if ((key.key == SDLK_RETURN || key.key == SDLK_KP_ENTER) && (key.mod & SDL_KMOD_ALT)) {
+        SetFullscreen(!fullscreen_);
+        return;
+    }
+    const auto action = input::FindAction(settings_.shortcuts, input::FromKeyEvent(key));
+    if (!action) return;
+    switch (*action) {
+    case input::Action::Help:
         helpVisible_ = !helpVisible_;
         break;
-    case SDLK_F2:
+    case input::Action::Settings:
         StopSession();
         EnterSettings();
         break;
-    case SDLK_F3:
+    case input::Action::AudioOsd:
         if (screen_ == Screen::Video) audioOsdVisible_ = !audioOsdVisible_;
         break;
-    case SDLK_F5:
+    case input::Action::PixelPerfect:
         if (screen_ == Screen::Video) {
             if (fullscreen_) SetFullscreen(false);
             ApplyVideoWindowSize(false);
         }
         break;
-    case SDLK_F11:
+    case input::Action::Fullscreen:
         SetFullscreen(!fullscreen_);
         break;
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER:
-        if (alt) SetFullscreen(!fullscreen_);
-        break;
-    case SDLK_F12:
+    case input::Action::Screenshot:
         if (screen_ == Screen::Video) RequestScreenshot();
         break;
-    case SDLK_TAB:
+    case input::Action::Diagnostics:
         diagnosticsVisible_ = !diagnosticsVisible_;
         if (diagnosticsVisible_) audio_.ResetMinimum();
         break;
-    case SDLK_ESCAPE:
+    case input::Action::Exit:
         if (menuVisible_) {
             menuVisible_ = false;
         } else if (helpVisible_) {
@@ -707,20 +728,20 @@ void App::DrawVideoOverlays() {
     }
     if (audioOsdVisible_) {
         ui::AudioMeterState state = BuildAudioState();
-        if (ui::DrawAudioOsd(state, fonts_, scale_)) ApplyAudioState(state);
+        if (ui::DrawAudioOsd(state, settings_.shortcuts, fonts_, scale_)) ApplyAudioState(state);
     }
     DrawCommonOverlays();
 }
 
 void App::DrawAudioOnly() {
     ui::AudioMeterState state = BuildAudioState();
-    if (ui::DrawAudioOnlyView(state, fonts_, scale_)) ApplyAudioState(state);
+    if (ui::DrawAudioOnlyView(state, settings_.shortcuts, fonts_, scale_)) ApplyAudioState(state);
     DrawCommonOverlays();
 }
 
 void App::DrawCommonOverlays() {
     const uint64_t now = platform::MonotonicMs();
-    if (diagnosticsVisible_) ui::DrawDiagnostics(BuildDiagnostics(), fonts_, scale_);
+    if (diagnosticsVisible_) ui::DrawDiagnostics(BuildDiagnostics(), settings_.shortcuts, fonts_, scale_);
     const float hudAlpha = FadeAlpha(now, volumeHudUntilMs_);
     if (hudAlpha > 0.0f) {
         ui::DrawVolumeHud(settings_.volumePercent, settings_.muteWhenBackground && !focused_,
@@ -728,7 +749,10 @@ void App::DrawCommonOverlays() {
     }
     const float toastAlpha = FadeAlpha(now, toastUntilMs_);
     if (toastAlpha > 0.0f) ui::DrawToast(toastText_, toastError_, toastAlpha, scale_);
-    if (helpVisible_) ui::DrawHelp(&helpVisible_, screen_ == Screen::AudioOnly, SessionHdrSupport(), fonts_, scale_);
+    if (helpVisible_) {
+        ui::DrawHelp(&helpVisible_, screen_ == Screen::AudioOnly, SessionHdrSupport(), settings_.shortcuts, fonts_,
+                     scale_);
+    }
     if (menuVisible_) DrawMenu();
 }
 
@@ -1455,7 +1479,7 @@ void App::DrawMenu() {
     state.audioOsd = audioOsdVisible_;
     state.backgroundMute = settings_.muteWhenBackground;
     state.volume = settings_.volumePercent;
-    const ui::MenuCommand command = ui::DrawMenuBar(state, scale_);
+    const ui::MenuCommand command = ui::DrawMenuBar(state, settings_.shortcuts, scale_);
     if (command != ui::MenuCommand::None) pendingMenuCommand_ = command;
 }
 

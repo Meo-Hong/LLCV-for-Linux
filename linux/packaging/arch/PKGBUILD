@@ -1,5 +1,5 @@
 pkgname=llcv
-pkgver=2.0.4
+pkgver=2.0.5
 pkgrel=1
 pkgdesc="Low-latency viewer for USB (UVC) HDMI capture devices, with HDR10"
 arch=('x86_64' 'aarch64')

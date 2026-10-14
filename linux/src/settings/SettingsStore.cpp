@@ -120,6 +120,18 @@ const char* Bool(bool value) {
     return value ? "1" : "0";
 }
 
+input::Bindings ReadShortcuts(const Values& values) {
+    input::Bindings bindings = input::kDefaultBindings;
+    for (size_t i = 0; i < input::kActionCount; ++i) {
+        const auto it = values.find(std::string("Shortcuts.") + input::kActionNames[i]);
+        if (it == values.end()) continue;
+        const auto binding = input::Parse(it->second);
+        if (!binding) return input::kDefaultBindings;
+        bindings[i] = *binding;
+    }
+    return input::IsValid(bindings) ? bindings : input::kDefaultBindings;
+}
+
 }
 
 AppSettings LoadSettings(const std::filesystem::path& path) {
@@ -174,6 +186,8 @@ AppSettings LoadSettings(const std::filesystem::path& path) {
     s.hasWindowPosition = ReadBool(v, "Window.HasPosition", false);
     s.windowX = ReadInt(v, "Window.X", 0, -32768, 32767);
     s.windowY = ReadInt(v, "Window.Y", 0, -32768, 32767);
+
+    s.shortcuts = ReadShortcuts(v);
     return s;
 }
 
@@ -233,7 +247,12 @@ bool SaveSettings(const std::filesystem::path& path, const AppSettings& s) {
              << "Height=" << s.windowHeight << "\n"
              << "HasPosition=" << Bool(s.hasWindowPosition) << "\n"
              << "X=" << s.windowX << "\n"
-             << "Y=" << s.windowY << "\n";
+             << "Y=" << s.windowY << "\n\n"
+             << "[Shortcuts]\n";
+        const input::Bindings& shortcuts = input::IsValid(s.shortcuts) ? s.shortcuts : input::kDefaultBindings;
+        for (size_t i = 0; i < input::kActionCount; ++i) {
+            file << input::kActionNames[i] << "=" << input::Label(shortcuts[i]) << "\n";
+        }
         file.flush();
         written = static_cast<bool>(file);
     }

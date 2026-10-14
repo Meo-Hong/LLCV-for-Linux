@@ -9,7 +9,7 @@
 %endif
 
 Name:           llcv
-Version:        2.0.4
+Version:        2.0.5
 Release:        1
 Summary:        Low-latency viewer for USB HDMI capture devices
 
@@ -109,6 +109,11 @@ cp -p third_party/pretendard/LICENSE.txt Pretendard-LICENSE.txt
 %{_mandir}/man1/llcv.1*
 
 %changelog
+* Wed Oct 14 2026 Meohong <busimh001@gmail.com> - 2.0.5-1
+- Follow the Windows LLCV 2.0.5 update.
+- Customizable keyboard shortcuts with Ctrl/Alt/Shift combinations and
+  Reset defaults; help, menu and overlays show the assigned keys.
+
 * Wed Oct 14 2026 Meohong <busimh001@gmail.com> - 2.0.4-1
 - Follow the Windows LLCV 2.0.3 and 2.0.4 updates.
 - Optional 40 fps capture, confirmed against the rate the driver reports,

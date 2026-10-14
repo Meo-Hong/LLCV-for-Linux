@@ -1,3 +1,15 @@
+llcv (2.0.5) resolute; urgency=medium
+
+  * Follow the Windows LLCV 2.0.5 update.
+  * Customizable keyboard shortcuts (Settings, Guide & logs). All eight
+    viewer shortcuts, including Esc, accept a single key or a Ctrl/Alt/Shift
+    combination. Duplicate, empty, Super and reserved combinations are
+    rejected, and Reset defaults restores the original keys.
+  * Keys are matched by scancode, so they work with any input method.
+  * Help, menu bar, overlays and settings text show the assigned keys.
+
+ -- Meohong <busimh001@gmail.com>  Wed, 14 Oct 2026 18:00:00 +0900
+
 llcv (2.0.4) resolute; urgency=medium
 
   * Follow the Windows LLCV 2.0.3 and 2.0.4 updates.

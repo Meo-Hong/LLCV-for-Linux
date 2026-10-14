@@ -54,6 +54,7 @@ private:
     int WaitTimeoutMs() const;
 
     void HandleEvent(const SDL_Event& event);
+    bool CaptureShortcutKey(const SDL_KeyboardEvent& key);
     void HandleKey(const SDL_KeyboardEvent& key);
     void HandleWheel(const SDL_MouseWheelEvent& wheel);
     void HandleAudioDeviceRemoved(const SDL_AudioDeviceEvent& event);
@@ -171,6 +172,7 @@ private:
     bool helpVisible_ = false;
     bool menuVisible_ = false;
     bool altTapPending_ = false;
+    SDL_Scancode shortcutKeyToRelease_ = SDL_SCANCODE_UNKNOWN;
     ui::MenuCommand pendingMenuCommand_ = ui::MenuCommand::None;
     bool cursorHidden_ = false;
     uint64_t lastMouseMoveMs_ = 0;

@@ -19,6 +19,11 @@ using settings::AppSettings;
 
 float g_scale = 1.0f;
 FontSet g_fonts;
+const input::Bindings* g_bindings = &input::kDefaultBindings;
+
+std::string Keys(const char* text) {
+    return input::ExpandKeyLabels(text, *g_bindings);
+}
 
 ImU32 WithAlpha(ImU32 color, int alpha) {
     return (color & ~IM_COL32_A_MASK) | (static_cast<ImU32>(alpha) << IM_COL32_A_SHIFT);
@@ -150,7 +155,9 @@ void HelpMarker(const GuideLine* lines, size_t count) {
     if (!ImGui::BeginItemTooltip()) return;
     ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.0f);
     const bool english = IsEnglish();
-    for (size_t i = 0; i < count; ++i) ImGui::BulletText("%s", english ? lines[i].english : lines[i].korean);
+    for (size_t i = 0; i < count; ++i) {
+        ImGui::BulletText("%s", Keys(english ? lines[i].english : lines[i].korean).c_str());
+    }
     ImGui::PopTextWrapPos();
     ImGui::EndTooltip();
 }
@@ -193,6 +200,7 @@ SettingsAction SettingsScreen::Draw(AppSettings& settings, const SettingsContext
     action_ = SettingsAction::None;
     g_scale = context.scale;
     g_fonts = context.fonts;
+    g_bindings = &settings.shortcuts;
     const Palette& palette = CurrentPalette();
 
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -250,6 +258,9 @@ SettingsAction SettingsScreen::Draw(AppSettings& settings, const SettingsContext
     ImGui::EndChild();
 
     ImGui::End();
+    if (page_ != Page::Guide || action_ == SettingsAction::Start || action_ == SettingsAction::Quit) {
+        CancelShortcutCapture();
+    }
     return action_;
 }
 
@@ -490,7 +501,7 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
 
     DrawHdr(s, context);
 
-    table = BeginCard("##screenshot", T("스크린샷 (F12)", "Screenshots (F12)"));
+    table = BeginCard("##screenshot", Keys(T("스크린샷 (F12)", "Screenshots (F12)")).c_str());
     if (table) {
         bool open = false;
         PathRow(T("저장 위치", "Save location"), context.screenshotDirectory,
@@ -690,8 +701,8 @@ void SettingsScreen::DrawWindow(AppSettings& s, const SettingsContext& context) 
         ImGui::Checkbox(T("Pixel-perfect (원본 크기 1:1 · 크기 고정)", "Pixel-perfect (1:1 source size · locked)"),
                         &s.pixelPerfect);
         ValueRow();
-        Note(T("끄면 창 크기를 자유롭게 바꿀 수 있고 영상 비율은 유지됩니다. F5로 1:1 크기로 돌아갑니다.",
-               "When off, the window can be resized freely while keeping the aspect ratio. F5 restores 1:1."));
+        Note(Keys(T("끄면 창 크기를 자유롭게 바꿀 수 있고 영상 비율은 유지됩니다. F5로 1:1 크기로 돌아갑니다.",
+                    "When off, the window can be resized freely while keeping the aspect ratio. F5 restores 1:1.")));
         ValueRow();
         ImGui::Checkbox(T("테두리 없는 창", "Borderless window"), &s.borderlessWindow);
         ValueRow();
@@ -739,21 +750,111 @@ void SettingsScreen::DrawWindow(AppSettings& s, const SettingsContext& context) 
     EndCard(table);
 }
 
-void SettingsScreen::DrawGuide(AppSettings& s, const SettingsContext& context) {
-    const bool english = IsEnglish();
-    bool table = BeginCard("##shortcuts", T("단축키", "Keyboard shortcuts"));
-    if (table) {
-        for (const auto& shortcut : kShortcuts) {
-            Row(shortcut.key);
-            std::string text = english ? shortcut.english : shortcut.korean;
-            if (shortcut.videoOnly) text += T(" (영상 모드)", " (video mode)");
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(text.c_str());
+void SettingsScreen::CancelShortcutCapture() {
+    editingShortcut_ = -1;
+    shortcutNotice_ = ShortcutNotice::None;
+}
+
+bool SettingsScreen::CaptureShortcut(AppSettings& settings, input::Binding binding) {
+    if (editingShortcut_ < 0) return false;
+    const size_t index = static_cast<size_t>(editingShortcut_);
+    if (!input::IsValid(binding)) {
+        shortcutNotice_ = ShortcutNotice::Reserved;
+        return false;
+    }
+    for (size_t i = 0; i < input::kActionCount; ++i) {
+        if (i != index && settings.shortcuts[i] == binding) {
+            shortcutNotice_ = ShortcutNotice::Duplicate;
+            return false;
         }
     }
-    EndCard(table);
+    settings.shortcuts[index] = binding;
+    CancelShortcutCapture();
+    return true;
+}
 
-    table = BeginCard("##mouse", T("마우스", "Mouse"));
+void SettingsScreen::DrawShortcuts(AppSettings& s) {
+    const Palette& palette = CurrentPalette();
+    const bool english = IsEnglish();
+    const bool table = BeginCard("##shortcuts", T("단축키", "Keyboard shortcuts"));
+    if (!table) {
+        EndCard(table);
+        return;
+    }
+
+    const ImGuiStyle& style = ImGui::GetStyle();
+    float keyWidth = 80.0f * g_scale;
+    for (const input::Binding binding : s.shortcuts) {
+        keyWidth = std::max(keyWidth, ImGui::CalcTextSize(input::Label(binding).c_str()).x + style.FramePadding.x * 2.0f +
+                                          8.0f * g_scale);
+    }
+
+    bool keyHovered = false;
+    for (const auto& shortcut : kShortcuts) {
+        const int index = static_cast<int>(shortcut.action);
+        const bool editing = editingShortcut_ == index;
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::PushID(index);
+        if (editing) {
+            ImGui::PushStyleColor(ImGuiCol_Button, palette.accent);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, palette.primaryHover);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, palette.primaryPressed);
+            ImGui::PushStyleColor(ImGuiCol_Text, palette.onAccent);
+        }
+        const std::string label = editing ? std::string("…") : input::Label(s.shortcuts[static_cast<size_t>(index)]);
+        const float width = std::min(keyWidth, ImGui::GetContentRegionAvail().x);
+        if (ImGui::Button((label + "###key").c_str(), ImVec2(width, 0.0f))) {
+            if (editing) {
+                CancelShortcutCapture();
+            } else {
+                editingShortcut_ = index;
+                shortcutNotice_ = ShortcutNotice::None;
+            }
+        }
+        keyHovered |= ImGui::IsItemHovered();
+        if (editing) ImGui::PopStyleColor(4);
+        ImGui::PopID();
+        ImGui::TableSetColumnIndex(1);
+        std::string text = english ? shortcut.english : shortcut.korean;
+        if (shortcut.videoOnly) text += T(" (영상 모드)", " (video mode)");
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextWrapped("%s", text.c_str());
+    }
+
+    Row(kMenuShortcut.key);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextWrapped("%s%s", english ? kMenuShortcut.english : kMenuShortcut.korean, T(" (고정)", " (fixed)"));
+
+    ValueRow();
+    if (editingShortcut_ < 0) {
+        Note(T("키 버튼을 눌러 변경 · Ctrl / Alt / Shift 조합 가능",
+               "Click a key to change it · Ctrl / Alt / Shift combinations are supported"));
+    } else if (shortcutNotice_ == ShortcutNotice::Reserved) {
+        Note(T("예약되었거나 지원하지 않는 키입니다. 다른 키를 입력하세요.", "Reserved or unsupported key. Try another."),
+             palette.warning);
+    } else if (shortcutNotice_ == ShortcutNotice::Duplicate) {
+        Note(T("이미 사용 중인 키입니다. 다른 키를 입력하세요.", "Already assigned. Try another key."), palette.warning);
+    } else {
+        Note(T("키 입력 (Ctrl / Alt / Shift 조합 가능) · 취소하려면 키 버튼을 다시 누르세요.",
+               "Press a key, optionally with Ctrl / Alt / Shift · click the key button again to cancel."),
+             palette.accent);
+    }
+    ValueRow();
+    if (ImGui::Button(T("기본값 복원##shortcuts", "Reset defaults##shortcuts"))) {
+        CancelShortcutCapture();
+        s.shortcuts = input::kDefaultBindings;
+    }
+    keyHovered |= ImGui::IsItemHovered();
+    if (editingShortcut_ >= 0 && !keyHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) CancelShortcutCapture();
+    EndCard(table);
+}
+
+void SettingsScreen::DrawGuide(AppSettings& s, const SettingsContext& context) {
+    const bool english = IsEnglish();
+    DrawShortcuts(s);
+
+    bool table = BeginCard("##mouse", T("마우스", "Mouse"));
     if (table) {
         for (const auto& hint : kMouseHints) {
             Row(english ? hint.englishGesture : hint.koreanGesture);
@@ -780,7 +881,7 @@ void SettingsScreen::DrawGuide(AppSettings& s, const SettingsContext& context) {
     if (table) {
         for (const auto& line : kCapture40Guide) {
             ValueRow();
-            Note(english ? line.english : line.korean);
+            Note(Keys(english ? line.english : line.korean));
         }
     }
     EndCard(table);
@@ -799,7 +900,7 @@ void SettingsScreen::DrawGuide(AppSettings& s, const SettingsContext& context) {
         };
         for (const char* note : notes) {
             ValueRow();
-            Note(note);
+            Note(Keys(note));
         }
     }
     EndCard(table);
@@ -850,8 +951,9 @@ void SettingsScreen::DrawApp(AppSettings& s, const SettingsContext& context) {
     table = BeginCard("##startup", T("시작", "Startup"));
     if (table) {
         ValueRow();
-        ImGui::Checkbox(T("다음 실행부터 설정 화면 건너뛰기 (F2로 다시 열기)",
-                          "Skip this settings screen on next launch (F2 reopens it)"),
+        ImGui::Checkbox(Keys(T("다음 실행부터 설정 화면 건너뛰기 (F2로 다시 열기)###skip",
+                               "Skip this settings screen on next launch (F2 reopens it)###skip"))
+                            .c_str(),
                         &s.skipStartupSettings);
     }
     EndCard(table);

@@ -4,7 +4,7 @@
 
 LLCV는 USB(UVC/V4L2) HDMI 캡처 장치의 영상과 소리를 낮은 지연으로 표시하는
 뷰어입니다. 이 폴더는 [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer)의
-Windows용 LLCV 2.0.4를 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
+Windows용 LLCV 2.0.5를 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
 기준 장치는 AVerMedia Live Gamer ULTRA S GC553Pro이고, 기준 데스크톱은
 Ubuntu 26.04(GNOME, Wayland)입니다.
 
@@ -39,11 +39,11 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 
 | 파일 | 설치할 OS | 명령 |
 | --- | --- | --- |
-| `llcv_2.0.4_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.0.4_amd64.deb` |
-| `llcv_2.0.4_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.0.4_arm64.deb` |
-| `llcv_2.0.4_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.0.4_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.0.4-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.0.4-1.x86_64.rpm` |
-| `llcv-2.0.4-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.0.4-1-x86_64.pkg.tar.zst` |
+| `llcv_2.0.5_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.0.5_amd64.deb` |
+| `llcv_2.0.5_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.0.5_arm64.deb` |
+| `llcv_2.0.5_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.0.5_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.0.5-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.0.5-1.x86_64.rpm` |
+| `llcv-2.0.5-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.0.5-1-x86_64.pkg.tar.zst` |
 
 - `.deb`를 설치하면 LLCV APT 저장소도 함께 등록되어, 다음 버전부터는
   `apt upgrade`나 소프트웨어 업데이트로 받습니다. `.rpm`과 Arch는 Releases에서
@@ -193,11 +193,13 @@ Wayland에서는 컴포지터가 창 위치를 정합니다. 그래서 시작 �
 
 재생 중에 **Alt**를 눌렀다 떼면 화면 위쪽에 메뉴 막대가 나타납니다. 보기,
 오디오, 도구, 설정, 도움말 메뉴가 있어서 기능 키를 외우지 않아도 됩니다.
-Alt나 Esc를 다시 누르거나 메뉴 밖을 클릭하면 닫힙니다.
+Alt나 종료 키(기본 Esc)를 다시 누르거나 메뉴 밖을 클릭하면 닫힙니다.
 
 ## 단축키
 
-| 키 | 동작 |
+아래 키는 기본값입니다. **설정 → 안내 · 로그**에서 바꿀 수 있습니다.
+
+| 기본 키 | 동작 |
 | --- | --- |
 | Alt | 메뉴 막대 표시 / 숨기기 |
 | F1 | 앱 정보 · 단축키 |
@@ -210,6 +212,22 @@ Alt나 Esc를 다시 누르거나 메뉴 밖을 클릭하면 닫힙니다.
 | Esc | 전체화면 해제 / 종료 |
 | 마우스 휠 | 음량 ±5% |
 | 더블 클릭 | 전체화면 전환 |
+
+### 단축키 변경
+
+1. **설정 → 안내 · 로그**에서 동작 옆의 키 버튼을 누르세요.
+2. 원하는 키를 누르세요. **Ctrl**, **Alt**, **Shift** 조합도 됩니다. 같은
+   버튼을 다시 누르면 취소됩니다.
+3. **시작**을 누르세요. 바꾼 키는 다른 설정과 함께 저장됩니다.
+
+**전체화면 해제 / 종료**(Esc)를 포함한 8개 단축키를 모두 바꿀 수 있습니다.
+빈 단축키는 둘 수 없습니다. 중복 키, 수정 키만 누른 경우, Super(Windows 키)
+조합, Alt+F4, Alt+Tab, Ctrl+Alt+Delete, Ctrl+Alt+F1~F12 같은 예약 조합은
+지정할 수 없습니다. **기본값 복원**은 8개를 모두 처음 키로 되돌립니다.
+Alt(메뉴 막대)와 Alt+Enter(전체화면)는 고정입니다.
+
+키는 물리적인 위치로 구분하므로 한글 입력기가 켜져 있어도 동작합니다. 도움말,
+메뉴 막대, 오버레이, 설정 화면에 지정한 키가 표시됩니다.
 
 ## 문제 해결
 
@@ -230,6 +248,10 @@ Alt나 Esc를 다시 누르거나 메뉴 밖을 클릭하면 닫힙니다.
   거부했거나 다른 속도로 설정한 경우입니다. 오류 내용과 진단 로그의
   `40 fps request` 줄을 확인하고, 다른 해상도나 형식을 고르거나 **40fps 캡처**를
   해제하세요.
+- **단축키가 동작하지 않음.** 영상 창을 클릭해 LLCV에 포커스를 준 뒤
+  **설정 → 안내 · 로그**에서 키를 확인하세요. 영상 전용 동작은 오디오 전용
+  모드에서 동작하지 않습니다. 설정 키를 잊었다면 메뉴 막대(**Alt**)에서 설정을
+  열거나 `llcv --settings`로 실행한 뒤 **기본값 복원**을 누르세요.
 - **/dev/video\* 권한 오류.** 로컬 세션으로 로그인하거나 사용자를 `video`
   그룹에 추가하세요.
 

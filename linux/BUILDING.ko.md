@@ -92,8 +92,8 @@ cd LLCV-for-Linux/linux
 마지막에 만들어진 파일과 설치 명령이 표시됩니다. 예시:
 
 ```text
-Package: /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.0.4_amd64.deb
-Install: sudo apt install /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.0.4_amd64.deb
+Package: /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.0.5_amd64.deb
+Install: sudo apt install /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.0.5_amd64.deb
 ```
 
 **⑤ 설치**
@@ -154,7 +154,7 @@ SDL3가 없으면 스크립트가 알아서 SDL3 소스를 받고(`tools/fetch-s
 넣어 빌드합니다.
 
 **결과물**: `dist/<배포판>-<버전>/llcv_<버전>~<배포판><버전>_<아키텍처>.deb`
-(예: `dist/debian-13/llcv_2.0.4_arm64.deb`)
+(예: `dist/debian-13/llcv_2.0.5_arm64.deb`)
 
 **설치** — 폴더 이름은 내 배포판(`ID`-`VERSION_ID`)입니다.
 
@@ -216,7 +216,7 @@ Fedora는 시스템 SDL3를 쓰고, RHEL 계열은 SDL3를 앱에 넣는 데 필
 ./tools/build-rpm.sh
 ```
 
-**결과물**: `dist/<배포판>-<버전>/llcv-2.0.4-1.x86_64.rpm`
+**결과물**: `dist/<배포판>-<버전>/llcv-2.0.5-1.x86_64.rpm`
 (디버그 정보 `llcv-debuginfo`, `llcv-debugsource`와 소스 RPM도 함께 생깁니다.)
 
 **설치** — 폴더 이름은 내 배포판(`ID`-`VERSION_ID`)입니다.
@@ -242,13 +242,13 @@ cd packaging/arch
 makepkg -f
 ```
 
-**결과물**: `packaging/arch/llcv-2.0.4-1-x86_64.pkg.tar.zst`
+**결과물**: `packaging/arch/llcv-2.0.5-1-x86_64.pkg.tar.zst`
 (`./tools/build-package.sh`를 쓰면 `dist/arch/`로 복사됩니다.)
 
 **설치**
 
 ```sh
-sudo pacman -U llcv-2.0.4-1-*.pkg.tar.zst
+sudo pacman -U llcv-2.0.5-1-*.pkg.tar.zst
 ```
 
 `makepkg -si`를 쓰면 의존성 설치, 빌드, 설치를 한 번에 합니다.

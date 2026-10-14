@@ -3,7 +3,7 @@
 > [한국어](README.ko.md)
 
 LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices with low
-latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.0.4 viewer
+latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.0.5 viewer
 by [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer). The
 reference device is the AVerMedia Live Gamer ULTRA S GC553Pro. The reference
 desktop is Ubuntu 26.04 (GNOME, Wayland).
@@ -40,11 +40,11 @@ Download the file for your system from
 
 | File | Install on | Command |
 | --- | --- | --- |
-| `llcv_2.0.4_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.0.4_amd64.deb` |
-| `llcv_2.0.4_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.0.4_arm64.deb` |
-| `llcv_2.0.4_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.0.4_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.0.4-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.0.4-1.x86_64.rpm` |
-| `llcv-2.0.4-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.0.4-1-x86_64.pkg.tar.zst` |
+| `llcv_2.0.5_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.0.5_amd64.deb` |
+| `llcv_2.0.5_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.0.5_arm64.deb` |
+| `llcv_2.0.5_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.0.5_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.0.5-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.0.5-1.x86_64.rpm` |
+| `llcv-2.0.5-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.0.5-1-x86_64.pkg.tar.zst` |
 
 - Installing a `.deb` also registers the LLCV APT repository, so later
   versions arrive through `apt upgrade` or Software Updater. For `.rpm` and
@@ -203,12 +203,15 @@ says so.
 
 Press and release **Alt** during playback to show the menu bar. It holds the
 View, Audio, Tools, Settings and Help commands, so you can use them without
-remembering the function keys. Press Alt or Esc again, or click outside the
-menu, to close it.
+remembering the function keys. Press Alt or the Exit key (default Esc) again,
+or click outside the menu, to close it.
 
 ## Shortcuts
 
-| Key | Action |
+The keys below are the defaults. They can be changed under
+**Settings → Guide & logs**.
+
+| Default key | Action |
 | --- | --- |
 | Alt | Show or hide the menu bar |
 | F1 | App information and shortcuts |
@@ -221,6 +224,24 @@ menu, to close it.
 | Esc | Leave fullscreen, or exit |
 | Mouse wheel | Volume ±5% |
 | Double-click | Toggle fullscreen |
+
+### Changing shortcuts
+
+1. Open **Settings → Guide & logs**, then click the key button beside an
+   action.
+2. Press a key, optionally with **Ctrl**, **Alt** or **Shift**. Click the same
+   button again to cancel.
+3. Choose **Start**. The new keys are saved with the other settings.
+
+All eight shortcuts can be changed, including **Leave fullscreen / exit**
+(Esc). None can be empty. Duplicate keys, modifier-only keys, Super (Windows
+key) combinations and reserved combinations such as Alt+F4, Alt+Tab,
+Ctrl+Alt+Delete and Ctrl+Alt+F1 to F12 cannot be assigned. **Reset defaults**
+restores all eight. Alt (menu bar) and Alt+Enter (fullscreen) stay fixed.
+
+Keys are matched by their physical position, so they keep working when a
+Korean or other input method is active. The help window, menu bar, overlays
+and settings show the assigned keys.
 
 ## Troubleshooting
 
@@ -242,6 +263,11 @@ menu, to close it.
   device, resolution or format, or set another rate. Read the error and the
   `40 fps request` line in the diagnostic log, then choose another resolution
   or format, or uncheck **40 fps capture**.
+- **A shortcut does not work.** Click the viewer to focus LLCV, then check
+  the keys under **Settings → Guide & logs**. Video-only actions do nothing in
+  audio-only mode. If you forget the settings key, open settings from the
+  menu bar (**Alt**) or start `llcv --settings`, then choose
+  **Reset defaults**.
 - **Permission denied on /dev/video\*.** Log in at the local seat, or add your
   user to the `video` group.
 
