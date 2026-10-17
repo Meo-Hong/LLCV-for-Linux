@@ -70,6 +70,7 @@ inline constexpr int IDC_SETTINGS_CAPTURE_40_HELP = 2058;
 inline constexpr int IDC_SETTINGS_LS_GUIDE = 2059;
 inline constexpr int IDC_SETTINGS_SHORTCUT_RESET = 2060;
 inline constexpr int IDC_SETTINGS_FULLSCREEN_POSITION = 2061;
+inline constexpr int IDC_SETTINGS_UNLISTED_FPS = 2078;
 inline constexpr int IDC_SETTINGS_SHORTCUT_FIRST = 2100;
 } // namespace control_id
 

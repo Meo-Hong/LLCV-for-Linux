@@ -30,6 +30,7 @@ static LRESULT CALLBACK CountEnableTransitions(HWND hwnd, UINT message, WPARAM w
 }
 static constexpr Member kMembers[] = {
     {&SettingsControls::capture40Check, "capture40Check"},
+    {&SettingsControls::unlistedFpsCheck, "unlistedFpsCheck"},
     {&SettingsControls::capture40Help, "capture40Help"},
     {&SettingsControls::guideLsButton, "guideLsButton"},
     {&SettingsControls::videoRefreshButton, "videoRefreshButton"},
@@ -92,6 +93,7 @@ static constexpr Member kMembers[] = {
     {&SettingsControls::pixelFormatLabel, "pixelFormatLabel"},
     {&SettingsControls::frameRateLabel, "frameRateLabel"},
     {&SettingsControls::videoCapabilityStatus, "videoCapabilityStatus"},
+    {&SettingsControls::unlistedFpsStatus, "unlistedFpsStatus"},
     {&SettingsControls::audioCombo, "audioCombo"},
     {&SettingsControls::bufferCombo, "bufferCombo"},
     {&SettingsControls::audioOutputCombo, "audioOutputCombo"},
@@ -174,10 +176,12 @@ static constexpr Geometry kGeometry[] = {
     {&SettingsControls::captureAudioDeviceCombo, "captureAudioDeviceCombo", 184, 228, 228, 376, 30},
     {&SettingsControls::videoCombo, "videoCombo", 184, 292, 292, 180, 30},
     {&SettingsControls::frameRateCombo, "frameRateCombo", 380, 292, 292, 180, 30},
-    {&SettingsControls::pixelFormatCombo, "pixelFormatCombo", 184, 356, 356, 376, 30},
-    {&SettingsControls::videoCapabilityStatus, "videoCapabilityStatus", 184, 392, 392, 376, 84},
+    {&SettingsControls::pixelFormatCombo, "pixelFormatCombo", 184, 352, 352, 376, 30},
+    {&SettingsControls::videoCapabilityStatus, "videoCapabilityStatus", 184, 388, 388, 376, 76},
+    {&SettingsControls::unlistedFpsStatus, "unlistedFpsStatus", 184, 464, 464, 376, 16},
     {&SettingsControls::hdrChromaCombo, "hdrChromaCombo", 304, 520, 520, 224, 30},
-    {&SettingsControls::capture40Check, "capture40Check", 184, 554, 554, 344, 28},
+    {&SettingsControls::capture40Check, "capture40Check", 400, 554, 554, 128, 28},
+    {&SettingsControls::unlistedFpsCheck, "unlistedFpsCheck", 184, 554, 554, 208, 28},
     {&SettingsControls::capture40Help, "capture40Help", 536, 556, 556, 24, 24},
     {&SettingsControls::guideLsButton, "guideLsButton", 600, 360, 360, 376, 32},
     {&SettingsControls::vsrCheck, "vsrCheck", 600, 412, 412, 264, 32},
@@ -324,6 +328,7 @@ static void CheckFontHierarchy(const SettingsControls& state, UINT dpi, bool eng
         {state.startButton, 10, FW_SEMIBOLD},
         {state.pageSubtitle, 9, FW_NORMAL},
         {state.videoCapabilityStatus, 9, FW_NORMAL},
+        {state.unlistedFpsStatus, 9, FW_NORMAL},
         {state.vsrStatus, 9, FW_NORMAL},
         {state.pageTitle, 20, FW_SEMIBOLD},
     };
@@ -821,6 +826,7 @@ static void TestActualControlCreation() {
     {&SettingsControls::guideLogFolderButton, 2039},
     {&SettingsControls::screenshotClipboardCheck, 2047},
     {&SettingsControls::capture40Check, 2057},
+    {&SettingsControls::unlistedFpsCheck, 2078},
     {&SettingsControls::capture40Help, 2058},
     {&SettingsControls::guideLsButton, 2059},
     {&SettingsControls::screenshotFolderButton, 2048},
@@ -1003,6 +1009,7 @@ static void TestActualControlCreation() {
             {state.saveLogCheck, settings.saveLog},
             {state.screenshotClipboardCheck, settings.screenshotClipboard},
             {state.capture40Check, settings.capture40Fps},
+            {state.unlistedFpsCheck, settings.allowUnlistedFps},
             {state.showConsoleCheck, settings.showDiagnosticConsole},
             {state.skipStartupCheck, settings.skipStartupSettings},
             {state.checkForUpdatesCheck, settings.checkForUpdates},
@@ -1023,13 +1030,15 @@ static void TestActualControlCreation() {
                          L"F11  전체화면 켜기/끄기") == 0, "fullscreen caption covers borderless and exclusive");
         Check((GetWindowLongPtrW(state.fullscreenCursorHint, GWL_STYLE) & SS_TYPEMASK) == SS_RIGHT,
               "F11 right alignment unchanged");
-        Check(SendMessageW(state.tooltipWindow, TTM_GETTOOLCOUNT, 0, 0) == 10,
-              "seven help buttons plus monitor, audio mode and pixel-perfect tooltips registered");
+        Check(SendMessageW(state.tooltipWindow, TTM_GETTOOLCOUNT, 0, 0) == 11,
+              "seven help buttons plus monitor, audio mode, frame rate and pixel-perfect tooltips registered");
         // Model a full five-line device capability report, not just the short
         // loading placeholder. Long formats/FPS lists must remain visible.
         SetWindowTextW(state.videoCapabilityStatus, english
             ? L"Detected modes:\r\nNV12 240/144/120/100/90/60/50/30 fps\r\nYUY2 120/100/60/50/30 fps\r\nP010 60/50/30 fps\r\nMJPEG 240/144/120/100/90/60/50/30 fps"
             : L"자동 인식:\r\nNV12 240/144/120/100/90/60/50/30 fps\r\nYUY2 120/100/60/50/30 fps\r\nP010 60/50/30 fps\r\nMJPEG 240/144/120/100/90/60/50/30 fps");
+        SetWindowTextW(state.unlistedFpsStatus, english
+            ? L"Direct request: 30 fps" : L"직접 요청: 30 fps");
         SetWindowTextW(state.audioStatus, english
             ? L"Console 5.1: output period is negotiated on start; actual value in Tab diagnostics."
             : L"콘솔 5.1: 출력 주기는 시작 시 협상 · 실제 값은 Tab 진단에서 확인");
@@ -1472,6 +1481,7 @@ int main(int argc, char** argv) {
                   "exit remains editable on the guide page");
             ExpectVisible(state.screenshotTitle, tab == SettingsTab::VideoWindow);
             ExpectVisible(state.capture40Check, tab == SettingsTab::VideoWindow);
+            ExpectVisible(state.unlistedFpsCheck, tab == SettingsTab::VideoWindow);
             ExpectVisible(state.capture40Help, tab == SettingsTab::VideoWindow);
             ExpectVisible(state.guideLsButton, tab == SettingsTab::GuideDiagnostics);
             ExpectVisible(state.vsrCheck, video);

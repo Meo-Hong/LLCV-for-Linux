@@ -19,7 +19,8 @@ public:
     ~Recorder();
     void Configure(const video::VideoSampleFormat&, const capture_audio::Format&,
                    video_color::Configuration, bool arrivalClock = false,
-                   const Options& options = {});
+                   const Options& options = {}, const AM_MEDIA_TYPE* captureType = nullptr,
+                   video_color::Override mjpegColorOverride = video_color::Override::Auto);
     bool Start(const std::wstring& path, const Options* options=nullptr);
     void Stop() noexcept;
     bool SetPaused(bool paused);
@@ -27,7 +28,7 @@ public:
     void Push(bool video, IMediaSample*) noexcept;
     Snapshot GetSnapshot() const;
     bool Busy() const { return busy_.load(); }
-    bool Recording() const { return accepting_.load(); }
+    bool Recording() const { return phase_.load(std::memory_order_acquire)==Phase::Recording; }
     HRESULT Result() const { return result_.load(); }
 private:
     struct Packet { Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer; LONGLONG time=0, duration=0; uint64_t pauseGeneration=0; bool video=false; };
@@ -51,6 +52,9 @@ private:
     std::atomic<uint64_t> pauseGeneration_{0};
     uint64_t pausedSinceMs_=0,totalPausedMs_=0; // statusMutex_
     video::VideoSampleFormat video_{};
+    GUID compressedFormatType_{};
+    std::vector<BYTE> compressedFormat_;
+    video_color::Override mjpegColorOverride_=video_color::Override::Auto;
     capture_audio::Format audio_{};
     video_color::Configuration color_{};
     bool arrivalClock_=false;
@@ -58,7 +62,7 @@ private:
     FrameLimiter videoLimiter_{};
     LONGLONG audioAnchor_=-1;
     uint64_t audioFrames_=0;
-    std::atomic<bool> accepting_{false}, busy_{false}, stop_{false};
+    std::atomic<bool> busy_{false}, stop_{false};
     std::atomic<HRESULT> result_{S_OK};
     std::atomic<HRESULT> finalizeResult_{S_OK};
     std::atomic<Failure> failure_{Failure::None};

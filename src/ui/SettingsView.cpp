@@ -284,7 +284,7 @@ void ApplySettingsFont(SettingsControls* state, HWND hwnd,
     // harder to read. Labels, fields, navigation and buttons remain 10 pt.
     for (HWND control : {state->pageSubtitle, state->versionWatermark,
                          state->audioStatus, state->surround51Hint,
-                         state->captureAudioStatus, state->videoCapabilityStatus,
+                         state->captureAudioStatus, state->videoCapabilityStatus, state->unlistedFpsStatus,
                          state->vsrStatus, state->screenshotHelp,
                          state->relativeSizeWarning, state->fullscreenCursorHint,
                          state->fullscreenPositionHint,
@@ -447,9 +447,10 @@ void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
     SendMessageW(state->captureDeviceCombo, CB_SETDROPPEDWIDTH, SettingsPixels(560, dpi), 0);
     SendMessageW(state->captureAudioDeviceCombo, CB_SETDROPPEDWIDTH, SettingsPixels(560, dpi), 0);
     SendMessageW(state->audioOutputCombo, CB_SETDROPPEDWIDTH, SettingsPixels(560, dpi), 0);
-    place(state->pixelFormatLabel, 184, 332, 376, 20);
-    place(state->pixelFormatCombo, 184, 356, 376, 160);
-    place(state->videoCapabilityStatus, 184, 392, 376, 84);
+    place(state->pixelFormatLabel, 184, 328, 376, 20);
+    place(state->pixelFormatCombo, 184, 352, 376, 160);
+    place(state->videoCapabilityStatus, 184, 388, 376, 76);
+    place(state->unlistedFpsStatus, 184, 464, 376, 16);
     place(state->forceHdr10Check, 184, 480, 344, 40);
     place(state->forceHdr10Help, 536, 488, 24, 24);
     // Keep the full compatibility captions readable in the closed field,
@@ -460,7 +461,8 @@ void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
     place(state->mjpegColorLabel, 184, 488, 322, 20);
     place(state->mjpegColorCombo, 184, 512, 344, 150);
     place(state->mjpegColorHelp, 536, 515, 24, 24);
-    place(state->capture40Check, 184, 554, 344, 28);
+    place(state->unlistedFpsCheck, 184, 554, 208, 28);
+    place(state->capture40Check, 400, 554, 128, 28);
     place(state->capture40Help, 536, 556, 24, 24);
 
     place(state->videoDisplaySection, 600, 112, 376, 20);
@@ -649,6 +651,9 @@ void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
     const bool capture40 = SendMessageW(state->capture40Check, BM_GETCHECK, 0, 0) == BST_CHECKED;
     SetSettingsControlVisible(state->frameRateCombo, video, availability.formats && !capture40);
     SetSettingsControlVisible(state->capture40Check, video, availability.formats);
+    SetSettingsControlVisible(state->unlistedFpsCheck, video, availability.formats && !capture40);
+    SetSettingsControlVisible(state->unlistedFpsStatus, video &&
+        GetWindowTextLengthW(state->unlistedFpsStatus) > 0);
     SetSettingsControlVisible(state->capture40Help, video);
     SetSettingsControlVisible(state->guideLsButton, guide);
     // This row has two mutually exclusive controls: the device picker for a

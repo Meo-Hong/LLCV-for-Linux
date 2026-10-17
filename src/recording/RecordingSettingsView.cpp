@@ -51,6 +51,13 @@ void CreateRecordingSettings(SettingsControls* s,HWND owner){
     Item(s->recFps,L"60 fps",60,s->recordingOptions.maxFps);Item(s->recFps,L"30 fps",30,s->recordingOptions.maxFps);
     s->recAudioLabel=label(L"오디오 (AAC)",L"Audio (AAC)");s->recAudio=combo(2067);
     Item(s->recAudio,L"128 kbps",128,s->recordingOptions.audioKbps);Item(s->recAudio,L"192 kbps",192,s->recordingOptions.audioKbps);
+    // These controls belong to Audio, not the Recording page.
+    s->recVolumeLabel=label(L"녹화 음량",L"Recording volume");
+    s->recVolume=combo(kRecordingVolume);
+    for(int percent=0;percent<=100;percent+=10)
+        Item(s->recVolume,(std::to_wstring(percent)+(percent==0?Text(s,L"% (무음)",L"% (mute)"):L"%")).c_str(),percent,s->recordingOptions.audioVolumePercent);
+    if(SendMessageW(s->recVolume,CB_GETCURSEL,0,0)==CB_ERR)
+        Item(s->recVolume,(std::to_wstring(s->recordingOptions.audioVolumePercent)+L"%").c_str(),s->recordingOptions.audioVolumePercent,s->recordingOptions.audioVolumePercent);
     s->recFolderLabel=label(L"저장 폴더",L"Save folder");s->recFolder=create(L"STATIC",L"",SS_PATHELLIPSIS|SS_NOPREFIX);
     s->recBrowse=create(L"BUTTON",Text(s,L"폴더 변경",L"Choose folder"),BS_PUSHBUTTON|WS_TABSTOP,2068);
     s->recSpace=label(L"",L"");
@@ -62,8 +69,8 @@ void CreateRecordingSettings(SettingsControls* s,HWND owner){
     s->recSplitValueLabel=label(L"분할 기준",L"Split threshold");s->recSplitValue=combo(kRecordingSplitValue);
     s->recPause=create(L"BUTTON",Text(s,L"녹화 일시정지",L"Pause recording"),BS_PUSHBUTTON|WS_TABSTOP,kRecordingPause);
     s->recSplitHint=label(L"독립 재생 가능한 지점에서 분할합니다.",L"Splits wait for an independently decodable frame.");
-    s->recNote=label(L"현재 NV12·YUY2 SDR 영상과\n16비트 PCM 스테레오 오디오만 녹화할 수 있습니다.\nMP4 저장 · CQP 용량은 장면에 따라 달라집니다.\n\nVSR·OSD·앱 음량은 녹화에 반영되지 않습니다.\n녹화 프레임 설정은 재생에 영향을 주지 않습니다.",
-        L"Recording supports only NV12/YUY2 SDR video\nand 16-bit PCM stereo audio.\nMP4 files · CQP size varies with the scene.\n\nVSR, OSD and app volume are not recorded.\nThe frame rate limit applies only to recording.");
+    s->recNote=label(L"현재 NV12·YUY2·MJPEG SDR 영상과\n16비트 PCM 스테레오 오디오를 녹화할 수 있습니다.\nMP4 저장 · CQP 용량은 장면에 따라 달라집니다.\n\nVSR·OSD·앱 음량은 녹화에 반영되지 않습니다.\n녹화 프레임 설정은 재생에 영향을 주지 않습니다.",
+        L"Recording supports NV12/YUY2/MJPEG SDR video\nand 16-bit PCM stereo audio.\nMP4 files · CQP size varies with the scene.\n\nVSR, OSD and app volume are not recorded.\nThe frame rate limit applies only to recording.");
     // New page fields precede the shared footer in keyboard traversal.
     for(auto h:s->recordingControls)SetWindowPos(h,HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
     for(auto h:{s->startButton,s->cancelButton})if(h)SetWindowPos(h,HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
@@ -136,7 +143,7 @@ void ShowRecordingSettings(SettingsControls* s){
     const bool editable=!s->recordingSnapshot.busy&&!s->recordingClosing;
     for(auto h:s->recordingControls){
         if(h==s->recEncoder||h==s->recMode||h==s->recBitrate||h==s->recFps||h==s->recAudio||h==s->recBrowse||
-            h==s->recResolution||h==s->recSplit||h==s->recSplitValue||h==s->recPause||
+            h==s->recVolume||h==s->recResolution||h==s->recSplit||h==s->recSplitValue||h==s->recPause||
             std::find(s->recordingCodecs.begin(),s->recordingCodecs.end(),h)!=s->recordingCodecs.end())continue;
         SetSettingsControlVisible(h,visible);
     }
@@ -150,7 +157,7 @@ void ShowRecordingSettings(SettingsControls* s){
     const bool available=!s->recordingProbePending&&support.container&&(cpu?support.software:!support.hardware.empty())&&rates.Available();
     SetSettingsControlVisible(s->recMode,visible,editable&&available);
     SetSettingsControlVisible(s->recBitrate,visible,editable&&available&&rates.Supports(s->recordingOptions.rateControl));
-    for(auto h:{s->recFps,s->recAudio,s->recBrowse,s->recResolution,s->recSplit})SetSettingsControlVisible(h,visible,editable);
+    for(auto h:{s->recFps,s->recAudio,s->recVolume,s->recBrowse,s->recResolution,s->recSplit})SetSettingsControlVisible(h,visible,editable);
     SetSettingsControlVisible(s->recSplitValue,visible,editable&&s->recordingOptions.splitMode!=recording::SplitMode::None);
     const bool canPause=s->recordingLive&&!s->recordingClosing&&s->recordingSnapshot.busy&&s->recordingSnapshot.phase==recording::Phase::Recording;
     SetSettingsControlVisible(s->recPause,visible&&canPause,canPause);
@@ -167,18 +174,19 @@ void LayoutRecordingSettings(SettingsControls* s,UINT dpi){
     };
     field(s->recEncoderLabel,s->recEncoder,184,216,376);
     p(s->recStatus,184,280,376,48);
-    field(s->recModeLabel,s->recMode,184,348,180);
-    field(s->recBitrateLabel,s->recBitrate,380,348,180);
-    field(s->recResolutionLabel,s->recResolution,184,420,180);
-    field(s->recFpsLabel,s->recFps,380,420,180);
-    field(s->recAudioLabel,s->recAudio,184,492,376);
+    field(s->recModeLabel,s->recMode,184,332,180);
+    field(s->recBitrateLabel,s->recBitrate,380,332,180);
+    field(s->recResolutionLabel,s->recResolution,184,396,180);
+    field(s->recFpsLabel,s->recFps,380,396,180);
+    field(s->recAudioLabel,s->recAudio,184,460,180);
+    field(s->recVolumeLabel,s->recVolume,380,460,180);
     p(s->recFolderLabel,600,144,376,20);p(s->recFolder,600,168,376,24);p(s->recBrowse,600,200,180,32);
     p(s->recSpace,600,240,376,40);
     p(s->recOpenFolder,796,200,180,32);
-    field(s->recSplitLabel,s->recSplit,600,296,180);
-    field(s->recSplitValueLabel,s->recSplitValue,796,296,180);
-    p(s->recSplitHint,600,360,376,40);
-    p(s->recNote,600,420,376,104);
+    field(s->recSplitLabel,s->recSplit,600,332,180);
+    field(s->recSplitValueLabel,s->recSplitValue,796,332,180);
+    p(s->recSplitHint,600,396,376,32);
+    p(s->recNote,600,436,376,104);
     p(s->recPause,600,548,180,32);
 }
 bool RecordingSettingsCommand(SettingsControls* s,HWND owner,int id,int notification){
@@ -193,12 +201,19 @@ bool RecordingSettingsCommand(SettingsControls* s,HWND owner,int id,int notifica
         }
         return true;
     }
-    if((id<kRecordingControlFirst||id>kRecordingControlLast)&&id!=kRecordingSplit&&id!=kRecordingSplitValue)return false;
+    if((id<kRecordingControlFirst||id>kRecordingControlLast)&&id!=kRecordingSplit&&id!=kRecordingSplitValue&&id!=kRecordingVolume)return false;
     if(s->recordingSnapshot.busy || s->recordingClosing)return true;
     // While a dropdown is open, arrows preview native selection only. Commit
     // on acceptance so Escape cannot restore the caption but leave new options.
     if(notification==CBN_SELCHANGE && SendMessageW(GetDlgItem(owner,id),CB_GETDROPPEDSTATE,0,0))return true;
     if(notification==CBN_SELENDOK)notification=CBN_SELCHANGE;
+    if(id==kRecordingVolume){
+        if(notification==CBN_SELCHANGE){
+            const int value=Value(s->recVolume);
+            if(value>=0&&value<=100)s->recordingOptions.audioVolumePercent=value;
+        }
+        return true;
+    }
     if(id<=2063&&notification==BN_CLICKED){if(IsWindowEnabled(s->recordingCodecs[id-2061]))s->recordingOptions.codec=static_cast<recording::Codec>(id-2061);}
     else if(id==2064&&notification==CBN_SELCHANGE){
         const int selected=Value(s->recEncoder);const bool cpu=selected==1;

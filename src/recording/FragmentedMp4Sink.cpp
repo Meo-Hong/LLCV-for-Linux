@@ -53,6 +53,7 @@ struct State : RecordingArchive {
     std::recursive_mutex mutex;
     Sink* owner = nullptr;
     ComPtr<IMFByteStream> bytes;
+    ComPtr<IMFAttributes> videoAttributes;
     std::vector<std::unique_ptr<StreamInfo>> streams;
     std::vector<Packet> pending;
     size_t pendingBytes = 0;
@@ -138,10 +139,24 @@ struct State : RecordingArchive {
     HRESULT Finalize();
 };
 
-HRESULT CopyType(IMFMediaType* from, IMFMediaType** result) {
+HRESULT CopyType(IMFMediaType* from, IMFMediaType** result, IMFAttributes* videoFallback=nullptr) {
     ComPtr<IMFMediaType> copy;
     HRESULT hr = MFCreateMediaType(&copy);
     if (SUCCEEDED(hr)) hr = from->CopyAllItems(copy.Get());
+    GUID major{};
+    if (SUCCEEDED(hr) && videoFallback &&
+        SUCCEEDED(copy->GetGUID(MF_MT_MAJOR_TYPE, &major)) && major == MFMediaType_Video) {
+        // SinkWriter can drop optional color attributes before the sink first
+        // sees the encoder's type. Preserve the caller's interpretation only
+        // where the encoder did not explicitly report a value.
+        for (const auto& key : {MF_MT_YUV_MATRIX, MF_MT_VIDEO_NOMINAL_RANGE,
+                               MF_MT_VIDEO_PRIMARIES, MF_MT_TRANSFER_FUNCTION}) {
+            UINT32 negotiatedValue = 0, fallback = 0;
+            if ((FAILED(copy->GetUINT32(key, &negotiatedValue)) || !negotiatedValue) &&
+                SUCCEEDED(videoFallback->GetUINT32(key, &fallback)) && fallback &&
+                FAILED(hr = copy->SetUINT32(key, fallback))) return hr;
+        }
+    }
     if (SUCCEEDED(hr)) *result = copy.Detach();
     return hr;
 }
@@ -312,7 +327,12 @@ HRESULT State::StartHeader() {
     // Preserve the encoder's actual PTS/DTS, including reordered pictures.
     // negative_cts_offsets would additionally shift DTS by the first CTS delta
     // and can double the starting delay when paired with the edit list.
-    int configured = av_dict_set(&options, "movflags", "delay_moov+default_base_moof+frag_keyframe", 0);
+    // Matrix/range can be known while primaries/transfer remain unspecified.
+    // The pinned muxer otherwise omits colr unless all three are specified.
+    const char* flags = videoAttributes
+        ? "delay_moov+default_base_moof+frag_keyframe+write_colr"
+        : "delay_moov+default_base_moof+frag_keyframe";
+    int configured = av_dict_set(&options, "movflags", flags, 0);
     if (configured >= 0) configured = av_dict_set(&options, "frag_duration", "1000000", 0);
     if (configured >= 0) configured = av_dict_set(&options, "min_frag_duration", "1000000", 0);
     if (configured >= 0) configured = av_dict_set(&options, "video_track_timescale", "10000000", 0);
@@ -610,11 +630,14 @@ public:
         std::lock_guard lock(state->mutex);
         HRESULT hr = IsMediaTypeSupported(type, nullptr); if (FAILED(hr)) return hr;
         auto* info = state->Find(id);
+        ComPtr<IMFMediaType> negotiated;
+        if (FAILED(hr = CopyType(type, &negotiated, state->videoAttributes.Get()))) return hr;
         if (state->format) {
             DWORD flags = 0;
-            return info->type->IsEqual(type, &flags) == S_OK ? S_OK : MF_E_INVALIDREQUEST;
+            return info->type->IsEqual(negotiated.Get(), &flags) == S_OK ? S_OK : MF_E_INVALIDREQUEST;
         }
-        return CopyType(type, info->type.ReleaseAndGetAddressOf());
+        info->type = std::move(negotiated);
+        return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetCurrentMediaType(IMFMediaType** type) override {
         if (!type) return E_POINTER; *type = nullptr;
@@ -682,6 +705,11 @@ public:
     void ConfigureSplit(const SplitPolicy& split,std::shared_ptr<RecordingArchive>* archive) {
         state_->split=split;if(archive)*archive=state_;
     }
+    HRESULT ConfigureVideoAttributes(IMFAttributes* attributes) {
+        if (!attributes) return S_OK;
+        HRESULT hr=MFCreateAttributes(&state_->videoAttributes,4);
+        return FAILED(hr)?hr:attributes->CopyAllItems(state_->videoAttributes.Get());
+    }
     bool TryAddRef() {
         ULONG count = references_.load();
         while (count && !references_.compare_exchange_weak(count, count + 1)) {}
@@ -718,7 +746,7 @@ public:
                 }
             }
             auto info = std::make_unique<StreamInfo>(); info->id = id;
-            HRESULT hr = type ? CopyType(type, &info->type) : S_OK; if (FAILED(hr)) return hr;
+            HRESULT hr = type ? CopyType(type, &info->type, state_->videoAttributes.Get()) : S_OK; if (FAILED(hr)) return hr;
             auto stream = Make<Stream>(); if (!stream) return E_OUTOFMEMORY;
             hr = stream->Initialize(state_, id); if (FAILED(hr)) return hr;
             state_->streams.push_back(std::move(info)); streams_.push_back(stream);
@@ -841,7 +869,7 @@ HRESULT Stream::GetMediaSink(IMFMediaSink** sink) {
 }
 }
 HRESULT CreateFragmentedMp4Sink(IMFByteStream* bytes, IMFMediaSink** sink,
-    const SplitPolicy* split,std::shared_ptr<RecordingArchive>* archive) {
+    const SplitPolicy* split,std::shared_ptr<RecordingArchive>* archive,IMFAttributes* videoAttributes) {
     if (!sink) return E_POINTER; *sink = nullptr;
     if (!bytes) return E_INVALIDARG;
     DWORD capabilities = 0;
@@ -849,6 +877,7 @@ HRESULT CreateFragmentedMp4Sink(IMFByteStream* bytes, IMFMediaSink** sink,
     if (FAILED(hr)) return hr;
     if (!(capabilities & MFBYTESTREAM_IS_WRITABLE) || !(capabilities & MFBYTESTREAM_IS_SEEKABLE)) return E_INVALIDARG;
     try { ComPtr<Sink> created;created.Attach(new Sink(bytes));
+        if(FAILED(hr=created->ConfigureVideoAttributes(videoAttributes)))return hr;
         if(split)created->ConfigureSplit(*split,archive);
         *sink=created.Detach();
         return S_OK; }

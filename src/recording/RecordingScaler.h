@@ -1,5 +1,6 @@
 #pragma once
 #include "recording/RecordingBufferPool.h"
+#include <mferror.h>
 #include <algorithm>
 #include <vector>
 
@@ -9,12 +10,14 @@ namespace llcv::recording {
 class RecordingScaler {
     struct Tap { int a,b,weight; };
     struct Plane {
-        int sourceOffset,targetOffset,sourceStride,targetStride,step,width,height;
+        int sourceRow,sourceColumn,targetOffset,targetStride,step,width,height;
         std::vector<Tap> x,y;
     };
     RecordingBufferPool buffers_;
     std::vector<Plane> planes_;
     DWORD size_=0;
+    LONG packedStride_=0;
+    int sourceRows_=0;
     static std::vector<Tap> Taps(int source,int target) {
         std::vector<Tap> taps; taps.reserve(target);
         for(int i=0;i<target;++i){
@@ -24,40 +27,52 @@ class RecordingScaler {
         return taps;
     }
 public:
-    void Clear() noexcept { planes_.clear();buffers_.Clear();size_=0; }
+    void Clear() noexcept { planes_.clear();buffers_.Clear();size_=0;packedStride_=0;sourceRows_=0; }
     void Configure(bool nv12,int width,int height,int outWidth,int outHeight) {
         Clear();
+        packedStride_=width*(nv12?1:2);
+        sourceRows_=nv12?height*3/2:height;
         if(width==outWidth && height==outHeight)return;
-        auto add=[&](int sourceOffset,int targetOffset,int sourceStride,int targetStride,
+        auto add=[&](int sourceRow,int sourceColumn,int targetOffset,int targetStride,
                      int step,int sw,int sh,int dw,int dh){
-            planes_.push_back({sourceOffset,targetOffset,sourceStride,targetStride,step,dw,dh,Taps(sw,dw),Taps(sh,dh)});
+            planes_.push_back({sourceRow,sourceColumn,targetOffset,targetStride,step,dw,dh,Taps(sw,dw),Taps(sh,dh)});
         };
         if(nv12){
-            add(0,0,width,outWidth,1,width,height,outWidth,outHeight);
-            add(width*height,outWidth*outHeight,width,outWidth,2,width/2,height/2,outWidth/2,outHeight/2);
-            add(width*height+1,outWidth*outHeight+1,width,outWidth,2,width/2,height/2,outWidth/2,outHeight/2);
+            add(0,0,0,outWidth,1,width,height,outWidth,outHeight);
+            add(height,0,outWidth*outHeight,outWidth,2,width/2,height/2,outWidth/2,outHeight/2);
+            add(height,1,outWidth*outHeight+1,outWidth,2,width/2,height/2,outWidth/2,outHeight/2);
             size_=outWidth*outHeight*3/2;
         }else{
-            add(0,0,width*2,outWidth*2,2,width,height,outWidth,outHeight);
-            add(1,1,width*2,outWidth*2,4,width/2,height,outWidth/2,outHeight);
-            add(3,3,width*2,outWidth*2,4,width/2,height,outWidth/2,outHeight);
+            add(0,0,0,outWidth*2,2,width,height,outWidth,outHeight);
+            add(0,1,1,outWidth*2,4,width/2,height,outWidth/2,outHeight);
+            add(0,3,3,outWidth*2,4,width/2,height,outWidth/2,outHeight);
             size_=outWidth*outHeight*2;
         }
         buffers_.Allocate(16,size_);
     }
-    HRESULT Apply(IMFMediaBuffer* input,IMFMediaBuffer** output) {
+    // Decoder stride may change between frames. Scaling consumes its current
+    // layout directly; the returned lease contains independent packed output.
+    HRESULT Apply(IMFMediaBuffer* input,IMFMediaBuffer** output,LONG sourceStride=0) {
         if(!input||!output)return E_POINTER;
         *output=nullptr;
-        if(planes_.empty()){input->AddRef();*output=input;return S_OK;}
+        if(planes_.empty()){
+            if(sourceStride && sourceStride!=packedStride_)return MF_E_INVALID_STREAM_DATA;
+            input->AddRef();*output=input;return S_OK;
+        }
+        const LONG pitch=sourceStride?sourceStride:packedStride_;
+        if(sourceStride && (pitch<packedStride_ || (pitch&1)))return MF_E_INVALID_STREAM_DATA;
+        const auto required=static_cast<uint64_t>(pitch)*sourceRows_;
         auto target=buffers_.Acquire();if(!target)return HRESULT_FROM_WIN32(ERROR_BUFFER_OVERFLOW);
-        BYTE *src=nullptr,*dst=nullptr;
-        HRESULT hr=input->Lock(&src,nullptr,nullptr);if(FAILED(hr))return hr;
-        hr=target->Lock(&dst,nullptr,nullptr);
+        BYTE *src=nullptr,*dst=nullptr;DWORD capacity=0,length=0;
+        HRESULT hr=input->Lock(&src,&capacity,&length);if(FAILED(hr))return hr;
+        if(sourceStride && (!src || length>capacity || required>length))hr=MF_E_INVALID_STREAM_DATA;
+        if(SUCCEEDED(hr))hr=target->Lock(&dst,nullptr,nullptr);
         if(SUCCEEDED(hr)){
             for(const auto& p:planes_)for(int y=0;y<p.height;++y){
                 const auto& ty=p.y[y];auto* row=dst+p.targetOffset+y*p.targetStride;
-                const auto* a=src+p.sourceOffset+ty.a*p.sourceStride;
-                const auto* b=src+p.sourceOffset+ty.b*p.sourceStride;
+                const auto* plane=src+static_cast<size_t>(p.sourceRow)*pitch+p.sourceColumn;
+                const auto* a=plane+static_cast<size_t>(ty.a)*pitch;
+                const auto* b=plane+static_cast<size_t>(ty.b)*pitch;
                 for(int x=0;x<p.width;++x){
                     const auto& tx=p.x[x];
                     const int top=a[tx.a*p.step]*(256-tx.weight)+a[tx.b*p.step]*tx.weight;

@@ -6,10 +6,100 @@
 #include <cstdio>
 #include <cstdlib>
 #include <chrono>
+#include <array>
+#include <cstring>
+#include <limits>
 using namespace llcv::recording;
 using Microsoft::WRL::ComPtr;
 void Check(bool ok,const char* why){if(!ok){printf("FAIL %s\n",why);std::exit(1);}}
 void Hr(HRESULT hr){Check(SUCCEEDED(hr),"media buffer operation");}
+ComPtr<IMFMediaBuffer> Buffer(DWORD size){
+    ComPtr<IMFMediaBuffer> buffer;Hr(MFCreateMemoryBuffer(size,&buffer));
+    Hr(buffer->SetCurrentLength(size));return buffer;
+}
+std::vector<BYTE> Contents(IMFMediaBuffer* buffer){
+    BYTE* data=nullptr;DWORD size=0;Hr(buffer->Lock(&data,nullptr,&size));
+    std::vector<BYTE> contents(data,data+size);Hr(buffer->Unlock());return contents;
+}
+void TestDecoderStrideScaling(){
+    for(bool nv12:{true,false}){
+        const LONG packedStride=nv12?8:16;
+        const int rows=nv12?6:4;
+        auto source=[&](LONG pitch){
+            auto buffer=Buffer(pitch*rows);BYTE* data=nullptr;Hr(buffer->Lock(&data,nullptr,nullptr));
+            std::memset(data,0xff,pitch*rows);
+            for(int y=0;y<rows;++y)for(int x=0;x<packedStride;++x)
+                data[y*pitch+x]=BYTE((x*13+y*31)%251);
+            Hr(buffer->Unlock());return buffer;
+        };
+        auto packed=source(packedStride);
+        RecordingScaler baseline,direct;
+        baseline.Configure(nv12,8,4,4,2);direct.Configure(nv12,8,4,4,2);
+        ComPtr<IMFMediaBuffer> expected;Hr(baseline.Apply(packed.Get(),&expected));
+        const auto reference=Contents(expected.Get());
+        for(LONG pitch:{packedStride,packedStride+4,packedStride+8}){
+            auto padded=source(pitch);const auto original=Contents(padded.Get());
+            ComPtr<IMFMediaBuffer> actual;Hr(direct.Apply(padded.Get(),&actual,pitch));
+            Check(Contents(actual.Get())==reference,"direct padded scaling equals packed staging for both formats");
+            Check(Contents(padded.Get())==original,"scaling never changes decoder-owned source bytes");
+            const DWORD required=pitch*rows;
+            Hr(padded->SetCurrentLength(required-1));
+            ComPtr<IMFMediaBuffer> rejected;
+            Check(direct.Apply(padded.Get(),&rejected,pitch)==MF_E_INVALID_STREAM_DATA&&!rejected,
+                "short padded luma/chroma storage is rejected before access");
+            Hr(padded->SetCurrentLength(required));
+            for(LONG invalid:{LONG{-1},packedStride-2,packedStride+1,(std::numeric_limits<LONG>::max)()-1})
+                Check(direct.Apply(padded.Get(),&rejected,invalid)==MF_E_INVALID_STREAM_DATA&&!rejected,
+                    "negative, short, odd and overflowing strides are rejected");
+        }
+        auto padded=source(packedStride+4);
+        std::array<ComPtr<IMFMediaBuffer>,16> retained;
+        for(auto& output:retained)Hr(direct.Apply(padded.Get(),&output,packedStride+4));
+        ComPtr<IMFMediaBuffer> extra;
+        Check(direct.Apply(padded.Get(),&extra,packedStride+4)==HRESULT_FROM_WIN32(ERROR_BUFFER_OVERFLOW)&&!extra,
+            "retained scaled frames cannot be overwritten when the bounded pool is full");
+        BYTE* data=nullptr;Hr(padded->Lock(&data,nullptr,nullptr));
+        std::memset(data,0,(packedStride+4)*rows);Hr(padded->Unlock());
+        retained[1].Reset();Hr(direct.Apply(padded.Get(),&extra,packedStride+4));
+        Check(Contents(retained[0].Get())==reference,"decoder source reuse leaves retained encoded frame unchanged");
+        padded.Reset();direct.Clear();
+        Check(Contents(retained[0].Get())==reference,"scaled lease survives source and scaler destruction");
+
+        RecordingBufferPool nativePool;nativePool.Allocate(1,packedStride*rows);
+        auto native=nativePool.Acquire();Hr(native->SetCurrentLength(packedStride*rows));
+        RecordingScaler identity;identity.Configure(nv12,8,4,8,4);
+        ComPtr<IMFMediaBuffer> rejected;
+        Check(identity.Apply(packed.Get(),&rejected,packedStride+4)==MF_E_INVALID_STREAM_DATA&&!rejected,
+            "native path cannot silently forward padded frames as packed encoder input");
+        ComPtr<IMFMediaBuffer> lease;Hr(identity.Apply(native.Get(),&lease));native.Reset();
+        Check(!nativePool.Acquire(),"native recording buffer remains leased while encoder retains it");
+        lease.Reset();Check(bool(nativePool.Acquire()),"native recording buffer returns only after encoder releases it");
+    }
+}
+void BenchmarkDecoderStrideScaling(){
+    constexpr int width=3840,height=2160,pitch=width+32,rows=height*3/2;
+    auto padded=Buffer(pitch*rows),staging=Buffer(width*rows);
+    BYTE* data=nullptr;Hr(padded->Lock(&data,nullptr,nullptr));std::memset(data,96,pitch*rows);Hr(padded->Unlock());
+    RecordingScaler baseline,direct;
+    baseline.Configure(true,width,height,1920,1080);direct.Configure(true,width,height,1920,1080);
+    auto oldPath=[&]{
+        BYTE *source=nullptr,*target=nullptr;Hr(padded->Lock(&source,nullptr,nullptr));Hr(staging->Lock(&target,nullptr,nullptr));
+        for(int y=0;y<rows;++y)std::memcpy(target+static_cast<size_t>(y)*width,source+static_cast<size_t>(y)*pitch,width);
+        Hr(staging->Unlock());Hr(padded->Unlock());
+        ComPtr<IMFMediaBuffer> output;Hr(baseline.Apply(staging.Get(),&output));return output;
+    };
+    auto newPath=[&]{ComPtr<IMFMediaBuffer> output;Hr(direct.Apply(padded.Get(),&output,pitch));return output;};
+    {auto old=oldPath(),current=newPath();Check(Contents(old.Get())==Contents(current.Get()),"4K direct scaling equals staged scaling");}
+    constexpr int iterations=3;
+    const auto before=std::chrono::steady_clock::now();
+    for(int i=0;i<iterations;++i)oldPath();
+    const auto middle=std::chrono::steady_clock::now();
+    for(int i=0;i<iterations;++i)newPath();
+    const auto after=std::chrono::steady_clock::now();
+    printf("4K->1080p MJPEG worker scaling (3 measured iterations after warm-up): staged %.3f ms/frame, direct %.3f ms/frame; avoids %d copied bytes/frame and full-resolution pool.\n",
+        std::chrono::duration<double,std::milli>(middle-before).count()/iterations,
+        std::chrono::duration<double,std::milli>(after-middle).count()/iterations,width*rows);
+}
 int main(){
     Hr(MFStartup(MF_VERSION));
     const uint8_t cra[]={0,0,0,1,42,1,7},idr[]={0,0,1,40,1,7},lengthIdr[]={0,0,0,3,40,1,7};
@@ -41,6 +131,7 @@ int main(){
         else{for(int i=1;i<16;i+=2)Check(data[i]==((i%4==3)?180:80),"YUY2 chroma order");}
         Hr(output->Unlock());
     }
+    TestDecoderStrideScaling();BenchmarkDecoderStrideScaling();
     constexpr int64_t second=10000000;
     RecordingPauseTimeline t;
     Check(t.Map(true,0,0,second/10).keep,"first video");

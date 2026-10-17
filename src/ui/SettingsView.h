@@ -63,6 +63,7 @@ struct SettingsControls {
     HWND recVideoTitle{},recSaveTitle{},recCodecLabel{},recStatus{},recEncoderLabel{},recEncoder{};
     HWND recFpsLabel{},recFps{},recBitrateLabel{},recBitrate{},recAudioLabel{},recAudio{};
     HWND recModeLabel{},recMode{};
+    HWND recVolumeLabel{},recVolume{};
     HWND recFolderLabel{},recFolder{},recBrowse{},recSpace{},recNote{};
     HWND recOpenFolder{};
     HWND recResolutionLabel{},recResolution{},recSplitLabel{},recSplit{},recSplitValueLabel{},recSplitValue{},recPause{},recSplitHint{};
@@ -92,6 +93,8 @@ struct SettingsControls {
     HWND guideLogFolderButton = nullptr;
     HWND screenshotClipboardCheck = nullptr;
     HWND capture40Check = nullptr;
+    HWND unlistedFpsCheck = nullptr;
+    HWND unlistedFpsStatus = nullptr;
     HWND capture40Help = nullptr;
     HWND guideLsButton = nullptr;
     HWND screenshotTitle = nullptr;

@@ -235,6 +235,17 @@ void CheckPaintContracts(TestWindow& state) {
         const COLORREF enabledText = GetTextColor(dc);
         backgroundFor(state.controls.pixelCheck);
         Check(GetTextColor(dc) != enabledText, "disabled text is visually distinct");
+        const bool detectedEnabled = IsWindowEnabled(state.controls.videoCapabilityStatus) != FALSE;
+        const bool requestEnabled = IsWindowEnabled(state.controls.unlistedFpsStatus) != FALSE;
+        EnableWindow(state.controls.videoCapabilityStatus, TRUE);
+        EnableWindow(state.controls.unlistedFpsStatus, TRUE);
+        backgroundFor(state.controls.videoCapabilityStatus);
+        const COLORREF detectedText = GetTextColor(dc);
+        backgroundFor(state.controls.unlistedFpsStatus);
+        Check(GetTextColor(dc) != detectedText,
+            "direct-request hint uses a distinct accent from detected capabilities");
+        EnableWindow(state.controls.videoCapabilityStatus, detectedEnabled);
+        EnableWindow(state.controls.unlistedFpsStatus, requestEnabled);
     }
     Check((SendMessageW(state.controls.vsrCheck, WM_GETDLGCODE, VK_SPACE, 0) & DLGC_BUTTON) != 0,
         "checkbox keeps native dialog keyboard semantics");
@@ -278,6 +289,10 @@ void OneCycle(const wchar_t* snapshot = nullptr) {
         184, 252, 400, 30, 17);
     c.vsrStatus = Child(hwnd, L"STATIC", L"Experimental. Actual NVIDIA enhancement cannot be verified here.", SS_LEFT,
         184, 310, 650, 28, 18);
+    c.videoCapabilityStatus = Child(hwnd, L"STATIC", L"Detected: 60 fps", SS_LEFT,
+        184, 350, 376, 20, 19);
+    c.unlistedFpsStatus = Child(hwnd, L"STATIC", L"Direct request: 30 fps", SS_LEFT,
+        184, 374, 376, 20, 20);
     c.startButton = Child(hwnd, L"BUTTON", L"Start", BS_DEFPUSHBUTTON | WS_TABSTOP, 698, 608, 110, 32, IDOK);
     c.cancelButton = Child(hwnd, L"BUTTON", L"Cancel", BS_PUSHBUTTON | WS_TABSTOP, 820, 608, 106, 32, IDCANCEL);
     c.themeCombo = Child(hwnd, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP,
@@ -442,7 +457,7 @@ void CheckActualTabOrder() {
                         c.hdrChromaCombo, c.hdrChromaHelp});
                 if (format == VideoPixelFormat::Mjpeg)
                     expected.insert(expected.end(), {c.mjpegColorCombo, c.mjpegColorHelp});
-                expected.insert(expected.end(), {c.capture40Check, c.capture40Help});
+                expected.insert(expected.end(), {c.unlistedFpsCheck, c.capture40Check, c.capture40Help});
                 expected.insert(expected.end(), {c.presentationCombo, c.presentationHelp,
                     c.displayMonitorCombo, c.pixelCheck});
                 if (!pixelPerfect) expected.push_back(c.scalingCombo); // fixture uses equal capture/display sizes

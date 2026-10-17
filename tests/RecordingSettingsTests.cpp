@@ -22,6 +22,39 @@ int main(){
         s.sectionNavigation=CreateWindowW(L"COMBOBOX",L"",kSettingsDropdownStyle,0,0,100,100,owner,nullptr,nullptr,nullptr);
         CreateRecordingSettings(&s,owner);ApplySettingsFont(&s,owner,dpi);
         Check(Text(s.recSpace).empty(),"opening another page does not query recording storage");
+        LayoutRecordingSettings(&s,dpi);
+        s.activeTab=SettingsTab::Recording;ShowRecordingSettings(&s);
+        Check((GetWindowLongPtrW(s.recVolume,GWL_STYLE)&WS_VISIBLE)!=0,"recording gain is on Recording page");
+        Check(SendMessageW(s.recVolume,CB_GETCURSEL,0,0)==10,"recording gain defaults to 100 percent");
+        SendMessageW(s.recVolume,CB_SETCURSEL,5,0);
+        RecordingSettingsCommand(&s,owner,kRecordingVolume,CBN_SELENDOK);
+        Check(s.recordingOptions.audioVolumePercent==50,"recording gain selection");
+        s.recordingSnapshot.busy=true;ShowRecordingSettings(&s);
+        Check(!IsWindowEnabled(s.recVolume),"gain is fixed during recording");
+        SendMessageW(s.recVolume,CB_SETCURSEL,0,0);
+        RecordingSettingsCommand(&s,owner,kRecordingVolume,CBN_SELENDOK);
+        Check(s.recordingOptions.audioVolumePercent==50,"busy command cannot change gain");
+        s.recordingSnapshot.busy=false;
+        for(auto size:{SIZE{1000,650},SIZE{800,550},SIZE{640,400}}){
+            FitSettingsClientArea(&s,{SettingsPixels(size.cx,dpi),SettingsPixels(size.cy,dpi)},dpi);
+            LayoutSettingsControls(&s,dpi);UpdateAdvancedControlVisibility(&s,false,llcv::settings::VideoPixelFormat::Nv12);
+            const int pages=SettingsCompactLayout(&s)?static_cast<int>(s.compactPageNames.size()):1;
+            bool reached=false;
+            for(int page=0;page<pages;++page){
+                s.compactPages[SettingsNavigationIndex(SettingsTab::Recording)]=page;
+                UpdateAdvancedControlVisibility(&s,false,llcv::settings::VideoPixelFormat::Nv12);
+                if(!(GetWindowLongPtrW(s.recVolume,GWL_STYLE)&WS_VISIBLE))continue;
+                reached=true;
+                RECT area{};GetWindowRect(s.recVolume,&area);MapWindowPoints(nullptr,owner,reinterpret_cast<POINT*>(&area),2);
+                Check(area.bottom<=SettingsPixels(s.footerTopDip,dpi)&&area.right<=SettingsPixels(s.clientWidthDip,dpi),"recording gain fits Recording page");
+            }
+            Check(reached,"recording gain reachable without scrolling");
+        }
+        FitSettingsClientArea(&s,{SettingsPixels(1000,dpi),SettingsPixels(650,dpi)},dpi);
+        LayoutSettingsControls(&s,dpi);
+        s.activeTab=SettingsTab::VideoWindow;ShowRecordingSettings(&s);
+        Check(!(GetWindowLongPtrW(s.recVolume,GWL_STYLE)&WS_VISIBLE),"recording gain hidden outside Recording");
+
         s.activeTab=SettingsTab::Recording;ShowRecordingSettings(&s);
         Check(!Text(s.recSpace).empty(),"opening recording page populates storage information");
         SetWindowTextW(s.recSpace,L"Storage query sentinel");
@@ -33,6 +66,7 @@ int main(){
         const auto recordingNote=Text(s.recNote);
         Check(recordingNote.find(L"CQP")!=std::wstring::npos&&recordingNote.find(L"MP4")!=std::wstring::npos,"essential recording guidance retained");
         Check(recordingNote.find(L"NV12")!=std::wstring::npos && recordingNote.find(L"YUY2")!=std::wstring::npos &&
+            recordingNote.find(L"MJPEG")!=std::wstring::npos &&
             recordingNote.find(L"PCM")!=std::wstring::npos,"supported recording input formats are explicit");
         Check(!IsWindowEnabled(s.recordingCodecs[0]),"pending probe disables codecs");
         s.recordingProbePending=false;
@@ -173,12 +207,21 @@ int main(){
             open.right-open.left==browse.right-browse.left,"folder actions aligned side by side at every DPI");
         Check(GetDlgItem(owner,kRecordingToggleCommand)==nullptr&&GetDlgItem(owner,2072)==nullptr,
             "removed status actions are not created");
+        RECT audio{},volume{};GetWindowRect(s.recAudio,&audio);GetWindowRect(s.recVolume,&volume);
+        Check(volume.left>audio.right && volume.top==audio.top && volume.bottom==audio.bottom &&
+            volume.right-volume.left==audio.right-audio.left,"AAC and recording volume have equal aligned fields");
+        RECT audioLabel{},volumeLabel{},mode{},split{};
+        GetWindowRect(s.recAudioLabel,&audioLabel);GetWindowRect(s.recVolumeLabel,&volumeLabel);
+        GetWindowRect(s.recMode,&mode);GetWindowRect(s.recSplit,&split);
+        Check(audioLabel.top==volumeLabel.top && audioLabel.left==audio.left &&
+            volumeLabel.left==volume.left,"audio captions align above their own fields");
+        Check(mode.top==split.top,"left quality and right split rows align");
         Check(IsWindowEnabled(s.recOpenFolder),"save folder is available before any recording");
         Check(!CanToggleRecordingSettings(&s),"startup settings cannot start capture");
         s.recordingLive=true;s.recordingClosing=true;
         Check(!CanToggleRecordingSettings(&s),"closing blocks recording shortcut");
         s.recordingClosing=false;s.recordingLive=false;
-        const HWND tabOrder[]={s.recEncoder,s.recMode,s.recBitrate,s.recResolution,s.recFps,s.recAudio,s.recBrowse,s.recOpenFolder,s.recSplit,s.recSplitValue};
+        const HWND tabOrder[]={s.recEncoder,s.recMode,s.recBitrate,s.recResolution,s.recFps,s.recAudio,s.recVolume,s.recBrowse,s.recOpenFolder,s.recSplit,s.recSplitValue};
         for(size_t i=1;i<std::size(tabOrder);++i)
             Check(GetNextDlgTabItem(owner,tabOrder[i-1],FALSE)==tabOrder[i],"keyboard traversal follows recording layout");
         s.recordingCapabilities[1].hardwareRates.quality=false;

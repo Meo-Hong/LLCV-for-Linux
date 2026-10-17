@@ -1,4 +1,6 @@
 #include "recording/RecordingOptions.h"
+#include "recording/RecordingAudioGain.h"
+#include <array>
 #include <windows.h>
 #include <filesystem>
 #include <cstdio>
@@ -7,6 +9,17 @@ using namespace llcv::recording;
 static void Check(bool b,const char* s){if(!b){printf("FAIL %s\n",s);std::abort();}}
 int main(){
     Options o;Check(Valid(o),"valid defaults");
+    Check(o.audioVolumePercent==100,"recording gain defaults to unchanged");
+    std::array<int16_t,8> pcm{-32768,-20000,-2,0,2,10000,20000,32767};
+    const auto original=pcm;
+    ApplyRecordingAudioGain(pcm.data(),sizeof(pcm),100);
+    Check(pcm==original,"unity is bit exact");
+    ApplyRecordingAudioGain(pcm.data(),sizeof(pcm),50);
+    for(size_t i=0;i<pcm.size();++i)Check(pcm[i]==original[i]/2,"both PCM channels attenuated without overflow");
+    ApplyRecordingAudioGain(pcm.data(),sizeof(pcm),0);
+    for(auto sample:pcm)Check(sample==0,"mute preserves sample count as silence");
+    auto invalidVolume=o;invalidVolume.audioVolumePercent=-1;Check(!Valid(invalidVolume),"negative recording volume rejected");
+    invalidVolume.audioVolumePercent=101;Check(!Valid(invalidVolume),"recording boost rejected");
     Check(o.maxFps==60&&o.maxHeight==1080&&OutputFps(o,120)==60,"new defaults cap recording at 1080p60");
     const auto capped=OutputSize(o,3840,2160),small=OutputSize(o,1280,720);
     Check(capped.width==1920&&capped.height==1080&&small.width==1280&&small.height==720&&OutputFps(o,30)==30,
@@ -41,6 +54,7 @@ int main(){
     Options native;native.maxFps=0;native.maxHeight=0;
     Check(SaveOptions(native,path.wstring())&&LoadOptions(path.wstring())==native,"saved native size and rate survive default change");
     o.codec=Codec::Hevc;o.videoMbps=12;o.audioKbps=128;o.encoder=L"cpu";o.folder=L"D:\\녹화 日本語 \U0001F3AE";
+    o.audioVolumePercent=40;
     o.maxHeight=720;o.splitMode=SplitMode::Time;o.splitSeconds=900;o.splitMiB=2048;
     Check(SaveOptions(o,path.wstring()),"save unicode profile");Check(LoadOptions(path.wstring())==o,"unicode profile round trip");
     o.codec=Codec::Av1;o.encoder.clear();o.maxFps=60;Check(SaveOptions(o,path.wstring()),"replace profile");Check(LoadOptions(path.wstring())==o,"replace round trip");
@@ -58,6 +72,8 @@ int main(){
     Check(SaveOptions(o,path.wstring())&&LoadOptions(path.wstring())==o,"both rate modes round trip");
     Check(WritePrivateProfileStringW(L"Recording",L"RateControl",nullptr,path.c_str())!=FALSE,"make legacy profile");
     Check(LoadOptions(path.wstring()).rateControl==RateControl::Bitrate,"legacy bitrate profile is not silently switched to CQP");
+    Check(WritePrivateProfileStringW(L"Recording",L"AudioVolumePercent",nullptr,path.c_str())!=FALSE,"make legacy recording gain profile");
+    Check(LoadOptions(path.wstring()).audioVolumePercent==100,"legacy recording keeps original audio level");
     for(const auto* key:{L"MaxFps",L"MaxHeight",L"SplitMode",L"SplitSeconds",L"SplitMiB"})
         Check(WritePrivateProfileStringW(L"Recording",key,nullptr,path.c_str())!=FALSE,"remove new fields from legacy profile");
     const auto migrated=LoadOptions(path.wstring());

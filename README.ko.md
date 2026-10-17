@@ -5,7 +5,7 @@
 HDMI 캡처보드로 들어오는 영상과 소리를 재생하는 Windows용 저지연 뷰어입니다.
 OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리만 들을 수 있습니다.
 
-**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.1.0.md) · [English](README.md)
+**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.1.1.md) · [English](README.md)
 
 <br>
 
@@ -13,16 +13,16 @@ OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리�
 | --- | --- |
 | [![영상 설정](docs/images/settings-video.png)](docs/images/settings-video.png) | [![오디오 설정](docs/images/settings-audio.png)](docs/images/settings-audio.png) |
 
-<sub>2.1.0 UI 코드로 렌더링한 설정 예시입니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
+<sub>2.1.1 UI 코드로 렌더링한 설정 예시입니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
 
 <br>
 
-## 2.1.0 업데이트
+## 2.1.1 업데이트
 
-SDR 영상·스테레오 **녹화**를 추가했습니다. H.264·HEVC·AV1 중 지원되는 코덱과
-품질·비트레이트를 선택하고, 일시정지와 자동 파일 분할을 사용할 수 있습니다.
-**독점 전체화면**, VSR과 독립된 **표시 해상도**, 전체화면 영상 위치 설정도 추가했습니다.
-[녹화 사용 방법](docs/RECORDING.ko.md) · [전체 변경 내역](docs/release-notes-v2.1.0.md)
+**MJPEG 입력 녹화**와 재생 음량과 별개인 **녹화 음량 조절**을 추가했습니다.
+**목록에 없는 FPS 요청**을 켜면 드라이버가 나열하지 않은 30fps도 요청할 수 있습니다.
+녹화 설정 배치와 시작·종료 안정성, 저장 영상의 색 정보 처리도 보완했습니다.
+[녹화 사용 방법](docs/RECORDING.ko.md) · [전체 변경 내역](docs/release-notes-v2.1.1.md)
 
 <br>
 
@@ -49,10 +49,10 @@ Windows 10/11 x64와 캡처보드 드라이버가 필요합니다.
 
 - 최신 프레임 우선 표시, 저지연 출력(일반·독점 전체화면)과 VSync
 - NV12/YUY2, MJPEG, P010 HDR10 입력
-- 드라이버가 지원하는 조합에서 선택적으로 40fps 캡처
+- 선택적 40fps 캡처 및 목록에 없는 30fps 직접 요청 — 드라이버 수락 필요
 - NVIDIA VSR (실험적), 캡처·표시 해상도 개별 설정
 - WASAPI Shared·Exclusive, ASIO, 콘솔 LPCM 5.1, 오디오 전용 모드
-- SDR·스테레오 MP4 녹화 — 코덱·품질 설정, 일시정지, 자동 분할
+- NV12/YUY2/MJPEG SDR·스테레오 MP4 녹화 — 코덱·품질·음량, 일시정지, 자동 분할
 - 입력 해상도 PNG 스크린샷과 클립보드 복사
 - 재생 중 자동 절전 방지 — 오디오 전용 모드에서는 화면 꺼짐 허용
 - 다크·라이트 테마, 전체화면, 창 크기 고정, 음량 조절, 한국어·영어

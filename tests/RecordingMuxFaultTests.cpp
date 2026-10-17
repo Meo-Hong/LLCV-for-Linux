@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwchar>
+#include <utility>
 #include <vector>
 
 using Microsoft::WRL::ComPtr;
@@ -241,11 +243,146 @@ void Bounds(const Fixture& fixture) {
         sink.Reset(); Released(bytes.Get());
     }
 }
+void ColorNegotiation() {
+    const GUID keys[]{MF_MT_YUV_MATRIX, MF_MT_VIDEO_NOMINAL_RANGE,
+                      MF_MT_VIDEO_PRIMARIES, MF_MT_TRANSFER_FUNCTION};
+    const UINT32 requested[]{MFVideoTransferMatrix_BT601, MFNominalRange_0_255,
+                             MFVideoPrimaries_SMPTE170M, MFVideoTransFunc_709};
+    const UINT32 changed[]{MFVideoTransferMatrix_BT709, MFNominalRange_16_235,
+                           MFVideoPrimaries_BT709, MFVideoTransFunc_sRGB};
+    const BYTE initialHeader[]{0, 0, 0, 1, 0x67, 0x42};
+    const BYTE negotiatedHeader[]{0, 0, 0, 1, 0x67, 0x64, 0x12, 0x34};
+    for (unsigned scenario = 0; scenario < 4; ++scenario) {
+        ComPtr<Bytes> bytes; bytes.Attach(new Bytes());
+        ComPtr<IMFAttributes> capturedColor; Hr(MFCreateAttributes(&capturedColor, ARRAYSIZE(keys)), "captured color attributes");
+        for (unsigned i = 0; i < ARRAYSIZE(keys); ++i)
+            Hr(capturedColor->SetUINT32(keys[i], requested[i]), "captured color attribute");
+        ComPtr<IMFAttributes> colorSnapshot; Hr(MFCreateAttributes(&colorSnapshot, ARRAYSIZE(keys)), "captured color snapshot");
+        Hr(capturedColor->CopyAllItems(colorSnapshot.Get()), "copy captured color snapshot");
+        ComPtr<IMFMediaSink> sink;
+        Hr(CreateFragmentedMp4Sink(bytes.Get(), &sink, nullptr, nullptr, capturedColor.Get()), "color negotiation sink");
+        BOOL colorUnchanged = FALSE;
+        Hr(capturedColor->Compare(colorSnapshot.Get(), MF_ATTRIBUTES_MATCH_ALL_ITEMS, &colorUnchanged), "compare captured color after creation");
+        UINT32 colorCount = 0; Hr(capturedColor->GetCount(&colorCount), "captured color attribute count");
+        Check(colorUnchanged && colorCount == ARRAYSIZE(keys), "sink creation never mutates caller-owned captured color attributes");
+        // Changing the caller's attributes after creation must not change the
+        // recorder's captured interpretation used by later negotiations.
+        for (unsigned i = 0; i < ARRAYSIZE(keys); ++i)
+            Hr(capturedColor->SetUINT32(keys[i], changed[i]), "caller reuses captured color attribute store");
+        ComPtr<IMFMediaType> original; Hr(MFCreateMediaType(&original), "requested color type");
+        Hr(original->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video), "requested major type");
+        Hr(original->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264), "requested H.264 type");
+        Hr(MFSetAttributeSize(original.Get(), MF_MT_FRAME_SIZE, 640, 480), "requested dimensions");
+        Hr(MFSetAttributeRatio(original.Get(), MF_MT_FRAME_RATE, 30, 1), "requested frame rate");
+        Hr(original->SetBlob(MF_MT_MPEG_SEQUENCE_HEADER, initialHeader, sizeof(initialHeader)), "requested codec header");
+        Hr(original->SetUINT32(MF_MT_AVG_BITRATE, 4000000), "requested bitrate");
+        ComPtr<IMFMediaType> originalSnapshot; Hr(MFCreateMediaType(&originalSnapshot), "requested type snapshot");
+        Hr(original->CopyAllItems(originalSnapshot.Get()), "copy requested type snapshot");
+        ComPtr<IMFStreamSink> stream; Hr(sink->AddStreamSink(0, original.Get(), &stream), "requested video stream");
+        ComPtr<IMFMediaTypeHandler> handler; Hr(stream->GetMediaTypeHandler(&handler), "color type handler");
+        ComPtr<IMFMediaType> initial; Hr(handler->GetCurrentMediaType(&initial), "initial stream type color fallback");
+        for (unsigned i = 0; i < ARRAYSIZE(keys); ++i) {
+            UINT32 value = 0; Hr(initial->GetUINT32(keys[i], &value), "initial captured color attribute");
+            Check(value == requested[i], "first stripped stream type uses independently captured original color");
+        }
+        ComPtr<IMFMediaType> negotiated; Hr(MFCreateMediaType(&negotiated), "negotiated color type");
+        Hr(original->CopyAllItems(negotiated.Get()), "copy negotiated base type");
+        for (unsigned i = 0; i < ARRAYSIZE(keys); ++i) {
+            if (scenario == 0 || (scenario == 3 && i == 0))
+                Hr(negotiated->DeleteItem(keys[i]), "encoder omitted color attribute");
+            else Hr(negotiated->SetUINT32(keys[i], scenario == 1 || (scenario == 3 && i == 1) ? 0 : changed[i]),
+                    "encoder color attribute");
+        }
+        Hr(negotiated->SetBlob(MF_MT_MPEG_SEQUENCE_HEADER, negotiatedHeader, sizeof(negotiatedHeader)), "new negotiated codec header");
+        Hr(negotiated->SetUINT32(MF_MT_AVG_BITRATE, 8000000), "new negotiated bitrate");
+        Hr(negotiated->SetUINT32(MF_MT_MPEG2_PROFILE, 100), "new negotiated profile");
+        ComPtr<IMFMediaType> negotiatedSnapshot; Hr(MFCreateMediaType(&negotiatedSnapshot), "negotiated type snapshot");
+        Hr(negotiated->CopyAllItems(negotiatedSnapshot.Get()), "copy negotiated type snapshot");
+        Hr(handler->SetCurrentMediaType(negotiated.Get()), "accept negotiated type without losing requested color");
+        ComPtr<IMFMediaType> current; Hr(handler->GetCurrentMediaType(&current), "stored negotiated type");
+        for (unsigned i = 0; i < ARRAYSIZE(keys); ++i) {
+            UINT32 value = 0; Hr(current->GetUINT32(keys[i], &value), "stored explicit color attribute");
+            const auto expected = scenario < 2 || (scenario == 3 && i < 2) ? requested[i] : changed[i];
+            Check(value == expected, "missing/Unknown color restored and explicit negotiated color respected");
+        }
+        UINT32 bitrate = 0, profile = 0;
+        Hr(current->GetUINT32(MF_MT_AVG_BITRATE, &bitrate), "stored negotiated bitrate");
+        Hr(current->GetUINT32(MF_MT_MPEG2_PROFILE, &profile), "stored negotiated profile");
+        Check(bitrate == 8000000 && profile == 100, "unrelated negotiated attributes remain authoritative");
+        BYTE header[sizeof(negotiatedHeader)]{}; UINT32 headerBytes = 0;
+        Hr(current->GetBlob(MF_MT_MPEG_SEQUENCE_HEADER, header, sizeof(header), &headerBytes), "stored negotiated codec header");
+        Check(headerBytes == sizeof(negotiatedHeader) && !std::memcmp(header, negotiatedHeader, sizeof(header)),
+            "negotiated codec header is preserved instead of reverting to requested bytes");
+        for (const auto& pair : {std::pair{original.Get(), originalSnapshot.Get()},
+                                 std::pair{negotiated.Get(), negotiatedSnapshot.Get()}}) {
+            BOOL equal = FALSE; UINT32 count = 0, snapshotCount = 0;
+            Hr(pair.first->Compare(pair.second, MF_ATTRIBUTES_MATCH_ALL_ITEMS, &equal), "compare caller-owned media type");
+            Hr(pair.first->GetCount(&count), "caller attribute count");
+            Hr(pair.second->GetCount(&snapshotCount), "caller snapshot attribute count");
+            Check(equal && count == snapshotCount, "color merge never mutates requested or negotiated caller-owned type");
+        }
+        handler.Reset(); stream.Reset(); sink.Reset(); Released(bytes.Get());
+    }
+    puts("Recording mux missing/Unknown/explicit color negotiation passed without encoded fixtures.");
+}
+void ColorNegotiationAfterFirstPacket(const Fixture& fixture) {
+    ComPtr<Bytes> bytes; bytes.Attach(new Bytes());
+    ComPtr<IMFAttributes> captured; Hr(MFCreateAttributes(&captured, 2), "active mux captured color");
+    Hr(captured->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT601), "active mux matrix");
+    Hr(captured->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255), "active mux range");
+    ComPtr<IMFMediaSink> sink;
+    Hr(CreateFragmentedMp4Sink(bytes.Get(), &sink, nullptr, nullptr, captured.Get()), "active mux color sink");
+    ComPtr<IMFMediaType> stripped; Hr(MFCreateMediaType(&stripped), "stripped fixture type");
+    Hr(fixture.video->CopyAllItems(stripped.Get()), "copy stripped fixture type");
+    for (const auto& key : {MF_MT_YUV_MATRIX, MF_MT_VIDEO_NOMINAL_RANGE,
+                            MF_MT_VIDEO_PRIMARIES, MF_MT_TRANSFER_FUNCTION})
+        Hr(stripped->DeleteItem(key), "strip negotiated fixture color");
+    ComPtr<IMFStreamSink> stream; Hr(sink->AddStreamSink(0, stripped.Get(), &stream), "active mux video stream");
+    ComPtr<IMFMediaTypeHandler> handler; Hr(stream->GetMediaTypeHandler(&handler), "active mux type handler");
+    ComPtr<IMFMediaType> initial; Hr(handler->GetCurrentMediaType(&initial), "normalized initial mux type");
+    const auto packet = std::find_if(fixture.packets.begin(), fixture.packets.end(),
+        [](const Packet& item) { return item.video; });
+    Check(packet != fixture.packets.end(), "fixture supplies a real first video packet");
+    Hr(stream->ProcessSample(packet->sample.Get()), "first packet creates the mux format");
+    Hr(handler->SetCurrentMediaType(stripped.Get()), "identical stripped type remains accepted after first packet");
+    ComPtr<IMFMediaType> unknown; Hr(MFCreateMediaType(&unknown), "active mux Unknown color type");
+    Hr(stripped->CopyAllItems(unknown.Get()), "copy active mux Unknown color type");
+    Hr(unknown->SetUINT32(MF_MT_YUV_MATRIX, 0), "active mux Unknown matrix");
+    Hr(unknown->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, 0), "active mux Unknown range");
+    Hr(handler->SetCurrentMediaType(unknown.Get()), "equivalent Unknown color type remains accepted after first packet");
+    for (const auto& key : {MF_MT_AVG_BITRATE, MF_MT_MPEG2_PROFILE}) {
+        ComPtr<IMFMediaType> changed; Hr(MFCreateMediaType(&changed), "changed active mux type");
+        Hr(stripped->CopyAllItems(changed.Get()), "copy changed active mux type");
+        UINT32 old = 0; stripped->GetUINT32(key, &old);
+        Hr(changed->SetUINT32(key, old == UINT32_MAX ? old - 1 : old + 1), "change active mux encoding attribute");
+        Check(FAILED(handler->SetCurrentMediaType(changed.Get())),
+            "actual bitrate/profile change remains rejected after mux initialization");
+    }
+    ComPtr<IMFMediaType> changedCodec; Hr(MFCreateMediaType(&changedCodec), "changed active mux codec");
+    Hr(stripped->CopyAllItems(changedCodec.Get()), "copy changed active mux codec");
+    GUID originalCodec{}; Hr(stripped->GetGUID(MF_MT_SUBTYPE, &originalCodec), "original active mux codec subtype");
+    Hr(changedCodec->SetGUID(MF_MT_SUBTYPE, originalCodec == MFVideoFormat_H264 ? MFVideoFormat_HEVC : MFVideoFormat_H264),
+        "change active mux codec subtype");
+    Check(FAILED(handler->SetCurrentMediaType(changedCodec.Get())), "actual codec change remains rejected after first packet");
+    ComPtr<IMFMediaType> current; Hr(handler->GetCurrentMediaType(&current), "active mux final type");
+    BOOL equal = FALSE; UINT32 initialCount = 0, currentCount = 0;
+    Hr(initial->Compare(current.Get(), MF_ATTRIBUTES_MATCH_ALL_ITEMS, &equal), "compare active mux type after rejected changes");
+    Hr(initial->GetCount(&initialCount), "initial mux attribute count");
+    Hr(current->GetCount(&currentCount), "current mux attribute count");
+    Check(equal && initialCount == currentCount, "reapplying equivalent types and rejecting changes leaves the active mux type intact");
+    handler.Reset(); stream.Reset(); sink.Reset(); Released(bytes.Get());
+    puts("Recording mux color type normalization stays idempotent after the first encoded packet.");
+}
 }
 int wmain(int argc, wchar_t** argv) {
-    Check(argc == 2, "supply HEVC encoded fixture path");
+    Check(argc == 2, "supply HEVC encoded fixture path or --color-negotiation");
     Hr(CoInitializeEx(nullptr, COINIT_MULTITHREADED), "COM"); Hr(MFStartup(MF_VERSION), "MF");
+    ColorNegotiation();
+    if (std::wcscmp(argv[1], L"--color-negotiation") == 0) {
+        MFShutdown(); CoUninitialize(); return 0;
+    }
     const auto fixture = Load(argv[1]);
+    ColorNegotiationAfterFirstPacket(fixture);
     DirectLifecycle(fixture);
     Bounds(fixture);
     {

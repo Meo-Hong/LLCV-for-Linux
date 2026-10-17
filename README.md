@@ -5,7 +5,7 @@
 A low-latency Windows viewer for video and audio from HDMI capture devices.
 Use it to play console games without OBS, or listen in audio-only mode.
 
-**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.1.0.md) · [한국어](README.ko.md)
+**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.1.1.md) · [한국어](README.ko.md)
 
 <br>
 
@@ -13,16 +13,16 @@ Use it to play console games without OBS, or listen in audio-only mode.
 | --- | --- |
 | [![Video settings](docs/images/settings-video-en.png)](docs/images/settings-video-en.png) | [![Audio settings](docs/images/settings-audio-en.png)](docs/images/settings-audio-en.png) |
 
-<sub>Settings examples rendered from the 2.1.0 UI code. Click an image to view it at full resolution.</sub>
+<sub>Settings examples rendered from the 2.1.1 UI code. Click an image to view it at full resolution.</sub>
 
 <br>
 
-## What's new in 2.1.0
+## What's new in 2.1.1
 
-Added **SDR video/stereo recording** with supported H.264/HEVC/AV1 encoders,
-quality or bitrate control, pause/resume and automatic file splitting.
-Also added **exclusive fullscreen**, VSR-independent **display resolution** and fullscreen video positioning.
-[Recording guide](docs/RECORDING.md) · [Full release notes](docs/release-notes-v2.1.0.md)
+Added **MJPEG input recording** and **recording volume** independent of playback volume.
+**Allow unlisted FPS** lets you request 30 fps even when the driver does not list it.
+Also refined recording settings, start/stop reliability and recorded color metadata.
+[Recording guide](docs/RECORDING.md) · [Full release notes](docs/release-notes-v2.1.1.md)
 
 <br>
 
@@ -49,10 +49,10 @@ These are the default keys; change them under **Guide & logs**.
 
 - Latest-frame-first presentation with low latency (standard or exclusive fullscreen) and VSync
 - NV12/YUY2, MJPEG, and P010 HDR10 input
-- Optional 40 fps capture where supported by the device and driver
+- Optional 40 fps capture and unlisted 30 fps requests, subject to driver acceptance
 - NVIDIA VSR (experimental), with separate capture and display resolutions
 - WASAPI Shared/Exclusive, ASIO, console LPCM 5.1, and audio-only mode
-- SDR/stereo MP4 recording — codec/quality controls, pause and automatic splitting
+- NV12/YUY2/MJPEG SDR/stereo MP4 recording — codec, quality, volume, pause and splitting
 - Source-resolution PNG screenshots with optional clipboard copy
 - Sleep prevention during playback, with display sleep allowed in audio-only mode
 - Dark/light themes, fullscreen, window size locking, volume controls, Korean/English UI

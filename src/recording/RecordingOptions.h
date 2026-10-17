@@ -21,6 +21,7 @@ struct Options {
     RateControl rateControl=RateControl::Quality;
     Quality quality=Quality::Balanced;
     int audioKbps=192;
+    int audioVolumePercent=100;
     std::wstring folder;
     bool operator==(const Options&) const = default;
 };
@@ -34,6 +35,7 @@ inline bool Valid(const Options& o) {
         static_cast<int>(o.rateControl)>=0 && static_cast<int>(o.rateControl)<=1 &&
         static_cast<int>(o.quality)>=0 && static_cast<int>(o.quality)<=2 &&
         (o.audioKbps==128 || o.audioKbps==192) &&
+        o.audioVolumePercent>=0 && o.audioVolumePercent<=100 &&
         (o.encoder.empty() || o.encoder==L"cpu") &&
         o.folder.find_first_of(L"\r\n")==std::wstring::npos &&
         o.folder.find(L'\0')==std::wstring::npos;

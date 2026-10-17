@@ -4,7 +4,7 @@
 
 [README](../README.md) · [Documentation](INDEX.md) · [한국어](TROUBLESHOOTING.ko.md)
 
-[Capture initialization fails](#capture-initialization-fails) · [40 fps startup](#40-fps-capture-will-not-start) · [Playback stops or input disappears](#playback-stops-or-input-disappears) · [Devices or supported modes look out of date](#devices-or-supported-modes-look-out-of-date) · [Video works but audio does not](#video-works-but-audio-does-not) · [The picture is soft](#the-picture-is-soft) · [MJPEG color differs from another application](#mjpeg-color-differs-from-another-application) · [Frame drops or stutter](#frame-drops-or-stutter) · [Settings window is skipped](#settings-window-is-skipped) · [A shortcut does not work](#a-shortcut-does-not-work) · [Settings could not be saved](#settings-could-not-be-saved) · [Sleep or screen-off behavior](#sleep-or-screen-off-behavior) · [Collecting a useful report](#collecting-a-useful-report)
+[Capture initialization fails](#capture-initialization-fails) · [Unlisted 30 fps](#unlisted-30-fps-request-fails) · [40 fps startup](#40-fps-capture-will-not-start) · [Playback stops or input disappears](#playback-stops-or-input-disappears) · [Devices or supported modes look out of date](#devices-or-supported-modes-look-out-of-date) · [Video works but audio does not](#video-works-but-audio-does-not) · [The picture is soft](#the-picture-is-soft) · [MJPEG color differs from another application](#mjpeg-color-differs-from-another-application) · [Frame drops or stutter](#frame-drops-or-stutter) · [Settings window is skipped](#settings-window-is-skipped) · [A shortcut does not work](#a-shortcut-does-not-work) · [Settings could not be saved](#settings-could-not-be-saved) · [Sleep or screen-off behavior](#sleep-or-screen-off-behavior) · [Collecting a useful report](#collecting-a-useful-report)
 
 Keys in this guide are defaults. If you [change a shortcut](USAGE.md#changing-shortcuts),
 use its assigned key instead.
@@ -35,6 +35,20 @@ already owns the device, or when a driver rejects the requested allocation.
 unavailable requested mode, a missing compatible capture pin, or no compatible
 48 kHz mono/stereo uncompressed PCM or 32-bit float audio path. The stage and
 pin diagnostics in the log are more useful than the code by itself.
+
+<br>
+
+## Unlisted 30 fps request fails
+
+**Allow unlisted FPS** and the colored 30 fps request line do not guarantee support.
+Acceptance is checked after selecting **Start**.
+
+1. Turn off **40 fps capture** and confirm 30 fps is selected.
+2. If it fails, disable **Allow unlisted FPS** and retry Auto or a previously working rate.
+3. If the normal mode works, the driver may reject 30 fps for that resolution/format.
+   Supporting 60 fps does not guarantee 30 fps. Compare only formats the driver actually offers.
+
+Even after startup succeeds, check **Actual FPS** in Tab. Include the device name, resolution, format and diagnostic log when reporting a problem.
 
 <br>
 

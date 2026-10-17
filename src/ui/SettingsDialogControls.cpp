@@ -412,6 +412,13 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_CAPTURE_40)), instance, nullptr);
     SendMessageW(state->capture40Check, BM_SETCHECK,
         initial.settings.capture40Fps ? BST_CHECKED : BST_UNCHECKED, 0);
+    state->unlistedFpsCheck = CreateWindowExW(0, L"BUTTON",
+        initial.english ? L"Allow unlisted FPS" : L"목록에 없는 FPS 요청",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+        0, 0, 240, 28, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_UNLISTED_FPS)), instance, nullptr);
+    SendMessageW(state->unlistedFpsCheck, BM_SETCHECK,
+        initial.settings.allowUnlistedFps ? BST_CHECKED : BST_UNCHECKED, 0);
     state->capture40Help = CreateWindowExW(0, L"BUTTON", L"?",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
         0, 0, 24, 24, hwnd,
@@ -640,10 +647,16 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         reinterpret_cast<HMENU>(
             static_cast<INT_PTR>(IDC_SETTINGS_FRAME_RATE)),
         instance, nullptr);
+    AddSettingsTooltip(state, hwnd, state->frameRateCombo, initial.english
+        ? L"Enable 'Allow unlisted FPS' to add 30 fps when absent from detected modes. Startup stops if the driver rejects 30 fps or applies a different rate."
+        : L"'목록에 없는 FPS 요청'을 켜면 자동 인식 목록에 없는 30fps를 추가합니다. 드라이버가 30fps를 거부하거나 다른 FPS로 적용하면 시작을 중단합니다.");
     state->videoCapabilityStatus = CreateWindowExW(
         0, L"STATIC", text(L"지원 모드 확인 중..."),
         WS_CHILD | WS_VISIBLE | SS_LEFT,
         430, 234, 365, 90, hwnd, nullptr, instance, nullptr);
+    state->unlistedFpsStatus = CreateWindowExW(0, L"STATIC", L"",
+        WS_CHILD | SS_LEFT | SS_NOPREFIX, 0, 0, 376, 16, hwnd,
+        nullptr, instance, nullptr);
     population.pixelFormat(population.context);
 
     state->scalingLabel = makeLabel(text(L"화면 확대 방식"), 430, 274);
@@ -925,7 +938,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         state->forceHdr10Check, state->forceHdr10Help,
         state->hdrChromaLabel, state->hdrChromaCombo, state->hdrChromaHelp,
         state->mjpegColorLabel, state->mjpegColorCombo, state->mjpegColorHelp,
-        state->capture40Check, state->capture40Help,
+        state->unlistedFpsCheck, state->unlistedFpsStatus, state->capture40Check, state->capture40Help,
         state->videoDisplaySection,
         state->presentationLabel, state->presentationCombo, state->presentationHelp,
         state->displayMonitorLabel, state->displayMonitorCombo, state->pixelCheck,

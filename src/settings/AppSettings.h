@@ -120,6 +120,7 @@ struct AppSettings {
     int videoFrameRate = 0;
     // Explicit driver request; leave the normal frame-rate preference intact.
     bool capture40Fps = false;
+    bool allowUnlistedFps = false;
     std::wstring captureDeviceId;
     // Empty means: use an audio pin on the video filter when available, then
     // try a clearly matching DirectShow audio-capture filter.

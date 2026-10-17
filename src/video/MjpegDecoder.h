@@ -8,6 +8,7 @@
 #include <mfapi.h>
 #include <mfidl.h>
 #include <mftransform.h>
+#include <optional>
 
 namespace llcv::video {
 
@@ -30,6 +31,10 @@ public:
     // enough input. If several frames become available, only the newest is
     // returned to preserve the viewer's latest-frame policy.
     HRESULT decode(IMediaSample* directShowSample, IMFMediaBuffer** output);
+    // Recorder-owned compressed bytes; no driver sample is retained.
+    HRESULT decode(const BYTE* source, DWORD length, std::optional<LONGLONG> time,
+                   LONGLONG duration, IMFMediaBuffer** output,
+                   bool requireSingleFrame = false);
 
     LONG stride() const { return stride_; }
     bool validOutputBuffer(DWORD capacity, DWORD length) const {
@@ -58,7 +63,7 @@ private:
 
     void UpdateColorConfiguration();
     HRESULT SetNv12OutputType(IMFTransform* transform);
-    HRESULT PullOutput(IMFMediaBuffer** newest);
+    HRESULT PullOutput(IMFMediaBuffer** newest, unsigned* frameCount = nullptr);
     void Log(const wchar_t* message) const;
 
     IMFTransform* transform_ = nullptr;

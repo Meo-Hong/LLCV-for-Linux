@@ -142,6 +142,7 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
                 {s->recFpsLabel,half+16,0,width-half-16,20},{s->recFps,half+16,24,width-half-16,30}});
         }
         pages.Field(s->recAudioLabel,s->recAudio);
+        pages.Field(s->recVolumeLabel,s->recVolume);
         pages.Group(text(L"저장",L"Storage"));
         pages.Text(s->recFolderLabel,20);pages.Text(s->recFolder,44);pages.Button(s->recBrowse);pages.Button(s->recOpenFolder);
         pages.Text(s->recSpace,64);
@@ -162,10 +163,13 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
             {s->captureAudioDeviceCombo,0,24,width,30},{s->captureAudioStatus,0,24,width,30}});
         pages.Field(s->videoLabel,s->videoCombo);
         pages.Field(s->frameRateLabel,s->frameRateCombo);
+        pages.Check(s->unlistedFpsCheck);
         pages.Check(s->capture40Check,s->capture40Help);
         pages.Group(text(L"영상 형식",L"Video format"));
         pages.Field(s->pixelFormatLabel,s->pixelFormatCombo);
         pages.Text(s->videoCapabilityStatus,88);
+        if (GetWindowTextLengthW(s->unlistedFpsStatus) > 0)
+            pages.Text(s->unlistedFpsStatus,20);
         // Do not create blank continuation pages for formats without overrides.
         {
         const LRESULT selection=SendMessageW(s->pixelFormatCombo,CB_GETCURSEL,0,0);

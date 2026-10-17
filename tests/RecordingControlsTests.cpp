@@ -5,10 +5,15 @@
 namespace llcv::recording {
 Snapshot fixtureSnapshot;
 unsigned stopCalls=0,startCalls=0;
+Options startedOptions;
+std::wstring startedPath;
 Recorder recorder;
 Recorder::~Recorder(){if(wake_)CloseHandle(wake_);}
 Snapshot Recorder::GetSnapshot() const{return fixtureSnapshot;}
-bool Recorder::Start(const std::wstring&,const Options* options){++startCalls;return options!=nullptr;}
+bool Recorder::Start(const std::wstring& path,const Options* options){
+    ++startCalls;if(!options)return false;
+    startedOptions=*options;startedPath=path;return true;
+}
 void Recorder::Stop() noexcept{++stopCalls;}
 std::wstring DefaultFolder(){return L"C:\\recordings";}
 }
@@ -98,7 +103,16 @@ int main(){
         else Check(GetGuiResources(GetCurrentProcess(),GR_GDIOBJECTS)<=warmed,"no GDI leak");
     }
     SetControlsClosing(true);Check(ToggleRecording()==ToggleResult::Stopping&&startCalls==0,"shutdown blocks restart");
+    const auto originalOptions=sessionOptions;
+    sessionOptions.encoder=L"cpu";sessionOptions.rateControl=RateControl::Bitrate;
+    sessionOptions.folder=L"C:\\updated-recordings";
+    sessionOptions.maxFps=30;sessionOptions.maxHeight=720;sessionOptions.audioVolumePercent=40;
+    const auto acceptedOptions=sessionOptions;
     SetControlsClosing(false);Check(ToggleRecording()==ToggleResult::Starting&&startCalls==1,"normal toggle passes current options");
+    Check(startedOptions==acceptedOptions && startedPath.starts_with(acceptedOptions.folder+L"\\LLCV-"),
+        "first recording uses preferences accepted after capture initialization began");
+    sessionOptions=originalOptions;
+    Check(startedOptions==acceptedOptions,"active start owns its options independently of later UI edits");
     puts("Recording child overlay: phases, expiry, ownership, no recorder side effects and resource lifetime passed.");
 }
 #endif
