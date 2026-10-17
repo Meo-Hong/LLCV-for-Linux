@@ -72,6 +72,9 @@ int wmain(int argc,wchar_t** argv){
         std::ofstream report(folder/L"quality.csv");report<<"codec,mode,qp,bytes,luma_psnr,push_mean_us,push_p95_us,push_max_us,finalize_ms\n";
         for(auto codec:{Codec::H264,Codec::Hevc})for(int preset=-1;preset<3;++preset){
             Options options;options.codec=codec;
+            // This benchmark compares native QHD frames, independently of the
+            // app's user-facing 1080p/60 default recording caps.
+            options.maxHeight=0;options.maxFps=0;
             options.rateControl=preset<0?RateControl::Bitrate:RateControl::Quality;
             options.quality=preset<0?llcv::recording::Quality::Balanced:static_cast<llcv::recording::Quality>(preset);
             const auto name=std::wstring(codec==Codec::H264?L"h264":L"hevc")+(preset<0?L"-20Mbps":L"-qp"+std::to_wstring(QualityQp(options.quality)));

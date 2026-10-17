@@ -44,10 +44,12 @@ HRESULT ConfigureVideoPin(
     IPin* videoPin, int wantedWidth, int wantedHeight, int wantedFps,
     VideoPixelFormat wantedFormat, DWORD& imageBytes, UINT32& stride,
     int& configuredFps, VideoPixelFormat& configuredFormat,
-    LogCallback logCallback, bool request40Fps = false,
+    LogCallback logCallback, bool requestExactFps = false,
     CaptureColorMetadata* acceptedCandidateColor = nullptr);
 // Strict timing check used at negotiation and after graph connection.
-bool Is40FpsMediaType(const AM_MEDIA_TYPE* mediaType);
+bool IsRequestedFrameRate(const AM_MEDIA_TYPE* mediaType, int fps);
+inline constexpr HRESULT kRequestedFrameRateMismatch =
+    MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, 0x301);
 HRESULT GetActiveVideoPinFormat(IPin* videoPin, AM_MEDIA_TYPE** mediaType);
 std::vector<PixelFormatSupport> ProbePixelFormats(
     IPin* videoPin, int width, int height, HRESULT* queryStatus = nullptr,

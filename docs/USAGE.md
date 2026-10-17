@@ -16,9 +16,10 @@ Get one of the files from the [latest release](https://github.com/seria-aa/LowLa
   shortcut is created automatically; the desktop shortcut is optional.
 - **x64.zip — portable:** extract it, then run `LowLatencyCaptureViewer.exe`.
 
-**Updating to 2.1.0:** existing installation paths and settings are retained.
-Adds SDR/stereo recording, exclusive fullscreen, independent display resolution and fullscreen positioning.
-[Recording guide](RECORDING.md) · [2.1.0 release notes](release-notes-v2.1.0.md)
+**Updating to 2.1.1:** existing installation paths and settings are retained.
+Adds MJPEG input recording, separate recording volume and unlisted 30 fps requests,
+with recording layout and reliability improvements.
+[Recording guide](RECORDING.md) · [2.1.1 release notes](release-notes-v2.1.1.md)
 **40 fps capture**, added in [2.0.4](release-notes-v2.0.4.md),
 remains off by default; enable it under **Video** only when needed.
 Sleep prevention and earlier settings improvements are covered in the
@@ -51,7 +52,7 @@ automatically,” no separate selection is needed.
 
 ## Finding your settings
 
-*The following settings examples are rendered directly from the 2.1.0 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
+*The following settings examples are rendered directly from the 2.1.1 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
 
 | <a id="video-settings"></a>Video settings | <a id="audio-settings"></a>Audio settings |
 | --- | --- |
@@ -67,8 +68,8 @@ automatically,” no separate selection is needed.
 </details>
 
 The sidebar separates **Video**, **Audio**, **Recording**, **Window**, **Guide & logs**, and **App**.
-[Recording](RECORDING.md) contains codec, quality, size/rate limits, splitting and storage settings.
-Video contains capture/display settings, VSR, and 40 fps capture/screenshot options at the bottom.
+[Recording](RECORDING.md) contains codec, quality, size/rate limits, AAC, recording volume, splitting and storage settings.
+Video contains capture/display settings, VSR, unlisted FPS requests, 40 fps capture and screenshot options.
 Audio contains output devices, buffers, volume options, audio-only mode, and LPCM 5.1.
 Window controls placement, resizing, borders, and cursor behavior.
 Guide & logs groups shortcut editing and reset, 40 fps capture guidance, and diagnostic logging; App contains language,
@@ -119,6 +120,14 @@ change Windows power settings or disable screen savers or security locks.
 A 120 fps capture mode does not create extra visual information when the game
 does not output a new frame at that rate. Choose only frame rates that the
 source and capture device actually support.
+
+Enable **Allow unlisted FPS** to add **30 fps** when the driver does not list it.
+This is off by default. Disabling it resets an unlisted 30 fps selection to Auto;
+driver-listed 30 fps remains available. The separately colored **Direct request: 30 fps**
+line below mode detection is not proof of support. This applies to the selected resolution/format,
+not only QHD; enabling 40 fps capture takes precedence. Select 30 fps and **Start** to request it.
+Rejection or a different applied rate stops startup with
+a notice. This does not capture at 60 fps and drop frames in the app.
 
 Disabling 40 fps capture restores the normal frame-rate selection. Unsupported
 requests produce a startup error rather than silently falling back to another

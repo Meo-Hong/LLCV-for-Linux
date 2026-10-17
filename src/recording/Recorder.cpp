@@ -5,6 +5,9 @@
 #include "recording/RecordingScaler.h"
 #include "recording/RecordingPauseTimeline.h"
 #include "recording/RecordingStorage.h"
+#include "recording/RecordingAudioGain.h"
+#include "recording/RecordingAdmission.h"
+#include "video/MjpegDecoder.h"
 #include <mfapi.h>
 #include <mfidl.h>
 #include <mfreadwrite.h>
@@ -40,10 +43,21 @@ void AudioType(IMFMediaType* t, bool encoded,int kbps) {
 Recorder::~Recorder() { Shutdown();if(wake_)CloseHandle(wake_); }
 void Recorder::Configure(const video::VideoSampleFormat& v,
                          const capture_audio::Format& a,
-                         video_color::Configuration c, bool arrivalClock,const Options& options) {
+                         video_color::Configuration c, bool arrivalClock,const Options& options,
+                         const AM_MEDIA_TYPE* captureType,video_color::Override mjpegColorOverride) {
     std::lock_guard life(lifecycle_);
     if (busy_) return;
     video_=v; audio_=a; color_=c; arrivalClock_=arrivalClock; options_=options;
+    mjpegColorOverride_=mjpegColorOverride;
+    compressedFormat_.clear();compressedFormatType_=GUID_NULL;
+    if(v.format==settings::VideoPixelFormat::Mjpeg && captureType){
+        if(captureType->cbFormat && !captureType->pbFormat){video_.valid=false;return;}
+        try {
+            if(captureType->cbFormat)compressedFormat_.assign(
+                captureType->pbFormat,captureType->pbFormat+captureType->cbFormat);
+            compressedFormatType_=captureType->formattype;
+        } catch (...) {video_.valid=false;}
+    }
 }
 void Recorder::Fail(HRESULT hr, Operation operation) noexcept {
     HRESULT ok=S_OK;
@@ -61,6 +75,7 @@ bool Recorder::Start(const std::wstring& path,const Options* options) {
     if(options)options_=*options;
     ++session_;
     result_=S_OK;
+    stop_=false;
     finalizeResult_=S_OK;failure_=Failure::None;phase_=Phase::Starting;
     recordingStartedMs_=0;recordingStoppedMs_=0;
     pauseGeneration_=0;
@@ -71,10 +86,11 @@ bool Recorder::Start(const std::wstring& path,const Options* options) {
     if(!wake_){Fail(E_OUTOFMEMORY);phase_=Phase::Failed;return false;}
     const bool nv12=video_.format==settings::VideoPixelFormat::Nv12;
     const bool yuy2=video_.format==settings::VideoPixelFormat::Yuy2;
-    if (!Valid(options_) || !video_.valid || (!nv12 && !yuy2) || video_.color.hdr10() ||
+    const bool mjpeg=video_.format==settings::VideoPixelFormat::Mjpeg;
+    if (!Valid(options_) || !video_.valid || (!nv12 && !yuy2 && !mjpeg) || video_.color.hdr10() ||
         video_.width<=0 || video_.height<=0 || video_.width>3840 || video_.height>2160 ||
         video_.width%2 || video_.height%2 || video_.fps<=0 || video_.fps>240 ||
-        video_.stride<static_cast<UINT32>(video_.width*(yuy2?2:1)) ||
+        (!mjpeg && video_.stride<static_cast<UINT32>(video_.width*(yuy2?2:1))) ||
         (video_.interlace & 1) || audio_.channels!=2 || audio_.containerBits!=16 ||
         audio_.validBits!=16 ||
         audio_.encoding!=capture_audio::Encoding::IntegerPcm || audio_.blockAlign!=4) {
@@ -84,7 +100,7 @@ bool Recorder::Start(const std::wstring& path,const Options* options) {
         videoCount_=0; audioCount_=0;
         audioAnchor_=-1; audioFrames_=0;
         videoLimiter_={options_.maxFps && options_.maxFps<video_.fps?options_.maxFps:0,video_.fps};
-        stop_=false; accepting_=false; busy_=true;
+        busy_=true;
         worker_=std::thread(&Recorder::Run,this,path);
         return true;
     } catch (...) { busy_=false;Fail(E_OUTOFMEMORY);phase_=Phase::Failed;return false; }
@@ -102,11 +118,9 @@ bool Recorder::SetPaused(bool paused) {
     return true;
 }
 void Recorder::Stop() noexcept {
-    accepting_=false;stop_=true;
+    stop_=true;
+    BeginFinalizing(phase_);
     uint64_t zero=0;recordingStoppedMs_.compare_exchange_strong(zero,GetTickCount64());
-    auto phase=phase_.load();
-    while ((phase==Phase::Starting || phase==Phase::Recording) &&
-        !phase_.compare_exchange_weak(phase,Phase::Finalizing)) {}
     SetEvent(wake_);
 }
 void Recorder::Shutdown() {
@@ -117,13 +131,13 @@ void Recorder::Shutdown() {
 }
 void Recorder::Push(bool video, IMediaSample* sample) noexcept {
     const auto session=session_.load(std::memory_order_acquire);
-    if (!accepting_.load(std::memory_order_acquire)) return;
+    if (!Recording()) return;
     struct Guard {
         Recorder& owner;
         Guard(Recorder& r):owner(r){++owner.producers_;}
         ~Guard(){if(--owner.producers_==0 && owner.stop_)SetEvent(owner.wake_);}
     } guard(*this);
-    if (!accepting_.load(std::memory_order_acquire) || session!=session_.load(std::memory_order_acquire)) return;
+    if (!Recording() || session!=session_.load(std::memory_order_acquire)) return;
     const auto pauseGeneration=pauseGeneration_.load(std::memory_order_acquire);
     LONGLONG start=0,end=0; BYTE* data=nullptr;
     const HRESULT timeHr=arrivalClock_?S_OK:(sample?sample->GetTime(&start,&end):E_POINTER);
@@ -176,14 +190,15 @@ void Recorder::Push(bool video, IMediaSample* sample) noexcept {
         size_t packedBytes=0;
         size_t row=0,rows=0;
         if (video) {
+            const bool mjpeg=video_.format==settings::VideoPixelFormat::Mjpeg;
             const bool nv12=video_.format==settings::VideoPixelFormat::Nv12;
             row=static_cast<size_t>(video_.width)*(nv12?1:2);
             rows=static_cast<size_t>(video_.height)*(nv12?3:2)/2;
-            if (static_cast<size_t>(length)<video_.stride*rows) {
+            if (!mjpeg && static_cast<size_t>(length)<video_.stride*rows) {
                 fwprintf(stderr,L"[recording] short video %ld < %zu\n",length,video_.stride*rows);
                 Fail(E_INVALIDARG,Operation::Input); return;
             }
-            packedBytes=row*rows;
+            packedBytes=mjpeg?static_cast<size_t>(length):row*rows;
             p.duration=videoLimiter_.fps?10000000LL/videoLimiter_.fps:
                 (end>start?end-start:10000000LL/video_.fps);
         } else {
@@ -191,8 +206,12 @@ void Recorder::Push(bool video, IMediaSample* sample) noexcept {
             packedBytes=static_cast<size_t>(length);
             p.duration=static_cast<LONGLONG>(length/4)*10000000/48000;
         }
+        if(video && video_.format==settings::VideoPixelFormat::Mjpeg){
+            DWORD capacity=0;Check(buffer->GetMaxLength(&capacity));
+            if(packedBytes>capacity){Fail(MF_E_BUFFERTOOSMALL,Operation::Input);return;}
+        }
         BYTE* target=nullptr;Check(buffer->Lock(&target,nullptr,nullptr));
-        if(!video || row==video_.stride)std::memcpy(target,data,packedBytes);
+        if(!video || video_.format==settings::VideoPixelFormat::Mjpeg || row==video_.stride)std::memcpy(target,data,packedBytes);
         else for(size_t y=0;y<rows;++y)std::memcpy(target+y*row,data+y*video_.stride,row);
         Check(buffer->Unlock());Check(buffer->SetCurrentLength(static_cast<DWORD>(packedBytes)));
         p.buffer=std::move(buffer);p.video=video;
@@ -208,6 +227,8 @@ void Recorder::Run(std::wstring path) {
     std::shared_ptr<RecordingArchive> archive;
     std::unique_ptr<RecordingTimeline> timeline;
     RecordingScaler scaler;
+    video::MjpegDecoder mjpegDecoder;
+    RecordingBufferPool decodedFrames;
     RecordingPauseTimeline pauseTimeline;
     bool begun=false;
     Operation operation=Operation::Storage;
@@ -232,19 +253,52 @@ void Recorder::Run(std::wstring path) {
         if(!spaceAvailable()) Check(HRESULT_FROM_WIN32(ERROR_DISK_FULL));
         // Allocate/free the bounded recording storage only on this worker.
         const bool yuy2=video_.format==settings::VideoPixelFormat::Yuy2;
+        const bool mjpeg=video_.format==settings::VideoPixelFormat::Mjpeg;
         const size_t frameBytes=static_cast<size_t>(video_.width)*video_.height*(yuy2?2:3)/(yuy2?1:2);
         videoQueue_.write=0; videoQueue_.read=0; audioQueue_.write=0; audioQueue_.read=0;
         videoQueue_.packets.resize(6);audioQueue_.packets.resize(32);
         // Keep delivery queues short; extra leases cover asynchronous encoder
         // retention without allowing unbounded memory growth.
-        videoBuffers_.Allocate(16,static_cast<DWORD>(frameBytes));
+        // Compressed input leases end after decoding; they never reach the
+        // encoder. Size them from the connected allocator when available.
+        videoBuffers_.Allocate(mjpeg?8:16,mjpeg
+            ? (video_.bytes?video_.bytes:static_cast<DWORD>(video_.width*video_.height*3))
+            : static_cast<DWORD>(frameBytes));
         audioBuffers_.Allocate(64,19200);
         const auto dimensions=OutputSize(options_,video_.width,video_.height);
+        const bool scaling=dimensions.width!=video_.width || dimensions.height!=video_.height;
+        auto recordingColor=color_;
+        if(mjpeg){
+            operation=Operation::Input;
+            AM_MEDIA_TYPE type{};type.formattype=compressedFormatType_;
+            type.cbFormat=static_cast<ULONG>(compressedFormat_.size());type.pbFormat=compressedFormat_.data();
+            Check(mjpegDecoder.initialize(video_.width,video_.height,video_.fps,
+                &type,&video_.color,mjpegColorOverride_,nullptr));
+            recordingColor=mjpegDecoder.colorConfiguration();
+            // Native recording needs leases that an asynchronous encoder may
+            // retain. Downscaling already produces its own encoder-safe lease.
+            if(!scaling)decodedFrames.Allocate(16,static_cast<DWORD>(frameBytes));
+        }
+        operation=Operation::Storage;
         scaler.Configure(!yuy2,video_.width,video_.height,dimensions.width,dimensions.height);
+        const UINT32 matrix=recordingColor.matrix==video_color::Matrix::Bt709
+            ? MFVideoTransferMatrix_BT709:MFVideoTransferMatrix_BT601;
+        const UINT32 range=recordingColor.range==video_color::Range::Full
+            ? MFNominalRange_0_255:MFNominalRange_16_235;
         ComPtr<IMFAttributes> attrs; Check(MFCreateAttributes(&attrs,2));
         Check(attrs->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS,options_.encoder==L"cpu"?FALSE:TRUE));
+        Check(attrs->SetUINT32(MF_MT_YUV_MATRIX,matrix));
+        Check(attrs->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE,range));
+#ifdef LLCV_RECORDING_MODERN_MP4
+        // The Windows H.264 sink can strip these attributes for raw inputs too.
+        constexpr bool preserveColor=true;
+#else
+        // Playback-only test builds keep their dependency-free raw H.264 path;
+        // distributed recording builds always include the packet-only muxer.
+        const bool preserveColor=mjpeg;
+#endif
         // Keep writer backpressure ON, but exclusively on this worker.
-        Check(CreateRecordingFile(path.c_str(),attrs.Get(),&bytes,&writer,options_.codec,&options_,&archive));
+        Check(CreateRecordingFile(path.c_str(),attrs.Get(),&bytes,&writer,options_.codec,&options_,&archive,preserveColor));
         if(archive){std::lock_guard status(statusMutex_);snapshot_.path=archive->CurrentPath();}
         operation=Operation::Encoder;
         auto output=Type();
@@ -255,12 +309,12 @@ void Recorder::Run(std::wstring path) {
         Check(MFSetAttributeSize(output.Get(),MF_MT_FRAME_SIZE,dimensions.width,dimensions.height));
         Check(MFSetAttributeRatio(output.Get(),MF_MT_FRAME_RATE,OutputFps(options_,video_.fps),1));
         Check(MFSetAttributeRatio(output.Get(),MF_MT_PIXEL_ASPECT_RATIO,1,1));
-        Check(output->SetUINT32(MF_MT_YUV_MATRIX,color_.matrix==video_color::Matrix::Bt709?1:2));
-        Check(output->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE,color_.range==video_color::Range::Full?1:2));
+        Check(output->SetUINT32(MF_MT_YUV_MATRIX,matrix));
+        Check(output->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE,range));
         DWORD videoStream=0,audioStream=0;
         Check(writer->AddStream(output.Get(),&videoStream));
         auto input=Type(); Check(output->CopyAllItems(input.Get()));
-        Check(input->SetGUID(MF_MT_SUBTYPE,video_.format==settings::VideoPixelFormat::Nv12?MFVideoFormat_NV12:MFVideoFormat_YUY2));
+        Check(input->SetGUID(MF_MT_SUBTYPE,yuy2?MFVideoFormat_YUY2:MFVideoFormat_NV12));
         Check(ConfigureVideoInput(writer.Get(),videoStream,input.Get(),options_));
         auto audioOut=Type(); AudioType(audioOut.Get(),true,options_.audioKbps);
         Check(writer->AddStream(audioOut.Get(),&audioStream));
@@ -270,9 +324,7 @@ void Recorder::Run(std::wstring path) {
         Check(writer->BeginWriting()); begun=true;
         Check(VerifyRateControl(writer.Get(),videoStream,options_));
         recordingStartedMs_=GetTickCount64();
-        phase_=Phase::Recording;
-        accepting_=true;
-        if (stop_) { accepting_=false;phase_=Phase::Finalizing; }
+        if (!TryPublishRecording(phase_)) stop_=true;
         LONGLONG lastVideo=-1,lastAudio=-1;
         uint64_t nextSpaceCheck=GetTickCount64()+1000;
         for (;;) {
@@ -324,9 +376,57 @@ void Recorder::Run(std::wstring path) {
                 operation=Operation::Input;
                 if (mapped.time<=last) Check(MF_E_INVALID_TIMESTAMP);
                 last=mapped.time;
+                // Gain runs off the capture/playback thread, before wrappers
+                // or encoder leases can retain this recorder-owned buffer.
+                if(!p.video && options_.audioVolumePercent!=100){
+                    BYTE* pcm=nullptr;DWORD length=0;
+                    Check(p.buffer->Lock(&pcm,nullptr,&length));
+                    ApplyRecordingAudioGain(pcm,length,options_.audioVolumePercent);
+                    Check(p.buffer->Unlock());
+                }
                 ComPtr<IMFSample> sample; Check(MFCreateSample(&sample));
                 ComPtr<IMFMediaBuffer> buffer;
-                if(p.video)Check(scaler.Apply(p.buffer.Get(),&buffer));
+                if(p.video){
+                    if(mjpeg){
+                        ComPtr<IMFMediaBuffer> frame;
+                        LONG frameStride=0;
+                        BYTE* compressed=nullptr;DWORD length=0;
+                        Check(p.buffer->Lock(&compressed,nullptr,&length));
+                        ComPtr<IMFMediaBuffer> decoded;
+                        const HRESULT decode=mjpegDecoder.decode(compressed,length,p.time,p.duration,&decoded,true);
+                        const HRESULT unlocked=p.buffer->Unlock();
+                        Check(decode);Check(unlocked);
+                        const auto decodedColor=mjpegDecoder.colorConfiguration();
+                        if(decodedColor.matrix!=recordingColor.matrix || decodedColor.range!=recordingColor.range)
+                            Check(MF_E_INVALIDMEDIATYPE);
+                        // A synchronous MJPEG frame must decode independently.
+                        // Do not silently omit frames or move their timestamps.
+                        if(!decoded)Check(MF_E_INVALID_STREAM_DATA);
+                        if(scaling){
+                            frame=std::move(decoded);
+                            frameStride=mjpegDecoder.stride();
+                        }else{
+                            frame=decodedFrames.Acquire();
+                            if(!frame)Check(HRESULT_FROM_WIN32(ERROR_BUFFER_OVERFLOW));
+                            BYTE *source=nullptr,*target=nullptr;DWORD capacity=0,current=0;
+                            Check(decoded->Lock(&source,&capacity,&current));
+                            HRESULT copied=source && mjpegDecoder.validOutputBuffer(capacity,current)?S_OK:MF_E_INVALID_STREAM_DATA;
+                            if(SUCCEEDED(copied))copied=frame->Lock(&target,nullptr,nullptr);
+                            if(SUCCEEDED(copied)){
+                                if(target){
+                                    for(int row=0;row<video_.height*3/2;++row)
+                                        std::memcpy(target+static_cast<size_t>(row)*video_.width,
+                                            source+static_cast<size_t>(row)*mjpegDecoder.stride(),video_.width);
+                                }else copied=E_POINTER;
+                                const HRESULT unlockedFrame=frame->Unlock();
+                                if(SUCCEEDED(copied))copied=unlockedFrame;
+                            }
+                            const HRESULT release=decoded->Unlock();Check(copied);Check(release);
+                            Check(frame->SetCurrentLength(static_cast<DWORD>(frameBytes)));
+                        }
+                        Check(scaler.Apply(frame.Get(),&buffer,frameStride));
+                    }else Check(scaler.Apply(p.buffer.Get(),&buffer));
+                }
                 else if(mapped.skipAudioFrames){
                     DWORD length=0;Check(p.buffer->GetCurrentLength(&length));
                     const DWORD skip=mapped.skipAudioFrames*4;
@@ -345,7 +445,7 @@ void Recorder::Run(std::wstring path) {
     } catch (HRESULT hr) { Fail(hr,operation); }
       catch (...) { Fail(E_OUTOFMEMORY,operation); }
     Stop();
-    // A callback that observed accepting=true may still own its ring slot.
+    // A callback that observed Phase::Recording may still own its ring slot.
     // Do not let Start/Configure recycle storage until it has left.
     while (producers_.load(std::memory_order_acquire)!=0) Sleep(1);
     if (begun) {
@@ -382,6 +482,7 @@ void Recorder::Run(std::wstring path) {
     std::vector<Packet>().swap(audioQueue_.packets);
     videoBuffers_.Clear();audioBuffers_.Clear();
     scaler.Clear(); // Release MF-backed scaling buffers before the worker's MFShutdown.
+    decodedFrames.Clear();mjpegDecoder.reset();
     archive.reset(); // Join storage after all split files close, before MFShutdown.
     if (mf) MFShutdown();
     if (SUCCEEDED(com)) CoUninitialize();

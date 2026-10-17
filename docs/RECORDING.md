@@ -4,10 +4,15 @@
 
 [README](../README.md) · [Documentation](INDEX.md) · [한국어](RECORDING.ko.md)
 
-Records NV12/YUY2 SDR video with 16-bit PCM stereo input to MP4.
-MJPEG, HDR, multichannel and audio-only recording are not supported; playback supports more formats.
+Records NV12/YUY2/MJPEG SDR video with 16-bit PCM stereo input to MP4.
+MJPEG input is decoded on the recording worker and saved with the selected H.264, HEVC or AV1 encoder.
+MJPEG recording adds decoding work and can increase CPU usage.
+Recordings retain the input color range/matrix; MJPEG also follows the override selected under **Video → MJPEG color interpretation**.
+HDR, multichannel and audio-only recording are not supported; playback supports more formats.
 
 ![Recording settings example](images/settings-recording-en.png)
+
+<sub>Example rendered from the 2.1.1 UI code. Encoder support varies by system.</sub>
 
 <br>
 
@@ -27,7 +32,7 @@ The corner recording indicator and OSD are not included in the recording.
 
 ## Quality and file size
 
-Defaults: **H.264 · automatic hardware · quality (CQP) · balanced (QP 23)**, **1080p/60fps limits**, AAC 192 kbps and splitting off. Lower-resolution/rate input stays unchanged, and existing saved recording preferences are preserved.
+Defaults: **H.264 · automatic hardware · quality (CQP) · balanced (QP 23)**, **1080p/60fps limits**, AAC 192 kbps, recording volume 100% and splitting off. Lower-resolution/rate input stays unchanged, and existing saved recording preferences are preserved.
 
 | Setting | Behavior |
 | --- | --- |
@@ -38,7 +43,8 @@ Defaults: **H.264 · automatic hardware · quality (CQP) · balanced (QP 23)**, 
 | Resolution / frame limit | Match capture or 1440p/1080p/720p and 60/30 fps. Never raises the source size/rate and does not alter playback settings. |
 | Automatic splitting | Off, duration (15/30/60/120 minutes), or size (1/2/4/8/16 GiB). A segment waits for an independently decodable boundary and may exceed the threshold. |
 
-VSR, display scaling/placement, OSD, screenshot processing and app volume changes are not recorded.
+Set **Recording volume**, next to **Audio (AAC)** in the **Recording** tab, to 0–100% before recording. The default is 100%; 0% mutes the recording. This setting is saved separately from playback volume.
+VSR, display scaling/placement, OSD, screenshot processing and playback volume changes are not recorded.
 Unsupported combinations report an error instead of silently changing codec or switching to CPU encoding.
 If encoding affects playback or cannot keep up, lower the recording resolution/frame-rate limit first.
 

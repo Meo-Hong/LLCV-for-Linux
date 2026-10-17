@@ -1,0 +1,56 @@
+#include "recording/RecordingAdmission.h"
+#include <cstdio>
+#include <initializer_list>
+#include <thread>
+
+using namespace llcv::recording;
+namespace {
+int failures=0;
+void Expect(bool passed,const char* message) {
+    if(!passed){++failures;std::printf("FAIL: %s\n",message);}
+}
+}
+int main() {
+    std::atomic<Phase> phase{Phase::Starting};
+    BeginFinalizing(phase);
+    Expect(!TryPublishRecording(phase) && phase==Phase::Finalizing,
+        "stop before publication cannot reopen capture admission");
+    phase=Phase::Starting;
+    Expect(TryPublishRecording(phase),"ready worker publishes recording");
+    BeginFinalizing(phase);
+    Expect(!TryPublishRecording(phase) && phase==Phase::Finalizing,
+        "stop after publication closes admission permanently");
+    for(auto terminal:{Phase::Idle,Phase::Saved,Phase::Failed}){
+        phase=terminal;BeginFinalizing(phase);
+        Expect(!TryPublishRecording(phase) && phase==terminal,
+            "stop and late publication preserve idle and terminal states");
+    }
+    // Run both production transitions concurrently, without an encoder or
+    // scheduler-dependent sleep. Each round ends only after both have returned.
+    constexpr unsigned rounds=10000;
+    std::atomic<unsigned> start{0},published{0},stopped{0};
+    std::thread worker([&]{
+        for(unsigned round=1;round<=rounds;++round){
+            while(start.load(std::memory_order_acquire)!=round)std::this_thread::yield();
+            TryPublishRecording(phase);
+            published.store(round,std::memory_order_release);
+        }
+    });
+    std::thread stop([&]{
+        for(unsigned round=1;round<=rounds;++round){
+            while(start.load(std::memory_order_acquire)!=round)std::this_thread::yield();
+            BeginFinalizing(phase);
+            stopped.store(round,std::memory_order_release);
+        }
+    });
+    for(unsigned round=1;round<=rounds;++round){
+        phase=Phase::Starting;
+        start.store(round,std::memory_order_release);
+        while(published.load(std::memory_order_acquire)!=round ||
+              stopped.load(std::memory_order_acquire)!=round)std::this_thread::yield();
+        Expect(phase==Phase::Finalizing,"concurrent publication cannot undo a completed stop");
+    }
+    worker.join();stop.join();
+    std::printf("Recording admission: %u concurrent publication/stop rounds, failures=%d\n",rounds,failures);
+    return failures?1:0;
+}

@@ -62,6 +62,7 @@ void TestDefaults(const std::wstring& path) {
     Check(!loaded.settings.settingsLightTheme, "legacy and fresh profiles retain dark settings");
     Check(!loaded.settings.screenshotClipboard, "screenshot clipboard is opt-in");
     Check(!loaded.settings.capture40Fps, "40fps is opt-in for fresh and legacy profiles");
+    Check(!loaded.settings.allowUnlistedFps, "unlisted FPS is opt-in for fresh and legacy profiles");
     Check(!loaded.settings.vsrEnabled, "VSR defaults OFF for fresh/legacy settings");
     Check(!loaded.settings.consoleSurround51, "5.1 is opt-in for old and fresh profiles");
     Check(loaded.settings.audioOnlyWidth == 380 && loaded.settings.audioOnlyHeight == 230,
@@ -312,6 +313,7 @@ void TestRoundTrip(const std::wstring& path) {
     saved.saveLog = true;
     saved.screenshotClipboard = true;
     saved.capture40Fps = true;
+    saved.allowUnlistedFps = true;
     saved.showDiagnosticConsole = true;
     saved.skipStartupSettings = true;
     saved.checkForUpdates = false;
@@ -372,6 +374,7 @@ void TestRoundTrip(const std::wstring& path) {
           "diagnostics round trip");
     Check(loaded.screenshotClipboard, "screenshot clipboard round trip");
     Check(loaded.capture40Fps, "40fps opt-in round trip");
+    Check(loaded.allowUnlistedFps, "unlisted FPS opt-in round trip");
     Check(loaded.skipStartupSettings && !loaded.checkForUpdates &&
               loaded.audioOnly && !loaded.preventSleep,
           "general settings round trip");

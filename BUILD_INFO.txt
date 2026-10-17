@@ -1,4 +1,13 @@
-LLCV v2.1.0 x64 (continued from the v0.14.2 rework)
+LLCV v2.1.1 x64 (continued from the v0.14.2 rework)
+
+v2.1.1 Recording and capture options
+------------------------------------
+- Adds MJPEG SDR input recording through supported H.264/HEVC/AV1 encoders.
+- Adds independent recording volume (0-100%, default 100%) and refines recording settings layout.
+- Adds opt-in unlisted 30 fps requests with a distinct status line and strict driver negotiation.
+- Improves recording start/stop reliability, first-session settings and NV12/YUY2 color metadata.
+- Preserves recording defaults (1080p/60fps limits), existing settings and installation paths.
+- MJPEG decoding can increase CPU load; unlisted rates and encoders remain device-dependent.
 
 v2.1.0 SDR recording and presentation
 -----------------------------------

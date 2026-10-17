@@ -537,7 +537,8 @@ bool SettingsTheme::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, LR
         if (key) field = true;
         const bool card = IsCardControl(child);
         const COLORREF bg = nav ? palette_.kSidebar : field ? palette_.kControl : card ? palette_.kCard : palette_.kBackground;
-        const COLORREF fg = !IsWindowEnabled(child) ? palette_.kDisabled : key ? palette_.kAccent : IsHeading(child) ? palette_.kText :
+        const COLORREF fg = !IsWindowEnabled(child) ? palette_.kDisabled :
+            (key || child == controls_->unlistedFpsStatus) ? palette_.kAccent : IsHeading(child) ? palette_.kText :
             IsSecondary(child) ? palette_.kSecondary : palette_.kText;
         SetTextColor(dc, fg); SetBkColor(dc, bg); SetBkMode(dc, TRANSPARENT);
         result = reinterpret_cast<LRESULT>(nav ? sidebar_ : field ? surface_ : card ? card_ : background_);

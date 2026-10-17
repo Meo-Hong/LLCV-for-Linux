@@ -29,6 +29,8 @@ struct Candidate {
     bool emitBefore = false, emitAfter = true;
     unsigned attributeCalls = 0, infoCalls = 0, outputStep = 0, framesProduced = 0;
     UINT32 lowLatency = 0;
+    HRESULT timeResult=E_FAIL,durationResult=E_FAIL;
+    LONGLONG time=0,duration=0;
     Layout before{}, after{4, 2, 16, 48};
 };
 static std::vector<Candidate> candidates;
@@ -104,6 +106,8 @@ public:
     STUB(ProcessEvent, DWORD, IMFMediaEvent*)
     STDMETHODIMP ProcessMessage(MFT_MESSAGE_TYPE, ULONG_PTR) override { return S_OK; }
     STDMETHODIMP ProcessInput(DWORD, IMFSample* sample, DWORD) override {
+        c.timeResult=sample->GetSampleTime(&c.time);
+        c.durationResult=sample->GetSampleDuration(&c.duration);
         IMFMediaBuffer* buffer = nullptr;
         Check(SUCCEEDED(sample->GetBufferByIndex(0, &buffer)), "input buffer available");
         BYTE* data = nullptr; DWORD capacity = 0;
@@ -225,6 +229,8 @@ static HRESULT WINAPI TestMFTEnum(GUID category, UINT32 flags, const MFT_REGISTE
 class Sample final : public IMediaSample {
 public:
     long bytes = 4, capacity = 4;
+    bool timed=false;
+    REFERENCE_TIME start=0,stop=0;
     unsigned pointerCalls = 0;
     std::vector<BYTE> data = std::vector<BYTE>(4);
     STDMETHODIMP QueryInterface(REFIID, void** p) override { *p = nullptr; return E_NOINTERFACE; }
@@ -232,7 +238,9 @@ public:
     STDMETHODIMP_(ULONG) Release() override { return 1; }
     STDMETHODIMP GetPointer(BYTE** p) override { ++pointerCalls; *p = data.data(); return S_OK; }
     STDMETHODIMP_(long) GetSize() override { return capacity; }
-    STUB(GetTime, REFERENCE_TIME*, REFERENCE_TIME*)
+    STDMETHODIMP GetTime(REFERENCE_TIME* from,REFERENCE_TIME* to) override {
+        if(!timed)return E_NOTIMPL;*from=start;*to=stop;return S_OK;
+    }
     STUB(SetTime, REFERENCE_TIME*, REFERENCE_TIME*)
     STUB(IsSyncPoint)
     STUB(SetSyncPoint, BOOL)
@@ -249,6 +257,36 @@ public:
 };
 #undef STUB
 
+static void TestInputTiming() {
+    candidates.assign(1,{});
+    llcv::video::MjpegDecoder decoder;
+    Check(SUCCEEDED(decoder.initialize(4,2,60,nullptr,nullptr,
+        llcv::video_color::Override::Auto,nullptr)),"timing decoder initialization");
+    Sample sample;Microsoft::WRL::ComPtr<IMFMediaBuffer> output;
+    Check(SUCCEEDED(decoder.decode(&sample,&output)) && FAILED(candidates[0].timeResult),
+        "untimed playback input remains untimed");
+    sample.timed=true;sample.start=-166667;sample.stop=0;
+    Check(SUCCEEDED(decoder.decode(&sample,&output)) && SUCCEEDED(candidates[0].timeResult) &&
+        candidates[0].time==sample.start && candidates[0].duration==166667,
+        "negative playback timestamps are preserved");
+    Check(SUCCEEDED(decoder.decode(sample.data.data(),sample.bytes,10000000,166667,&output)) &&
+        candidates[0].time==10000000 && candidates[0].duration==166667,
+        "recording input timestamps are preserved independently of decode completion");
+}
+static void TestRecordingFramePolicy() {
+    for(int scenario=0;scenario<3;++scenario){
+        candidates.assign(1,{});
+        auto& c=candidates.front();c.change=scenario!=0;c.emitBefore=scenario==2;
+        llcv::video::MjpegDecoder decoder;
+        Check(SUCCEEDED(decoder.initialize(4,2,60,nullptr,nullptr,
+            llcv::video_color::Override::Auto,nullptr)),"recording decoder initialization");
+        Sample sample;Microsoft::WRL::ComPtr<IMFMediaBuffer> output;
+        const auto hr=decoder.decode(sample.data.data(),static_cast<DWORD>(sample.data.size()),
+            10000000,166667,&output,true);
+        Check(scenario==1?SUCCEEDED(hr)&&output:hr==MF_E_INVALID_STREAM_DATA&&!output,
+            "recording requires exactly one decoded frame instead of silently keeping the newest");
+    }
+}
 static void TestStreamChanges() {
     for (unsigned scenario = 0; scenario < 15; ++scenario) {
         candidates.assign(1, {});
@@ -360,7 +398,9 @@ static void TestNativeDecoder() {
         unsigned decoded = 0;
         for (unsigned index = 0; index < 8; ++index) {
             ComPtr<IMFMediaBuffer> output;
-            Check(SUCCEEDED(decoder.decode(&sample, &output)), "system MJPEG decode succeeds");
+            Check(SUCCEEDED(index%2?decoder.decode(sample.data.data(),
+                static_cast<DWORD>(sample.bytes),index*10000000LL/60,10000000/60,&output,true):
+                decoder.decode(&sample,&output)), "system MJPEG display/recording decode succeeds");
             if (!output) continue;
             BYTE* data = nullptr; DWORD capacity = 0, length = 0;
             Check(SUCCEEDED(output->Lock(&data, &capacity, &length)), "native NV12 buffer locked");
@@ -455,6 +495,8 @@ int main(int argc, char** argv) {
         Check(!decoder.validOutputBuffer(24, 24), "reset decoder has no usable output layout");
     }
     TestStreamChanges();
+    TestRecordingFramePolicy();
+    TestInputTiming();
     TestBufferReuse();
     CoUninitialize();
     std::puts("MJPEG: 6 selection cases, packet bounds, 15 stream changes and 4 attribute/layout cases passed.");

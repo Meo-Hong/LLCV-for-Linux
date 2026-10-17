@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(LowLatencyCaptureViewer VERSION 2.1.0 LANGUAGES CXX)
+project(LowLatencyCaptureViewer VERSION 2.1.1 LANGUAGES CXX)
 
 include(cmake/MsvcDependencies.cmake)
 
@@ -178,10 +178,30 @@ if(BUILD_TESTING)
         target_compile_options(RecordingTests PRIVATE /W4 /EHsc /utf-8)
     endif()
     add_test(NAME RecordingTests COMMAND RecordingTests)
+    if(LLCV_RECORDING_FFMPEG_ROOT)
+        foreach(case mjpeg mjpeg-pause mjpeg-limited mjpeg-scale mjpeg-arrival mjpeg-invalid
+                     mjpeg-color mjpeg-color-scale raw-color raw-color-scale
+                     raw-yuy2-color raw-yuy2-color-scale)
+            add_test(NAME Recording_${case} COMMAND RecordingTests --${case})
+            set_tests_properties(Recording_${case} PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+        endforeach()
+        add_test(NAME Recording_mjpeg-split COMMAND RecordingTests --mjpeg-split)
+        set_tests_properties(Recording_mjpeg-split PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+        add_test(NAME Recording_mjpeg-hevc COMMAND RecordingTests --mjpeg-hevc)
+        set_tests_properties(Recording_mjpeg-hevc PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        add_test(NAME Recording_mjpeg-hd COMMAND RecordingTests --mjpeg-hd)
+        set_tests_properties(Recording_mjpeg-hd PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+    endif()
+    add_test(NAME RecordingGainTests COMMAND RecordingTests --gain)
+    add_test(NAME RecordingMuteTests COMMAND RecordingTests --mute)
+    set_tests_properties(RecordingGainTests RecordingMuteTests
+        PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
     add_test(NAME RecordingPauseTests COMMAND RecordingTests --pause)
     add_test(NAME RecordingPauseUnalignedTests COMMAND RecordingTests --pause-unaligned)
     set_tests_properties(RecordingPauseUnalignedTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
     if(LLCV_RECORDING_FFMPEG_ROOT)
+        add_test(NAME RecordingGainSplitTests COMMAND RecordingTests --gain-split)
+        set_tests_properties(RecordingGainSplitTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
         add_test(NAME RecordingSplitPauseTests COMMAND RecordingTests --split-pause)
         set_tests_properties(RecordingSplitPauseTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
     endif()
@@ -196,6 +216,22 @@ if(BUILD_TESTING)
     add_test(NAME RecordingYuy2InputTests COMMAND RecordingTests --yuy2)
     add_test(NAME RecordingLifecycleTests COMMAND RecordingTests --lifecycle)
     set_tests_properties(RecordingLifecycleTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    add_executable(RecordingAdmissionTests tests/RecordingAdmissionTests.cpp)
+    target_include_directories(RecordingAdmissionTests PRIVATE src)
+    target_compile_definitions(RecordingAdmissionTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(RecordingAdmissionTests PRIVATE /W4 /EHsc /utf-8)
+    set_target_properties(RecordingAdmissionTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingAdmissionTests COMMAND RecordingAdmissionTests)
+    set_tests_properties(RecordingAdmissionTests PROPERTIES TIMEOUT 15)
+    add_executable(RecordingStartupOptionsTests tests/RecordingStartupOptionsTests.cpp
+        src/recording/Recorder.cpp src/recording/RecordingOptions.cpp src/recording/EncoderSupport.cpp)
+    target_include_directories(RecordingStartupOptionsTests PRIVATE src)
+    target_compile_definitions(RecordingStartupOptionsTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(RecordingStartupOptionsTests PRIVATE ole32 oleaut32 shell32 strmiids mfplat mfreadwrite mfuuid)
+    target_compile_options(RecordingStartupOptionsTests PRIVATE /W4 /EHsc /utf-8)
+    set_target_properties(RecordingStartupOptionsTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingStartupOptionsTests COMMAND RecordingStartupOptionsTests)
+    set_tests_properties(RecordingStartupOptionsTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
     set_tests_properties(RecordingPaddedInputTests RecordingYuy2InputTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
     add_executable(RecordingBufferTests tests/RecordingBufferTests.cpp)
     target_include_directories(RecordingBufferTests PRIVATE src)
@@ -531,6 +567,7 @@ if (BUILD_TESTING)
     # These test translation units include the implementation directly. Keep
     # that dependency explicit even when a localized MSVC include scan misses it.
     set_property(SOURCE tests/AudioCallbackTests.cpp tests/HdrPipelineTests.cpp
+        tests/MjpegRecordingPlaybackTests.cpp
         tests/MonitorMoveTests.cpp tests/SharedReplayTests.cpp
         APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerHelpWindow.h"
@@ -582,6 +619,24 @@ if (BUILD_TESTING)
         target_compile_options(AudioCallbackTests PRIVATE /W4 /EHsc /permissive- /utf-8)
     endif()
     add_test(NAME AudioCallbackTests COMMAND AudioCallbackTests)
+
+    if(LLCV_RECORDING)
+        add_executable(MjpegRecordingPlaybackTests tests/MjpegRecordingPlaybackTests.cpp
+            ${audio_callback_sources})
+        target_include_directories(MjpegRecordingPlaybackTests PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,INCLUDE_DIRECTORIES>)
+        target_compile_definitions(MjpegRecordingPlaybackTests PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,COMPILE_DEFINITIONS>)
+        target_link_libraries(MjpegRecordingPlaybackTests PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,LINK_LIBRARIES>)
+        set_target_properties(MjpegRecordingPlaybackTests PROPERTIES WIN32_EXECUTABLE FALSE)
+        if(MSVC)
+            target_compile_options(MjpegRecordingPlaybackTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+        endif()
+        add_test(NAME MjpegRecordingPlaybackTests COMMAND MjpegRecordingPlaybackTests)
+        set_tests_properties(MjpegRecordingPlaybackTests PROPERTIES
+            TIMEOUT 45 RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS GPU)
+    endif()
 
     add_executable(HdrPipelineTests tests/HdrPipelineTests.cpp ${audio_callback_sources})
     target_include_directories(HdrPipelineTests PRIVATE
@@ -921,6 +976,8 @@ if(BUILD_TESTING AND LLCV_RECORDING_FFMPEG_ROOT)
     add_test(NAME RecordingMuxFaultTests COMMAND RecordingMuxFaultTests
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/recording/mux-hevc-flash-tone.mp4")
     set_tests_properties(RecordingMuxFaultTests PROPERTIES TIMEOUT 30)
+    add_test(NAME RecordingColorNegotiationTests COMMAND RecordingMuxFaultTests --color-negotiation)
+    set_tests_properties(RecordingColorNegotiationTests PROPERTIES TIMEOUT 15)
     add_test(NAME RecordingHevcSyncTests COMMAND RecordingTests --hevc)
     add_test(NAME RecordingHevcArrivalSyncTests COMMAND RecordingTests --hevc-arrival)
     set_tests_properties(RecordingHevcSyncTests RecordingHevcArrivalSyncTests PROPERTIES
@@ -1004,6 +1061,16 @@ endif()
 get_property(llcv_build_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 foreach(llcv_target IN LISTS llcv_build_targets)
     get_target_property(llcv_sources ${llcv_target} SOURCES)
+    if("tests/RecordingTests.cpp" IN_LIST llcv_sources)
+        target_link_libraries(${llcv_target} PRIVATE windowscodecs)
+    endif()
+    if("src/recording/Recorder.cpp" IN_LIST llcv_sources)
+        foreach(llcv_decode_source src/video/MjpegDecoder.cpp src/video/VideoColor.cpp)
+            if(NOT "${llcv_decode_source}" IN_LIST llcv_sources)
+                target_sources(${llcv_target} PRIVATE ${llcv_decode_source})
+            endif()
+        endforeach()
+    endif()
     if("src/recording/EncoderSupport.cpp" IN_LIST llcv_sources AND
        NOT "src/recording/RecordingContainer.cpp" IN_LIST llcv_sources)
         target_sources(${llcv_target} PRIVATE src/recording/RecordingContainer.cpp)
@@ -1032,6 +1099,21 @@ if(BUILD_TESTING)
     set_tests_properties(RendererResizeTests PROPERTIES LABELS GPU SKIP_RETURN_CODE 77 TIMEOUT 120)
     find_program(LLCV_POWERSHELL NAMES pwsh powershell)
     if(LLCV_POWERSHELL)
+        if(LLCV_RECORDING_FFMPEG_ROOT AND LLCV_TEST_FFPROBE)
+            add_test(NAME RecordingMjpegCrashRecovery COMMAND "${LLCV_POWERSHELL}"
+                -NoProfile -ExecutionPolicy Bypass -File
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-MjpegRecordingRecovery.ps1"
+                -Recorder "$<TARGET_FILE:RecordingTests>" -Probe "${LLCV_TEST_FFPROBE}")
+            set_tests_properties(RecordingMjpegCrashRecovery PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+            foreach(raw_input Nv12 Yuy2)
+                add_test(NAME Recording${raw_input}CrashRecovery COMMAND "${LLCV_POWERSHELL}"
+                    -NoProfile -ExecutionPolicy Bypass -File
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-MjpegRecordingRecovery.ps1"
+                    -Recorder "$<TARGET_FILE:RecordingTests>" -Probe "${LLCV_TEST_FFPROBE}"
+                    -InputFormat ${raw_input})
+                set_tests_properties(Recording${raw_input}CrashRecovery PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+            endforeach()
+        endif()
         add_test(NAME PackageDocsTests COMMAND "${LLCV_POWERSHELL}"
             -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/PackageDocsTests.ps1")
         set_tests_properties(PackageDocsTests PROPERTIES TIMEOUT 60)

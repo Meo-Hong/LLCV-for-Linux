@@ -4,7 +4,7 @@
 
 [README](../README.md) · [Documentation](INDEX.md) · [한국어](VIDEO.ko.md)
 
-[Capture path](#capture-path) · [Mode detection](#mode-detection) · [NV12, YUY2, and MJPEG](#nv12-yuy2-and-mjpeg) · [Frame rate](#frame-rate) · [40 fps capture](#40-fps-capture) · [Presentation](#presentation) · [P010 HDR10](#p010-hdr10) · [Pixel-perfect and resizing](#pixel-perfect-and-resizing) · [Scaling and multi-monitor behavior](#scaling-and-multi-monitor-behavior)
+[Capture path](#capture-path) · [Mode detection](#mode-detection) · [NV12, YUY2, and MJPEG](#nv12-yuy2-and-mjpeg) · [Frame rate](#frame-rate) · [Unlisted 30 fps](#unlisted-30-fps-requests) · [40 fps capture](#40-fps-capture) · [Presentation](#presentation) · [P010 HDR10](#p010-hdr10) · [Pixel-perfect and resizing](#pixel-perfect-and-resizing) · [Scaling and multi-monitor behavior](#scaling-and-multi-monitor-behavior)
 
 Keys in this guide are defaults. If you [change a shortcut](USAGE.md#changing-shortcuts),
 use its assigned key instead.
@@ -101,6 +101,21 @@ a stable 60 or 120 fps source provides lower video latency and smoother motion.
 When several valid source rates exist, a rate with an even cadence on the target
 display can improve VSync pacing—for example, 120 fps on a 120 or 240 Hz display.
 The source's real maximum rate still takes priority over monitor refresh rate.
+
+<br>
+
+### Unlisted 30 fps requests
+
+Enable **Video → Allow unlisted FPS**, select **Frame rate → 30 fps**, then **Start**.
+The option is off by default and applies to the selected resolution/pixel format, not only QHD.
+
+The separately colored **Direct request: 30 fps** line below mode detection is not a support confirmation.
+If the driver rejects the request or the connected format reports another rate, startup stops with a notice.
+After starting, check **Actual FPS** in Tab as well. This does not receive 60 fps and discard frames in the app.
+
+Disabling the option resets an added 30 fps selection to Auto; driver-listed 30 fps remains available.
+**40 fps capture** takes precedence, so turn it off before selecting 30 fps.
+Support varies by device and mode. [Startup troubleshooting](TROUBLESHOOTING.md#unlisted-30-fps-request-fails)
 
 <br>
 

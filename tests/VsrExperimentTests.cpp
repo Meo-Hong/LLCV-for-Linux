@@ -683,6 +683,12 @@ static void TestSettingsModeFlow() {
     state.displayResolutionCombo = combo(IDC_SETTINGS_DISPLAY_RESOLUTION);
     state.pixelFormatCombo = combo(IDC_SETTINGS_PIXEL_FORMAT);
     state.frameRateCombo = combo(IDC_SETTINGS_FRAME_RATE);
+    state.unlistedFpsCheck = CreateWindowW(L"BUTTON",L"",WS_CHILD | BS_AUTOCHECKBOX,
+        0,0,240,28,window,nullptr,wc.hInstance,nullptr);
+    state.videoCapabilityStatus = CreateWindowW(L"STATIC",L"",WS_CHILD,
+        0,0,376,76,window,nullptr,wc.hInstance,nullptr);
+    state.unlistedFpsStatus = CreateWindowW(L"STATIC",L"",WS_CHILD,
+        0,0,376,16,window,nullptr,wc.hInstance,nullptr);
     state.vsrCheck = CreateWindowW(L"BUTTON",L"",WS_CHILD | BS_AUTOCHECKBOX,
         0,0,200,30,window,nullptr,wc.hInstance,nullptr);
     state.startButton = CreateWindowW(L"BUTTON",L"Start",WS_CHILD,
@@ -715,6 +721,56 @@ static void TestSettingsModeFlow() {
     Require(state.videoModesPending && !IsWindowEnabled(state.startButton), "cannot start with stale modes");
     complete();
     Require(modeQueryCalls == 1 && state.pixelFormats.front().selectedFps == 144, "FPS follows capture size");
+    const auto rateRows=[&](int rate) {
+        int count=0;
+        for(LRESULT i=0;i<SendMessageW(state.frameRateCombo,CB_GETCOUNT,0,0);++i)
+            if(SendMessageW(state.frameRateCombo,CB_GETITEMDATA,i,0)==rate)++count;
+        return count;
+    };
+    Require(rateRows(30)==0, "unlisted 30fps is hidden by default");
+    Require(GetWindowTextLengthW(state.unlistedFpsStatus)==0,
+        "direct request hint is empty by default");
+    SendMessageW(state.unlistedFpsCheck,BM_SETCHECK,BST_CHECKED,0);
+    SendMessageW(window,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_UNLISTED_FPS,BN_CLICKED),0);
+    Require(rateRows(30)==1 && state.pixelFormats.size()==1,
+        "unlisted 30fps appears once without modifying detected capabilities");
+    Require(GetWindowTextLengthW(state.unlistedFpsStatus)>0,
+        "unlisted 30fps opt-in shows distinct direct request hint");
+    const auto countBefore=modeQueryCalls.load();
+    g_settings.capture40Fps=false;
+    g_settings.videoFrameRate=30;
+    SendMessageW(state.frameRateCombo,CB_SETCURSEL,static_cast<WPARAM>(-1),0);
+    PopulateFrameRateCombo(&state);
+    Require(SendMessageW(state.frameRateCombo,CB_GETITEMDATA,
+        SendMessageW(state.frameRateCombo,CB_GETCURSEL,0,0),0)==30 &&
+        RequestsExactCaptureRate() && RequestedVideoFrameRate()==30,
+        "saved 30fps is retained and requests strict negotiation");
+    g_settings.capture40Fps=true;
+    Require(RequestedVideoFrameRate()==40 && RequestsExactCaptureRate(),
+        "40fps override remains authoritative over selected 30fps");
+    g_settings.capture40Fps=false;
+    SendMessageW(state.unlistedFpsCheck,BM_SETCHECK,BST_UNCHECKED,0);
+    SendMessageW(window,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_UNLISTED_FPS,BN_CLICKED),0);
+    Require(rateRows(30)==0 && SendMessageW(state.frameRateCombo,CB_GETITEMDATA,
+        SendMessageW(state.frameRateCombo,CB_GETCURSEL,0,0),0)==0,
+        "disabling unlisted rates returns an unlisted 30fps selection to Auto");
+    Require(GetWindowTextLengthW(state.unlistedFpsStatus)==0,
+        "disabling unlisted rates clears the direct request hint");
+    g_settings.videoFrameRate=0;
+    Require(!RequestsExactCaptureRate(),"automatic frame rate does not enable direct-request policy");
+    state.pixelFormats.push_back({VideoPixelFormat::Nv12,30});
+    PopulateFrameRateCombo(&state);
+    Require(rateRows(30)==1 && modeQueryCalls==countBefore,
+        "driver-listed 30fps remains available with opt-in off and no extra queries");
+    SendMessageW(state.frameRateCombo,CB_SETCURSEL,2,0);
+    SendMessageW(state.unlistedFpsCheck,BM_SETCHECK,BST_CHECKED,0);
+    PopulateFrameRateCombo(&state);
+    Require(rateRows(30)==1,"driver-listed 30fps is not duplicated when opted in");
+    UpdateVideoCapabilityStatus(&state);
+    Require(GetWindowTextLengthW(state.unlistedFpsStatus)==0,
+        "driver-listed 30fps never appears as a synthetic request");
+    SendMessageW(state.unlistedFpsCheck,BM_SETCHECK,BST_UNCHECKED,0);
+    state.pixelFormats.pop_back();
     for (int i = 0; i < 50; ++i) {
         SendMessageW(state.displayResolutionCombo,CB_SETCURSEL,1 + i % 3,0);
         SendMessageW(window,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_DISPLAY_RESOLUTION,CBN_SELCHANGE),0);

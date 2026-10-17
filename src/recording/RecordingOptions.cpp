@@ -25,6 +25,7 @@ Options LoadOptions(const std::wstring& path){
     o.splitMode=static_cast<SplitMode>(number(L"SplitMode",0));
     o.splitSeconds=number(L"SplitSeconds",1800);o.splitMiB=number(L"SplitMiB",4096);
     o.videoMbps=number(L"VideoMbps",20);o.audioKbps=number(L"AudioKbps",192);
+    o.audioVolumePercent=number(L"AudioVolumePercent",100);
     // Older prototype profiles used only a target bitrate; preserve that intent.
     o.rateControl=static_cast<RateControl>(number(L"RateControl",existing?1:0));
     o.quality=static_cast<Quality>(number(L"Quality",1));
@@ -47,6 +48,7 @@ bool SaveOptions(const Options& o,const std::wstring& path){
     add(L"MaxHeight",std::to_wstring(o.maxHeight));add(L"SplitMode",std::to_wstring(static_cast<int>(o.splitMode)));
     add(L"SplitSeconds",std::to_wstring(o.splitSeconds));add(L"SplitMiB",std::to_wstring(o.splitMiB));
     add(L"VideoMbps",std::to_wstring(o.videoMbps));add(L"AudioKbps",std::to_wstring(o.audioKbps));
+    add(L"AudioVolumePercent",std::to_wstring(o.audioVolumePercent));
     add(L"RateControl",std::to_wstring(static_cast<int>(o.rateControl)));add(L"Quality",std::to_wstring(static_cast<int>(o.quality)));
     add(L"Folder",o.folder);add(L"Encoder",o.encoder);
     static std::atomic<unsigned> sequence=0;

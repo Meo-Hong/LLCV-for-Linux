@@ -249,9 +249,10 @@ void TestCaptureColorStartupFallback() {
         (9u << DXVA_VideoPrimariesShift) | (15u << DXVA_VideoTransFuncShift);
     constexpr DWORD hlgLeft = (pqLeft & ~(31u << DXVA_VideoTransFuncShift)) |
         (16u << DXVA_VideoTransFuncShift);
-    for (bool request40 : {false, true}) for (bool legacy : {false, true})
+    for (int requested : {60,30,40}) for (bool legacy : {false, true})
     for (DWORD flags : {pqLeft, hlgLeft}) {
-        g_settings.capture40Fps = request40;
+        g_settings.capture40Fps = requested==40;
+        g_settings.videoFrameRate = requested;
         FakeVideoPin pin;
         pin.modes = {{60}};
         pin.modes[0].subtype = MFVideoFormat_P010;
@@ -264,16 +265,16 @@ void TestCaptureColorStartupFallback() {
         int fps = 0;
         VideoPixelFormat format{};
         DirectShowColorMetadata candidate{}, effective{};
-        Require(SUCCEEDED(ConfigureVideoPin(&pin, 1920, 1080, request40 ? 40 : 60,
+        Require(SUCCEEDED(ConfigureVideoPin(&pin, 1920, 1080, requested,
             VideoPixelFormat::P010, bytes, stride, fps, format, candidate)),
             "production wrapper negotiates caps-only color driver");
-        Require(candidate.present == request40,
+        Require(candidate.present == (requested!=60),
             "ordinary capture retains its existing metadata lookup path");
         AM_MEDIA_TYPE* active = nullptr;
         Require(SUCCEEDED(GetActiveVideoPinFormat(&pin, &active)), "read active color fixture");
         Require(ResolveInitialVideoColorMetadata(&pin, active, format, 1920, 1080,
             fps, candidate, effective) && effective.controlFlags == flags,
-            "startup preserves caps-only color at ordinary 60 and unlisted 40fps");
+            "startup preserves caps-only color at ordinary 60 and unlisted 30/40fps");
         const auto input = llcv::hdr::ResolveInput(effective, false);
         Require(flags == pqLeft
             ? input.kind == llcv::hdr::InputKind::Hdr10 && !input.assumed &&
