@@ -1,4 +1,7 @@
 #include "capture/AudioSampleGrabber.h"
+#ifdef LLCV_RECORDING
+#include "recording/Recorder.h"
+#endif
 
 #include <algorithm>
 
@@ -131,6 +134,9 @@ STDMETHODIMP AudioSampleGrabberCallback::SampleCB(
     } else {
         ring_.PushConverted(data, frames, format_);
     }
+#ifdef LLCV_RECORDING
+    recording::recorder.Push(false, sample);
+#endif
     return S_OK;
 }
 

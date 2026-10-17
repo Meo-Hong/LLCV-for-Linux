@@ -16,10 +16,10 @@ Get one of the files from the [latest release](https://github.com/seria-aa/LowLa
   shortcut is created automatically; the desktop shortcut is optional.
 - **x64.zip — portable:** extract it, then run `LowLatencyCaptureViewer.exe`.
 
-**Updating to 2.0.5:** existing settings, installation paths, and default shortcuts
-are retained. Change shortcuts under **Guide & logs**; see
-[Changing shortcuts](#changing-shortcuts) and the [2.0.5 release notes](release-notes-v2.0.5.md).
-The optional **40 fps capture** setting introduced in [2.0.4](release-notes-v2.0.4.md)
+**Updating to 2.1.0:** existing installation paths and settings are retained.
+Adds SDR/stereo recording, exclusive fullscreen, independent display resolution and fullscreen positioning.
+[Recording guide](RECORDING.md) · [2.1.0 release notes](release-notes-v2.1.0.md)
+**40 fps capture**, added in [2.0.4](release-notes-v2.0.4.md),
 remains off by default; enable it under **Video** only when needed.
 Sleep prevention and earlier settings improvements are covered in the
 [2.0.3 release notes](release-notes-v2.0.3.md).
@@ -51,7 +51,7 @@ automatically,” no separate selection is needed.
 
 ## Finding your settings
 
-*The following settings examples are rendered directly from the 2.0.5 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
+*The following settings examples are rendered directly from the 2.1.0 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
 
 | <a id="video-settings"></a>Video settings | <a id="audio-settings"></a>Audio settings |
 | --- | --- |
@@ -66,7 +66,8 @@ automatically,” no separate selection is needed.
 
 </details>
 
-The sidebar separates **Video**, **Audio**, **Window**, **Guide & logs**, and **App**.
+The sidebar separates **Video**, **Audio**, **Recording**, **Window**, **Guide & logs**, and **App**.
+[Recording](RECORDING.md) contains codec, quality, size/rate limits, splitting and storage settings.
 Video contains capture/display settings, VSR, and 40 fps capture/screenshot options at the bottom.
 Audio contains output devices, buffers, volume options, audio-only mode, and LPCM 5.1.
 Window controls placement, resizing, borders, and cursor behavior.
@@ -106,13 +107,14 @@ change Windows power settings or disable screen savers or security locks.
 
 | Setting | Good starting choice |
 | --- | --- |
-| Capture resolution | **1920 × 1080** to start. With VSR enabled, this field becomes **Display resolution**; set input size separately in **VSR capture** |
+| Capture resolution | Start with **1920 × 1080**; this is the input size. |
+| Display resolution | Select independently of VSR. Fullscreen retains this video size with black margins. |
 | Pixel format | **Auto (NV12 preferred)** |
 | Frame rate | **Auto**, or the source's actual output rate |
 | 40 fps capture | **Off (default)**. Enable to request 40 fps instead of the normal frame-rate selection; support is checked at startup |
-| Presentation | **Immediate (minimum latency)**; **VSync (reduced tearing)** waits for refresh. **Compatibility (Blt + VSync)** uses an alternative output path, may add latency/GPU load, and does not support HDR10 |
+| Presentation | **Low latency (standard)** is the default for use alongside other apps. **Low latency (exclusive fullscreen)** may further reduce latency but limits use of other windows. **VSync (reduced tearing)** waits for refresh. **Compatibility (Blt + VSync)** uses an alternative output path, may add latency/GPU load, and does not support HDR10 |
 | Display monitor | **Auto (restore last position)**; select a monitor to choose the startup location. A missing monitor falls back to the primary display; moving the window afterward is still allowed |
-| Pixel-perfect / Lock display size | Without VSR, locks the source-sized window. With VSR, locks the selected display size. Turn off to resize manually |
+| Pixel-perfect / Lock display size | Locks the selected display size; 1:1 only when capture and display resolutions match. Turn off to resize manually |
 
 A 120 fps capture mode does not create extra visual information when the game
 does not output a new frame at that rate. Choose only frame rates that the
@@ -203,10 +205,10 @@ If you change one, use your assigned key instead.
    button again to cancel key entry.
 3. Choose **Start** to apply the changes. **Cancel** discards unapplied changes.
 
-All nine shortcuts can be changed, including **Leave fullscreen / Exit** (Esc).
+All ten shortcuts can be changed, including **Leave fullscreen / Exit** (Esc).
 None can be left empty. Duplicate bindings, modifier-only keys, Windows-key
 combinations, and some reserved combinations such as Alt+F4 cannot be assigned.
-**Reset defaults** restores all nine; choose **Start** to apply the reset.
+**Reset defaults** restores all ten; choose **Start** to apply the reset.
 
 Help, settings, and OSD labels show the assigned keys, and longer combinations
 expand the key column. Shortcuts act within LLCV, not globally in other apps.
@@ -230,22 +232,19 @@ Settings controls retain their normal navigation and editing keys.
 | `F6` | Toggle NVIDIA VSR request (video mode) |
 | `F1` | App information and shortcuts (Help/Exit keys close only the help window while it is active) |
 | `F12` | Save a source-resolution screenshot (video mode) |
-| `F11` | Toggle borderless fullscreen |
+| `F9` | Start / stop SDR/stereo recording during video playback |
+| `F11` | Toggle fullscreen (using the selected presentation mode) |
 | `Esc` | Leave shortcut-enabled fullscreen; close the app in windowed or automatic-fullscreen mode |
 | Mouse wheel over viewer | Change app volume in 5% steps |
 | Mouse wheel over an L/R card | Change that channel only (show the meter with `F3` in video mode) |
 | Double-click a master/L/R area in the audio-only view | Reset that volume to 100% |
 | `Shift` + drag | Temporarily bypass edge snap |
 
-Without VSR, Pixel-perfect maps one video pixel to one display pixel for a sharper image,
-but fixes the window size. With it off, the window can be resized freely while
-keeping the aspect ratio; choose Smooth or Sharp scaling in settings.
-In Pixel-perfect fullscreen, video that fits is centered at its original size;
-only video larger than the display is scaled down, keeping its aspect ratio.
-With VSR enabled in settings, the control becomes **Lock display size**: it keeps
-the selected display resolution, which can differ from the capture resolution.
-It does not mean 1:1 source pixels when the two sizes differ; use F5 to restore
-source size. F6 does not switch between these size policies during playback.
+**Pixel-perfect / Lock display size** keeps the selected display size. Matching capture and display
+resolutions gives 1:1 pixels; turn this off to resize the window while retaining aspect ratio.
+Borderless and exclusive fullscreen retain the selected display size with black margins.
+Choose **Fullscreen video position** under **Window** for center/edge positioning. Oversized video
+is fitted without cropping. F5 restores input size, while F6 changes only the VSR effect.
 
 **Hide title bar** removes windowed-mode borders and is separate from `F11`
 fullscreen. **Keep relative window size when moving monitors** maintains similar
@@ -293,8 +292,8 @@ automatically; accepting the prompt opens the installer link in your browser.
 **Since 2.0.1:** HDR10/YUY2 + VSR support below is not included in v2.0.0.
 
 At startup, the viewer checks its default D3D11 rendering adapter once, before
-showing settings. On Intel/AMD or an unidentified adapter, VSR and its capture-size
-selector are disabled; F6 cannot enable it. Identification failure has a separate
+showing settings. On Intel/AMD or an unidentified adapter, VSR is disabled; capture and display
+resolution choices remain available; F6 cannot enable it. Identification failure has a separate
 message. This vendor check does not certify RTX support or actual enhancement,
 does not change GPU selection, and is not repeated on tab changes or per frame.
 
@@ -302,8 +301,8 @@ The **Video** page has an opt-in NVIDIA VSR checkbox and a **Setup guide**
 button. VSR defaults to OFF; the checkbox and F6 preference are saved on normal
 exit. Supported viewer routes are NV12/YUY2 SDR, MJPEG decoded to NV12, and P010 HDR10
 displayed at the source size or larger. Same-size output can request native-resolution
-de-artifacting. With VSR enabled in settings, the main resolution selects display
-size and **VSR capture** selects the input resolution independently. **Lock display
+de-artifacting. **Capture resolution** selects the input, while **Display resolution** independently
+selects the video size, whether VSR is on or off. **Lock display
 size** keeps that selected window size; disable it for manual resizing. F6 changes
 only the effect, without restarting capture or changing either resolution. F5
 restores source-size display. Detected formats/FPS and screenshots follow the input
@@ -319,7 +318,7 @@ If a driver accepts the VSR request but cannot process the frame, the viewer
 turns VSR off and retries that frame once, preserving the HDR route. The request
 status reports rejection; ordinary HDR rendering errors are not suppressed.
 
-For example, choose **VSR capture: 1920 × 1080** and **Display resolution: 2560 × 1440**
+For example, choose **Capture resolution: 1920 × 1080** and **Display resolution: 2560 × 1440**
 for 1080p capture in a 1440p-sized window. Choose 1920 × 1080 for both to request
 same-size processing. These options configure the viewer/capture path; they do
 not change the console's HDMI output mode or the monitor's desktop resolution.
@@ -410,7 +409,7 @@ cannot be guaranteed.
 ### Viewing HDR
 
 Enable HDR on the source, select **P010 10-bit HDR10**, and enable **Windows HDR
-on the monitor displaying the app**. Use Immediate or VSync presentation.
+on the monitor displaying the app**. Use low latency or VSync presentation.
 An HDR passthrough display does not by itself mean the PC view is also HDR.
 
 - P010 is **HDR-only** in this app. For normal SDR input, choose Auto or NV12/YUY2.

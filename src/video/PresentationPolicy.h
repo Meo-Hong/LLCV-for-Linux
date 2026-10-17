@@ -7,7 +7,8 @@ namespace llcv::presentation {
 
 using Mode = settings::PresentationMode;
 
-constexpr bool UsesVSync(Mode mode) { return mode != Mode::AllowTearing; }
+constexpr bool IsExclusive(Mode mode) { return mode == Mode::ExclusiveFullscreen; }
+constexpr bool UsesVSync(Mode mode) { return mode == Mode::VSync || mode == Mode::Compatibility; }
 constexpr bool IsCompatibility(Mode mode) { return mode == Mode::Compatibility; }
 // P010 is HDR-only even when Force HDR10 is off. Audio-only has no video output.
 constexpr bool SupportsCapture(Mode mode, settings::VideoPixelFormat format,
@@ -18,12 +19,19 @@ constexpr const wchar_t* PathName(Mode mode) {
     return IsCompatibility(mode) ? L"Blt-discard" : L"Flip-discard";
 }
 constexpr const wchar_t* ModeName(Mode mode) {
-    return IsCompatibility(mode) ? L"Blt + VSync"
+    return IsExclusive(mode) ? L"Exclusive fullscreen"
+         : IsCompatibility(mode) ? L"Blt + VSync"
          : UsesVSync(mode) ? L"VSync" : L"Immediate";
 }
 
-// Keep the original flip path unchanged. The opt-in SDR comparison path has
-// neither tearing nor flip-only waitable-object flags; it is never exclusive.
+constexpr UINT PresentFlags(Mode mode, bool actualExclusive, bool tearingSupported) {
+    // ALLOW_TEARING is valid only for an interval-zero windowed Present.
+    return !actualExclusive && !UsesVSync(mode) && tearingSupported
+        ? DXGI_PRESENT_ALLOW_TEARING : 0u;
+}
+
+// Existing modes retain their original descriptors. The opt-in exclusive
+// chain omits the D3D11 windowed-only waitable-object flag.
 inline DXGI_SWAP_CHAIN_DESC1 Description(Mode mode, UINT width, UINT height,
                                          bool hdr, bool tearingSupported) {
     const bool compatibility = IsCompatibility(mode);
@@ -40,7 +48,8 @@ inline DXGI_SWAP_CHAIN_DESC1 Description(Mode mode, UINT width, UINT height,
                                    : DXGI_SWAP_EFFECT_FLIP_DISCARD;
     desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
     if (!compatibility) {
-        desc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+        // D3D11 exclusive chains cannot carry the waitable-object flag.
+        desc.Flags = IsExclusive(mode) ? 0 : DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
         if (tearingSupported) desc.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
     }
     return desc;

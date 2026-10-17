@@ -14,8 +14,23 @@ using namespace control_id;
 using settings::AudioMode;
 using settings::DriftCorrectionMode;
 using settings::FullscreenCursorMode;
-using settings::PresentationMode;
 using settings::ScalingMode;
+
+void ApplyResolutionSelections(const SettingsControls& state,
+                              std::span<const settings::VideoPresetInfo> presets,
+                              settings::AppSettings& settings) {
+    const LRESULT capture = SendMessageW(state.videoCombo, CB_GETCURSEL, 0, 0);
+    const LRESULT display = SendMessageW(state.displayResolutionCombo, CB_GETCURSEL, 0, 0);
+    if (capture >= 0 && static_cast<size_t>(capture) < presets.size()) {
+        settings.capturePreset = presets[capture].preset;
+    }
+    if (display >= 0 && static_cast<size_t>(display) < presets.size())
+        settings.videoPreset = presets[display].preset;
+    if (state.fullscreenPositionCombo) {
+        const LRESULT position = SendMessageW(state.fullscreenPositionCombo, CB_GETCURSEL, 0, 0);
+        settings.fullscreenVideoPosition = settings::FullscreenPositionFromIndex(static_cast<int>(position));
+    }
+}
 
 void PopulateCaptureDevicePicker(HWND picker, std::span<const capture::DeviceInfo> devices,
                                  const std::wstring& selected, bool audio, bool english) {
@@ -63,6 +78,9 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     if (state->tabControl) {
         const wchar_t* labels[] = {
             initial.english ? L"Video" : L"영상", text(L"오디오"),
+#ifdef LLCV_RECORDING
+            initial.english ? L"Recording" : L"녹화",
+#endif
             initial.english ? L"Window" : L"창",
             initial.english ? L"Guide & logs" : L"도움말 · 진단",
             initial.english ? L"App" : L"앱 설정"};
@@ -420,16 +438,16 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
         340, 444, 120, 26, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_VSR_GUIDE)), instance, nullptr);
-    state->vsrCaptureLabel = makeLabel(initial.english ? L"VSR capture" : L"VSR 캡처 해상도", 576, 420);
-    state->vsrCaptureCombo = CreateWindowExW(0, L"COMBOBOX", nullptr,
+    state->displayResolutionLabel = makeLabel(initial.english ? L"Display resolution" : L"표시 해상도", 576, 420);
+    state->displayResolutionCombo = CreateWindowExW(0, L"COMBOBOX", nullptr,
         kSettingsDropdownStyle,
         748, 416, 178, 150, hwnd,
-        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_VSR_CAPTURE)), instance, nullptr);
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_DISPLAY_RESOLUTION)), instance, nullptr);
     for (const auto& preset : initial.videoPresets) {
-        const LRESULT index = SendMessageW(state->vsrCaptureCombo, CB_ADDSTRING, 0,
+        const LRESULT index = SendMessageW(state->displayResolutionCombo, CB_ADDSTRING, 0,
             reinterpret_cast<LPARAM>(preset.label));
-        if (preset.preset == initial.settings.vsrCapturePreset)
-            SendMessageW(state->vsrCaptureCombo, CB_SETCURSEL, index, 0);
+        if (preset.preset == initial.initialVideoPreset)
+            SendMessageW(state->displayResolutionCombo, CB_SETCURSEL, index, 0);
     }
     state->vsrStatus = makeLabel(initial.english
         ? L"SDR / HDR10 · Toggle with F6"
@@ -509,15 +527,15 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                  reinterpret_cast<LPARAM>(
                      llcv::presentation_ui::VSyncLabel(
                          initial.english)));
-    SendMessageW(state->presentationCombo, CB_SETCURSEL,
-                 initial.settings.presentationMode == PresentationMode::VSync
-                     ? 1 : 0, 0);
     SendMessageW(state->presentationCombo, CB_ADDSTRING, 0,
                  reinterpret_cast<LPARAM>(
                      llcv::presentation_ui::CompatibilityLabel(initial.english)));
-    if (initial.settings.presentationMode == PresentationMode::Compatibility) {
-        SendMessageW(state->presentationCombo, CB_SETCURSEL, 2, 0);
-    }
+    SendMessageW(state->presentationCombo, CB_ADDSTRING, 0,
+                 reinterpret_cast<LPARAM>(
+                     llcv::presentation_ui::ExclusiveFullscreenLabel(initial.english)));
+    SendMessageW(state->presentationCombo, CB_SETCURSEL,
+                 llcv::presentation_ui::SelectionFromMode(
+                     initial.settings.presentationMode), 0);
     state->displayMonitorLabel = makeLabel(
         initial.english ? L"Display monitor" : L"표시 모니터", 505, 124);
     state->displayMonitorCombo = CreateWindowExW(
@@ -596,8 +614,9 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                      reinterpret_cast<LPARAM>(info.label));
     }
     size_t selectedVideo = 0;
+    const auto capturePreset = initial.settings.capturePreset;
     for (size_t i = 0; i < initial.videoPresets.size(); ++i) {
-        if (initial.videoPresets[i].preset == initial.initialVideoPreset) {
+        if (initial.videoPresets[i].preset == capturePreset) {
             selectedVideo = i;
             break;
         }
@@ -661,9 +680,31 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                  0);
     state->fullscreenCursorHint = CreateWindowExW(
         0, L"STATIC",
-        text(L"F11  보더리스 전체화면 켜기/끄기"),
+        text(L"F11  전체화면 켜기/끄기"),
         WS_CHILD | WS_VISIBLE | SS_RIGHT,
         630, 364, 255, 24, hwnd, nullptr, instance, nullptr);
+
+    state->fullscreenPositionLabel = makeLabel(
+        initial.english ? L"Fullscreen video position" : L"전체화면 영상 위치", 600, 316);
+    state->fullscreenPositionCombo = CreateWindowExW(0, L"COMBOBOX", nullptr,
+        kSettingsDropdownStyle, 600, 340, 376, 300, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_FULLSCREEN_POSITION)), instance, nullptr);
+    const wchar_t* positionKo[] = {L"중앙", L"왼쪽 위", L"위", L"오른쪽 위", L"왼쪽",
+        L"오른쪽", L"왼쪽 아래", L"아래", L"오른쪽 아래"};
+    const wchar_t* positionEn[] = {L"Center", L"Top left", L"Top", L"Top right", L"Left",
+        L"Right", L"Bottom left", L"Bottom", L"Bottom right"};
+    static_assert(std::size(positionKo) == settings::kFullscreenVideoPositionCount);
+    static_assert(std::size(positionEn) == settings::kFullscreenVideoPositionCount);
+    for (int i = 0; i < settings::kFullscreenVideoPositionCount; ++i)
+        SendMessageW(state->fullscreenPositionCombo, CB_ADDSTRING, 0,
+            reinterpret_cast<LPARAM>(initial.english ? positionEn[i] : positionKo[i]));
+    SendMessageW(state->fullscreenPositionCombo, CB_SETCURSEL,
+        static_cast<int>(settings::FullscreenPositionFromIndex(
+            static_cast<int>(initial.settings.fullscreenVideoPosition))), 0);
+    state->fullscreenPositionHint = CreateWindowExW(0, L"STATIC",
+        initial.english ? L"Applies in exclusive / borderless fullscreen.\r\nOversized video is reduced to fit."
+                        : L"독점·보더리스 전체화면에 적용합니다.\r\n화면보다 크면 잘리지 않도록 축소합니다.",
+        WS_CHILD | WS_VISIBLE, 600, 380, 376, 40, hwnd, nullptr, instance, nullptr);
 
     state->forceHdr10Check = CreateWindowExW(
         0, L"BUTTON", text(
@@ -767,8 +808,8 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     SendMessageW(state->pixelCheck, BM_SETCHECK,
                  initial.settings.pixelPerfect ? BST_CHECKED : BST_UNCHECKED, 0);
     AddSettingsTooltip(state, hwnd, state->pixelCheck, initial.english
-        ? L"Locks the selected size. With VSR enabled, this is display size; otherwise it is 1:1 capture size. Relative-size behavior across monitors is separate."
-        : L"선택한 크기로 창을 고정합니다. VSR을 켜면 표시 해상도, 끄면 입력 1:1 크기입니다. 모니터 이동 시 상대적 창 크기 유지는 별도 옵션입니다.");
+        ? L"Locks the selected display size, with or without VSR. Matching capture and display sizes give 1:1 pixels. Relative-size behavior across monitors is separate."
+        : L"VSR 사용 여부와 관계없이 선택한 표시 크기로 창을 고정합니다. 캡처와 표시 해상도가 같으면 1:1 크기입니다. 모니터 이동 시 상대적 창 크기 유지는 별도 옵션입니다.");
 
     state->relativeSizeCheck = CreateWindowExW(
         0, L"BUTTON", initial.english ? L"Keep window size proportional across monitors" : L"모니터에 맞춰 상대적 창 크기 유지",
@@ -889,7 +930,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         state->presentationLabel, state->presentationCombo, state->presentationHelp,
         state->displayMonitorLabel, state->displayMonitorCombo, state->pixelCheck,
         state->scalingLabel, state->scalingCombo,
-        state->vsrCheck, state->vsrGuideButton, state->vsrCaptureLabel, state->vsrCaptureCombo, state->vsrStatus,
+        state->displayResolutionLabel, state->displayResolutionCombo, state->vsrCheck, state->vsrGuideButton, state->vsrStatus,
         state->screenshotTitle, state->screenshotClipboardCheck,
         state->screenshotFolderButton, state->screenshotHelp,
 
@@ -910,6 +951,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         // Keep the hint above the combo in Z order, including before layout's
         // existing hint-to-front safeguard, and the actual label next to it.
         state->fullscreenCursorHint, state->fullscreenCursorLabel, state->fullscreenCursorCombo,
+        state->fullscreenPositionLabel, state->fullscreenPositionCombo, state->fullscreenPositionHint,
 
         state->guideShortcutsTitle, state->shortcutResetButton, state->guideVideoHint,
         state->guideDiagnosticsTitle, state->guideDiagnosticsText,

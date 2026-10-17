@@ -5,7 +5,7 @@
 HDMI 캡처보드로 들어오는 영상과 소리를 재생하는 Windows용 저지연 뷰어입니다.
 OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리만 들을 수 있습니다.
 
-**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.0.5.md) · [English](README.md)
+**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.1.0.md) · [English](README.md)
 
 <br>
 
@@ -13,23 +13,24 @@ OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리�
 | --- | --- |
 | [![영상 설정](docs/images/settings-video.png)](docs/images/settings-video.png) | [![오디오 설정](docs/images/settings-audio.png)](docs/images/settings-audio.png) |
 
-<sub>2.0.5 UI 코드로 렌더링한 설정 예시입니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
+<sub>2.1.0 UI 코드로 렌더링한 설정 예시입니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
 
 <br>
 
-## 2.0.5 업데이트
+## 2.1.0 업데이트
 
-**도움말·진단**에서 Esc를 포함한 단축키 9개를 바꾸거나 기본값으로 복원할 수 있습니다.
-Ctrl·Alt·Shift 조합을 지원하며, 안내창·설정·OSD에도 변경한 키를 표시합니다.
-기존 단축키 기본값과 설정은 유지합니다.
-[단축키 변경 방법](docs/USAGE.ko.md#단축키-변경) · [전체 변경 내역](docs/release-notes-v2.0.5.md)
+SDR 영상·스테레오 **녹화**를 추가했습니다. H.264·HEVC·AV1 중 지원되는 코덱과
+품질·비트레이트를 선택하고, 일시정지와 자동 파일 분할을 사용할 수 있습니다.
+**독점 전체화면**, VSR과 독립된 **표시 해상도**, 전체화면 영상 위치 설정도 추가했습니다.
+[녹화 사용 방법](docs/RECORDING.ko.md) · [전체 변경 내역](docs/release-notes-v2.1.0.md)
 
 <br>
 
 ## 설치 및 실행
 
 Windows 10/11 x64와 캡처보드 드라이버가 필요합니다.
-별도 코덱 팩·FFmpeg·Visual C++ 재배포 패키지는 설치하지 않아도 됩니다.
+별도 코덱 팩·Visual C++ 재배포 패키지는 설치하지 않아도 됩니다.
+녹화에 필요한 FFmpeg 저장 라이브러리는 배포본에 포함되어 있습니다.
 
 [최신 릴리스](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)에서 **Setup.exe**로 끝나는 설치 파일을 받으세요.
 설치 없이 쓰려면 **x64.zip**을 풀고 `LowLatencyCaptureViewer.exe`를 실행하면 됩니다.
@@ -38,7 +39,7 @@ Windows 10/11 x64와 캡처보드 드라이버가 필요합니다.
 2. LLCV에서 **캡처 장치**를 확인하고 **시작**을 누릅니다.
 3. 소리가 나오지 않으면 **캡처 오디오 장치**를 확인하세요.
 
-<kbd>F1</kbd> 도움말 · <kbd>F2</kbd> 설정 · <kbd>F6</kbd> VSR · <kbd>F11</kbd> 전체화면 · <kbd>F12</kbd> 스크린샷 · <kbd>Tab</kbd> 진단
+<kbd>F1</kbd> 도움말 · <kbd>F2</kbd> 설정 · <kbd>F6</kbd> VSR · <kbd>F9</kbd> 녹화 · <kbd>F11</kbd> 전체화면 · <kbd>F12</kbd> 스크린샷 · <kbd>Tab</kbd> 진단
 
 위 키는 기본값이며, **도움말·진단**에서 변경할 수 있습니다.
 
@@ -46,11 +47,12 @@ Windows 10/11 x64와 캡처보드 드라이버가 필요합니다.
 
 ## 지원 기능
 
-- 최신 프레임 우선 표시, 저지연·VSync 출력
+- 최신 프레임 우선 표시, 저지연 출력(일반·독점 전체화면)과 VSync
 - NV12/YUY2, MJPEG, P010 HDR10 입력
 - 드라이버가 지원하는 조합에서 선택적으로 40fps 캡처
 - NVIDIA VSR (실험적), 캡처·표시 해상도 개별 설정
 - WASAPI Shared·Exclusive, ASIO, 콘솔 LPCM 5.1, 오디오 전용 모드
+- SDR·스테레오 MP4 녹화 — 코덱·품질 설정, 일시정지, 자동 분할
 - 입력 해상도 PNG 스크린샷과 클립보드 복사
 - 재생 중 자동 절전 방지 — 오디오 전용 모드에서는 화면 꺼짐 허용
 - 다크·라이트 테마, 전체화면, 창 크기 고정, 음량 조절, 한국어·영어
@@ -68,6 +70,7 @@ VSR 동작은 GPU·드라이버에 따라 다르며 지연이 늘 수 있습니�
 [전체 문서 목록](docs/INDEX.ko.md)에서 릴리스 노트와 개발·검증 기록도 확인할 수 있습니다.
 
 - [사용 가이드](docs/USAGE.ko.md) — 설정, 절전 방지, 단축키, VSR, 스크린샷
+- [녹화](docs/RECORDING.ko.md) — 지원 조건, 품질·용량, 분할·파일 보호
 - [영상·HDR](docs/VIDEO.ko.md) / [오디오·5.1](docs/AUDIO.ko.md)
 - [문제 해결](docs/TROUBLESHOOTING.ko.md) / [진단·로그](docs/DIAGNOSTICS.ko.md) / [소스 빌드](docs/BUILDING.ko.md)
 

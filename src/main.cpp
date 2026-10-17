@@ -51,6 +51,10 @@
 #include "capture/AudioSampleGrabber.h"
 #include "capture/DirectShowGraphResources.h"
 #include "capture/LatestVideoSample.h"
+#ifdef LLCV_RECORDING
+#include "recording/Recorder.h"
+#include "recording/RecordingGpuIndicator.h"
+#endif
 #include "capture/HardwareToneMapping.h"
 #include "diagnostics/Logger.h"
 #include "diagnostics/AudioErrorHistory.h"
@@ -65,10 +69,16 @@
 #include "ui/OverlayStyle.h"
 #include "ui/AudioOnlyView.h"
 #include "ui/PresentationModeUi.h"
+#include "video/VideoClearPolicy.h"
+#include "video/VideoPlacement.h"
+#include "video/ExclusivePresentationState.h"
 #include "ui/SettingsView.h"
 #include "ui/SettingsTheme.h"
 #include <dwmapi.h>
 #include "ui/SettingsModeCache.h"
+#ifdef LLCV_RECORDING
+#include "recording/RecordingSettingsView.h"
+#endif
 #include "ui/SettingsDialogControls.h"
 #include "ui/UiText.h"
 #include "video/OutputTransitionState.h"
@@ -137,9 +147,9 @@ constexpr int kSampleRate = 48000;
 constexpr int kChannels = 2;
 constexpr int kBitsPerSample = 16;
 #ifdef LLCV_VSR_EXPERIMENT
-constexpr wchar_t kAppVersionLabel[] = L"v2.0.5-vsr-test";
+constexpr wchar_t kAppVersionLabel[] = L"v2.1.0-vsr-test";
 #else
-constexpr wchar_t kAppVersionLabel[] = L"v2.0.5";
+constexpr wchar_t kAppVersionLabel[] = L"v2.1.0";
 #endif
 
 constexpr int kRecommendedCaptureBufferMs = 20;
@@ -222,7 +232,72 @@ static AudioMode ActiveAudioMode() {
 static bool g_exclusiveStartupFallback = false;
 static AudioMode g_exclusiveStartupRequestedMode = AudioMode::WasapiShared;
 static std::atomic<bool> g_fullscreen{false};
+// F5 may temporarily request source-size fullscreen without changing the
+// saved display resolution. Read only when configuring output geometry.
+static std::atomic<bool> g_fullscreenSourceSize{false};
 static std::atomic<uint64_t> g_outputConfigurationGeneration{0};
+// UI publishes intent. Only the render owner calls DXGI. Never wait for a
+// render acknowledgement while dispatching window messages: DXGI can send
+// synchronous messages back to this UI thread.
+static std::atomic<uint64_t> g_presentationRevision{1};
+static std::atomic<bool> g_presentationActive{false};
+static std::atomic<bool> g_presentationMinimized{false};
+static std::atomic<bool> g_presentationBlocked{false};
+static std::atomic<bool> g_presentationClosing{false};
+static std::atomic<bool> g_videoOutputThreadActive{false};
+static std::atomic<bool> g_running{true};
+enum class DeferredPresentationUi { None, Help, RecordingSettings, ClosePrompt };
+static constexpr UINT WM_PRESENTATION_UI_READY = WM_APP + 97;
+static std::atomic<DeferredPresentationUi> g_deferredPresentationUi{DeferredPresentationUi::None};
+static std::atomic<UINT_PTR> g_deferredPresentationSerial{0};
+static std::mutex g_deferredPresentationMutex;
+static UINT_PTR g_presentationUiSerial = 0;
+static bool g_presentationUiPending = false; // UI owner only
+static MSG g_deferredHelpMessage{};
+static unsigned g_deferredHelpModifiers = 0;
+static bool ExclusiveOutputSelected() {
+    return !g_settings.audioOnly && llcv::presentation::IsExclusive(g_settings.presentationMode);
+}
+static void NotifyPresentationChange() {
+    if (ExclusiveOutputSelected()) g_presentationRevision.fetch_add(1,std::memory_order_release);
+}
+static HWND PresentationWindow(HWND host) {
+    return ExclusiveOutputSelected() ? GetAncestor(host,GA_ROOT) : host;
+}
+
+static bool DeferPresentationUi(DeferredPresentationUi action, const MSG* help = nullptr,
+                                unsigned modifiers = 0) {
+    if (!ExclusiveOutputSelected() || !g_videoOutputThreadActive.load(std::memory_order_acquire))
+        return false;
+    if (!g_running.load(std::memory_order_acquire) || g_presentationClosing.load(std::memory_order_acquire))
+        return true;
+    if (g_presentationUiPending && action != DeferredPresentationUi::ClosePrompt) return true;
+    g_presentationUiPending = true;
+    if (help) { g_deferredHelpMessage = *help; g_deferredHelpModifiers = modifiers; }
+    g_presentationBlocked.store(true, std::memory_order_release);
+    {
+        // Publish the ticket and action as one request. No DXGI/window call is
+        // made under this lock, and normal frame submission never acquires it.
+        std::lock_guard<std::mutex> lock(g_deferredPresentationMutex);
+        g_deferredPresentationSerial.store(++g_presentationUiSerial, std::memory_order_release);
+        g_deferredPresentationUi.store(action, std::memory_order_release);
+    }
+    NotifyPresentationChange();
+    return true;
+}
+
+static DeferredPresentationUi TakeDeferredPresentationUi(UINT_PTR& serial) {
+    std::lock_guard<std::mutex> lock(g_deferredPresentationMutex);
+    serial = g_deferredPresentationSerial.load(std::memory_order_acquire);
+    return g_deferredPresentationUi.exchange(DeferredPresentationUi::None, std::memory_order_acq_rel);
+}
+
+static void RefreshPresentationUiBlock() {
+    if (!ExclusiveOutputSelected()) return;
+    const bool blocked = g_presentationUiPending || g_viewerHelp.Handle() != nullptr;
+    if (g_presentationBlocked.exchange(blocked, std::memory_order_acq_rel) != blocked)
+        NotifyPresentationChange();
+}
 
 static bool IsEnglishUi() {
     if (g_settings.uiLanguage == UiLanguage::English) return true;
@@ -265,7 +340,6 @@ constexpr size_t kRingFrames = 48000 / 2;
 
 static HWND g_videoHost = nullptr;
 static bool g_suppressSettingsSave = false;
-static std::atomic<bool> g_running{true};
 static llcv::update::UpdateCheckTask g_updateCheckTask;
 static std::atomic<bool> g_restartToSettings{false};
 static std::atomic<uint64_t> g_videoCapturedFrames{0};
@@ -274,6 +348,7 @@ static std::atomic<uint64_t> g_videoReplacedFrames{0};
 static std::atomic<int64_t> g_videoAppLatencyUs{-1};
 static std::atomic<int> g_videoConfiguredFps{0};
 static std::atomic<bool> g_videoTearing{false};
+static std::atomic<bool> g_videoExclusiveActive{false};
 static std::atomic<bool> g_directVideoActive{false};
 static std::atomic<HRESULT> g_captureFailureHr{S_OK};
 static std::atomic<bool> g_captureGraphStopped{false};
@@ -324,6 +399,47 @@ enum class TransientHudContent { Volume, OneToOne, OneToOneUnavailable,
 #endif
 };
 static void ShowTransientHud(TransientHudContent content);
+static bool HandleViewerShortcut(HWND hwnd,WPARAM key,LPARAM flags,unsigned modifiers);
+#ifdef LLCV_RECORDING
+// UI-thread only. Startup/finalization remain asynchronous on the writer.
+static bool g_recordingClosePending=false;
+static bool g_recordingDrainPending=false;
+static bool g_recordingClosePrompt=false;
+static bool g_recordingShutdownBlocked=false;
+static uint64_t g_recordingCloseWarningAt=0;
+static constexpr UINT WM_RECORDING_CAPTURE_ENDED=WM_APP+94;
+static HWND g_recordingSettingsWindow=nullptr;
+static std::optional<llcv::recording::Capabilities> g_recordingCapabilities;
+static int g_requestedSettingsTab=-1;
+static void UpdateViewerRecordingIndicator(const llcv::recording::Snapshot& snapshot) {
+    if (ExclusiveOutputSelected()) {
+        llcv::recording::PublishGpuIndicator(snapshot, IsEnglishUi(),
+            g_settings.settingsLightTheme, GetDpiForWindow(PresentationWindow(g_videoHost)));
+    } else {
+        llcv::recording::UpdateRecordingIndicator(g_videoHost, snapshot);
+    }
+}
+
+static bool HandleGpuRecordingMouse(HWND hwnd, UINT message, LPARAM parameter) {
+    if (!ExclusiveOutputSelected()) return false;
+    RECT client{};
+    if (!GetClientRect(hwnd, &client)) return false;
+    const UINT width = static_cast<UINT>((std::max)(0L, client.right));
+    const UINT height = static_cast<UINT>((std::max)(0L, client.bottom));
+    if (message == WM_LBUTTONUP)
+        return llcv::recording::HandleGpuIndicatorClick(hwnd, width, height,
+            GET_X_LPARAM(parameter), GET_Y_LPARAM(parameter));
+    if (message == WM_SETCURSOR && LOWORD(parameter) == HTCLIENT) {
+        POINT point{};
+        if (GetCursorPos(&point) && ScreenToClient(hwnd, &point) &&
+            llcv::recording::GpuIndicatorHitTest(width, height, point.x, point.y)) {
+            SetCursor(LoadCursorW(nullptr, IDC_HAND));
+            return true;
+        }
+    }
+    return false;
+}
+#endif
 #ifdef LLCV_VSR_FEATURE
 static bool HandleVsrTestKey(WPARAM key, LPARAM flags, unsigned modifiers=keys::Modifiers()) {
     if (!keys::Match(g_settings.shortcuts,keys::Action::Vsr,static_cast<UINT>(key),modifiers)) return false;
@@ -729,7 +845,7 @@ static int RunExclusiveCompatibilityProbeCli(bool allEndpoints) {
 }
 
 static bool g_resolutionPlanLatched = false;
-static bool g_vsrResolutionPlan = false;
+static bool g_splitResolutionPlan = false;
 static VideoPreset g_capturePreset = VideoPreset::R1920x1080;
 
 static const VideoPresetInfo& VideoPresetDetails(VideoPreset preset) {
@@ -745,18 +861,20 @@ static const VideoPresetInfo& CurrentVideoPreset() {
 
 static const VideoPresetInfo& CurrentCapturePreset() {
     return VideoPresetDetails(g_resolutionPlanLatched ? g_capturePreset :
-        (g_settings.vsrEnabled && !g_settings.audioOnly ? g_settings.vsrCapturePreset : g_settings.videoPreset));
+        g_settings.capturePreset);
 }
 
 static void LatchVideoResolutionPlan() {
-    g_vsrResolutionPlan = g_settings.vsrEnabled && !g_settings.audioOnly;
-    g_capturePreset = g_vsrResolutionPlan ? g_settings.vsrCapturePreset : g_settings.videoPreset;
+    g_fullscreenSourceSize.store(false, std::memory_order_release);
+    g_capturePreset = g_settings.capturePreset;
+    g_splitResolutionPlan = !g_settings.audioOnly &&
+        VideoPresetDetails(g_capturePreset).preset != CurrentVideoPreset().preset;
     g_resolutionPlanLatched = true;
 }
 
 static bool SourcePixelPerfect() {
     return g_settings.pixelPerfect &&
-        (!g_vsrResolutionPlan || CurrentCapturePreset().preset == CurrentVideoPreset().preset);
+        CurrentCapturePreset().preset == CurrentVideoPreset().preset;
 }
 
 static int RequestedVideoFrameRate() {
@@ -1984,6 +2102,9 @@ struct DirectD3D11Renderer {
     ID3D11Buffer* hdrOverlayConstants = nullptr;
     IDWriteFactory* dwriteFactory = nullptr;
     llcv::overlay_ui::Fonts overlayFonts;
+#ifdef LLCV_RECORDING
+    llcv::recording::GpuIndicator recordingIndicator;
+#endif
     IDWriteTextFormat* osdTextFormat = nullptr;
     IDWriteTextFormat* volumeTextFormat = nullptr;
     IDWriteTextFormat* audioTextFormat = nullptr;
@@ -1995,8 +2116,12 @@ struct DirectD3D11Renderer {
     float volumePanelTop = 0.0f;
     UINT outputWidth = 0;
     UINT outputHeight = 0;
-    bool pixelPerfectFullscreen = false;
+    bool fullscreenDisplaySize = false;
     bool pixelPerfectBorders = false;
+    bool skipRedundantBorderClear = false;
+    bool exclusiveActive = false;
+    uint64_t presentationRevision = 0;
+    llcv::exclusive_presentation::AttemptGate exclusiveAttempts;
     uint64_t outputConfigurationGeneration = 0;
     uint64_t cachedOverlayGeneration = 0;
     unsigned cachedOverlayMask = 0;
@@ -2158,6 +2283,13 @@ struct DirectD3D11Renderer {
 #endif
 
     void reset() {
+        if (swapChain && llcv::presentation::IsExclusive(g_settings.presentationMode)) {
+            const HRESULT leave = swapChain->SetFullscreenState(FALSE, nullptr);
+            if (FAILED(leave)) LogHr(L"Leave exclusive output during renderer reset",leave);
+        }
+        exclusiveActive=false;presentationRevision=0;exclusiveAttempts.Reset();
+        g_videoExclusiveActive.store(false, std::memory_order_release);
+        skipRedundantBorderClear=false;
         volumePanelHeight = 82.0f;
         volumePanelTop = 0.0f;
 #ifdef LLCV_VSR_FEATURE
@@ -2221,6 +2353,9 @@ struct DirectD3D11Renderer {
         SafeRelease(audioValueFormat);
         SafeRelease(audioSmallFormat);
         SafeRelease(osdTextFormat);
+#ifdef LLCV_RECORDING
+        recordingIndicator.Reset();
+#endif
         overlayFonts.Reset(); // Release layouts/formats before unregistering fonts.
         SafeRelease(dwriteFactory);
         SafeRelease(d2dFactory);
@@ -2244,7 +2379,7 @@ struct DirectD3D11Renderer {
         SafeRelease(device);
         outputWidth = 0;
         outputHeight = 0;
-        pixelPerfectFullscreen = false;
+        fullscreenDisplaySize = false;
         pixelPerfectBorders = false;
         outputConfigurationGeneration = 0;
         cachedOverlayGeneration = 0;
@@ -2277,7 +2412,9 @@ struct DirectD3D11Renderer {
 
     bool outputConfigurationChanged() const {
         return outputConfigurationGeneration !=
-            g_outputConfigurationGeneration.load(std::memory_order_acquire);
+            g_outputConfigurationGeneration.load(std::memory_order_acquire) ||
+            (ExclusiveOutputSelected() && presentationRevision !=
+                g_presentationRevision.load(std::memory_order_acquire));
     }
 
     HRESULT initialize(HWND hwnd, int width, int height, int fps,
@@ -2320,8 +2457,7 @@ struct DirectD3D11Renderer {
             1L, clientRect.right - clientRect.left));
         outputHeight = static_cast<UINT>((std::max)(
             1L, clientRect.bottom - clientRect.top));
-        pixelPerfectFullscreen =
-            SourcePixelPerfect() &&
+        fullscreenDisplaySize =
             g_fullscreen.load(std::memory_order_acquire);
         outputConfigurationGeneration = configurationGeneration;
         UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT |
@@ -2384,10 +2520,11 @@ struct DirectD3D11Renderer {
 #ifdef LLCV_HDR_SCRGB_PROTOTYPE
         if (scrgbOutput) swapDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 #endif
-        hr = factory->CreateSwapChainForHwnd(device, hwnd, &swapDesc, nullptr,
+        const HWND outputWindow=PresentationWindow(hwnd);
+        hr = factory->CreateSwapChainForHwnd(device, outputWindow, &swapDesc, nullptr,
                                              nullptr, &swapChain);
         backBufferFormat = swapDesc.Format;
-        factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
+        factory->MakeWindowAssociation(outputWindow, DXGI_MWA_NO_ALT_ENTER);
         DXGI_ADAPTER_DESC adapterDesc{};
         adapter->GetDesc(&adapterDesc);
         adapterVendor = adapterDesc.VendorId;
@@ -2655,6 +2792,13 @@ struct DirectD3D11Renderer {
         // The private GDI fonts used by settings need a DirectWrite collection
         // here. Fallback fonts preserve rendering on older DirectWrite versions.
         (void)overlayFonts.Initialize(dwriteFactory);
+#ifdef LLCV_RECORDING
+        if (ExclusiveOutputSelected()) {
+            hr = recordingIndicator.Initialize(device, d2dFactory, dwriteFactory,
+                overlayFonts, IsEnglishUi());
+            if (FAILED(hr)) return hr;
+        }
+#endif
         hr = overlayFonts.CreateFormat(dwriteFactory, DWRITE_FONT_WEIGHT_MEDIUM,
             15.0f, IsEnglishUi(), &osdTextFormat);
         if (SUCCEEDED(hr)) hr = overlayFonts.CreateFormat(dwriteFactory,
@@ -2709,13 +2853,19 @@ struct DirectD3D11Renderer {
         if (!device || !context || !swapChain || captureWidth <= 0 || captureHeight <= 0)
             return E_UNEXPECTED;
         const uint64_t generation = g_outputConfigurationGeneration.load(std::memory_order_acquire);
+        const uint64_t revision = g_presentationRevision.load(std::memory_order_acquire);
+        const HWND outputWindow=PresentationWindow(hwnd);
         RECT client{};
-        if (!GetClientRect(hwnd, &client)) {
+        if (!GetClientRect(outputWindow, &client)) {
             const DWORD error = GetLastError();
             return error ? HRESULT_FROM_WIN32(error) : E_FAIL;
         }
-        const UINT width = static_cast<UINT>((std::max)(1L, client.right - client.left));
-        const UINT height = static_cast<UINT>((std::max)(1L, client.bottom - client.top));
+        const bool minimized = ExclusiveOutputSelected() &&
+            g_presentationMinimized.load(std::memory_order_acquire);
+        const UINT width = minimized ? outputWidth
+            : static_cast<UINT>((std::max)(1L, client.right - client.left));
+        const UINT height = minimized ? outputHeight
+            : static_cast<UINT>((std::max)(1L, client.bottom - client.top));
         DXGI_SWAP_CHAIN_DESC1 description{};
         HRESULT hr = swapChain->GetDesc1(&description);
         if (FAILED(hr)) return hr;
@@ -2729,12 +2879,47 @@ struct DirectD3D11Renderer {
         for (auto& view : inputViews) SafeRelease(view);
         SafeRelease(processor);
         SafeRelease(enumerator);
-        if (width != outputWidth || height != outputHeight) {
+        bool transitioned=false;
+        if (ExclusiveOutputSelected()) {
+            BOOL actual=FALSE;
+            hr=swapChain->GetFullscreenState(&actual,nullptr);
+            if(FAILED(hr))return hr;
+            // DXGI can leave fullscreen itself on focus loss. That still
+            // requires a flip-chain ResizeBuffers even if client size agrees.
+            transitioned=exclusiveActive!=(actual!=FALSE);
+            const bool wanted=llcv::exclusive_presentation::Wanted({true,
+                g_fullscreen.load(std::memory_order_acquire),
+                g_presentationActive.load(std::memory_order_acquire),
+                g_presentationMinimized.load(std::memory_order_acquire),
+                g_presentationBlocked.load(std::memory_order_acquire),
+                g_presentationClosing.load(std::memory_order_acquire)});
+            if(exclusiveAttempts.Begin(revision,wanted,actual!=FALSE)) {
+                const auto change=swapChain->SetFullscreenState(wanted?TRUE:FALSE,nullptr);
+                BOOL current=FALSE;
+                const auto query=swapChain->GetFullscreenState(&current,nullptr);
+                transitioned=transitioned || (SUCCEEDED(query) && actual!=current);
+                actual=current;
+                fwprintf(stderr,L"[video-exclusive] requested=%d actual=%d change=0x%08X query=0x%08X revision=%llu\n",
+                    wanted,actual,static_cast<unsigned>(change),static_cast<unsigned>(query),revision);
+                if(change==DXGI_ERROR_DEVICE_REMOVED || change==DXGI_ERROR_DEVICE_RESET)return change;
+                if(FAILED(query))return query;
+                if(!wanted && actual)
+                    return FAILED(change) ? change : DXGI_ERROR_NOT_CURRENTLY_AVAILABLE;
+                // An unavailable exclusive mode remains usable as normal flip
+                // output. Retry only after new user/focus/display intent.
+            }
+            exclusiveActive=actual!=FALSE;
+            g_videoExclusiveActive.store(exclusiveActive, std::memory_order_release);
+            g_videoTearing.store(llcv::presentation::PresentFlags(
+                g_settings.presentationMode, exclusiveActive, allowTearing) != 0,
+                std::memory_order_release);
+        }
+        if (transitioned || width != outputWidth || height != outputHeight) {
             hr = swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, description.Flags);
             if (FAILED(hr)) return hr;
         }
         outputWidth = width; outputHeight = height;
-        pixelPerfectFullscreen = SourcePixelPerfect() && g_fullscreen.load(std::memory_order_acquire);
+        fullscreenDisplaySize = g_fullscreen.load(std::memory_order_acquire);
         sharpScalingActive = false;
         cachedOverlayGeneration = 0; cachedOverlayMask = 0;
         occluded = false; nextOcclusionTestMs = 0;
@@ -2756,7 +2941,21 @@ struct DirectD3D11Renderer {
         }
         hr = createVideoOutputResources(captureWidth, captureHeight, captureFps);
         if (SUCCEEDED(hr)) hr = configureVideoOutput(captureWidth, captureHeight);
-        if (SUCCEEDED(hr)) outputConfigurationGeneration = generation;
+        if (SUCCEEDED(hr)) {
+            outputConfigurationGeneration = generation;
+            presentationRevision=revision;
+            // Open owned UI only after the output owner has completed the
+            // windowed transition, never concurrently with SetFullscreenState.
+            if (ExclusiveOutputSelected() && !exclusiveActive &&
+                revision == g_presentationRevision.load(std::memory_order_acquire) &&
+                g_presentationBlocked.load(std::memory_order_acquire)) {
+                UINT_PTR serial = 0;
+                const auto action = TakeDeferredPresentationUi(serial);
+                if (action != DeferredPresentationUi::None)
+                    PostMessageW(outputWindow, WM_PRESENTATION_UI_READY, static_cast<WPARAM>(action),
+                        static_cast<LPARAM>(serial));
+            }
+        }
         return hr;
     }
 
@@ -2841,79 +3040,19 @@ struct DirectD3D11Renderer {
     }
 
     HRESULT configureVideoOutput(int width, int height) {
+        skipRedundantBorderClear=false;
         HRESULT hr = S_OK;
         RECT sourceRect{0, 0, width, height};
         RECT outputRect{0, 0, static_cast<LONG>(outputWidth),
                         static_cast<LONG>(outputHeight)};
-        RECT videoRect = outputRect;
-        // Scaled mode must preserve the capture aspect ratio even when the
-        // user maximizes the window on an ultrawide monitor.  The window
-        // sizing constraint covers interactive edge-resizing, but it cannot
-        // constrain maximize/DPI transitions or arbitrary window rectangles.
-        // Compute a fit rectangle here as the final rendering safeguard.
-        pixelPerfectBorders = false;
-        if (pixelPerfectFullscreen) {
-            LONG displayWidth = 0;
-            LONG displayHeight = 0;
-            if (width <= static_cast<int>(outputWidth) &&
-                height <= static_cast<int>(outputHeight)) {
-                // Pixel-perfect means strict 1:1 mapping. Do not turn FHD
-                // into a 2x 4K Video Processor upscale; center the original
-                // capture pixels and clear the unused output to black.
-                displayWidth = static_cast<LONG>(width);
-                displayHeight = static_cast<LONG>(height);
-                fwprintf(stderr,
-                         L"[video] pixel-perfect fullscreen: strict 1:1, "
-                         L"centered %ld x %ld in %u x %u.\n",
-                         displayWidth, displayHeight,
-                         outputWidth, outputHeight);
-            } else {
-                // Exact pixel mapping cannot fit when the capture is larger
-                // than the display. Preserve the complete picture and aspect
-                // ratio instead of cropping it.
-                const double scale = (std::min)(
-                    static_cast<double>(outputWidth) / width,
-                    static_cast<double>(outputHeight) / height);
-                displayWidth = (std::max)(
-                    1L, static_cast<LONG>(std::lround(width * scale)));
-                displayHeight = (std::max)(
-                    1L, static_cast<LONG>(std::lround(height * scale)));
-                fwprintf(stderr,
-                         L"[video] pixel-perfect fullscreen cannot fit 1:1; "
-                         L"aspect-preserving downscale to %ld x %ld in %u x %u.\n",
-                         displayWidth, displayHeight, outputWidth, outputHeight);
-            }
-            videoRect.left =
-                (static_cast<LONG>(outputWidth) - displayWidth) / 2;
-            videoRect.top =
-                (static_cast<LONG>(outputHeight) - displayHeight) / 2;
-            videoRect.right = videoRect.left + displayWidth;
-            videoRect.bottom = videoRect.top + displayHeight;
-            pixelPerfectBorders =
-                videoRect.left != outputRect.left ||
-                videoRect.top != outputRect.top ||
-                videoRect.right != outputRect.right ||
-                videoRect.bottom != outputRect.bottom;
-        } else {
-            const double scale = (std::min)(
-                static_cast<double>(outputWidth) / width,
-                static_cast<double>(outputHeight) / height);
-            const LONG displayWidth = (std::max)(
-                1L, static_cast<LONG>(std::lround(width * scale)));
-            const LONG displayHeight = (std::max)(
-                1L, static_cast<LONG>(std::lround(height * scale)));
-            videoRect.left =
-                (static_cast<LONG>(outputWidth) - displayWidth) / 2;
-            videoRect.top =
-                (static_cast<LONG>(outputHeight) - displayHeight) / 2;
-            videoRect.right = videoRect.left + displayWidth;
-            videoRect.bottom = videoRect.top + displayHeight;
-            pixelPerfectBorders =
-                videoRect.left != outputRect.left ||
-                videoRect.top != outputRect.top ||
-                videoRect.right != outputRect.right ||
-                videoRect.bottom != outputRect.bottom;
-        }
+        const auto& display = CurrentVideoPreset();
+        const bool sourceSize = fullscreenDisplaySize &&
+            g_fullscreenSourceSize.load(std::memory_order_acquire);
+        const RECT videoRect = llcv::video_placement::Destination(width, height,
+            static_cast<int>(outputWidth), static_cast<int>(outputHeight),
+            fullscreenDisplaySize, sourceSize ? width : display.width,
+            sourceSize ? height : display.height, g_settings.fullscreenVideoPosition);
+        pixelPerfectBorders = !EqualRect(&videoRect, &outputRect);
 #ifdef LLCV_HDR_SCRGB_PROTOTYPE
         if (scrgbOutput) {
             scrgbPipeline.Configure(context, static_cast<UINT>(width), static_cast<UINT>(height),
@@ -2961,6 +3100,23 @@ struct DirectD3D11Renderer {
                                                       &videoRect);
         videoContext->VideoProcessorSetOutputTargetRect(processor, TRUE,
                                                         &outputRect);
+        llcv::video_clear::State clear{};
+        clear.outputWidth=outputWidth;clear.outputHeight=outputHeight;
+        clear.outputFormat=backBufferFormat;clear.hdrOutput=hdrOutput;
+#ifdef LLCV_HDR_SCRGB_PROTOTYPE
+        clear.scrgbOutput=scrgbOutput;
+#endif
+        clear.videoProcessorPath=!clear.scrgbOutput;
+        clear.outputTargetEnabled=true;clear.outputTarget=outputRect;
+        clear.sourceWidth=width;clear.sourceHeight=height;
+        clear.source=sourceRect;clear.destination=videoRect;
+        clear.singleOpaqueVideoStream=true;clear.opaqueOutput=true;
+        BOOL backgroundYuv=TRUE;D3D11_VIDEO_COLOR background{};
+        videoContext->VideoProcessorGetOutputBackgroundColor(processor,&backgroundYuv,&background);
+        clear.backgroundKnown=true;clear.backgroundIsYuv=backgroundYuv!=FALSE;
+        clear.backgroundR=background.RGBA.R;clear.backgroundG=background.RGBA.G;
+        clear.backgroundB=background.RGBA.B;clear.backgroundA=background.RGBA.A;
+        skipRedundantBorderClear=llcv::video_clear::CanSkipBorderClear(clear);
         if (hdrOutput) {
             // Preserve PQ video values; use the validated range/chroma tuple
             // instead of the legacy SDR color-space bitfield.
@@ -3323,14 +3479,23 @@ struct DirectD3D11Renderer {
     }
 
     HRESULT drawOverlayQuads() {
+        HRESULT hr = S_OK;
+        bool recordingVisible = false;
+#ifdef LLCV_RECORDING
+        if (ExclusiveOutputSelected()) {
+            hr = recordingIndicator.Refresh();
+            if (FAILED(hr)) return hr;
+            recordingVisible = recordingIndicator.Visible();
+        }
+#endif
         const bool osdVisible =
             g_osdVisible.load(std::memory_order_acquire);
         const bool volumeVisible = GetTickCount64() <
             g_volumeHudUntilMs.load(std::memory_order_acquire);
         const bool audioVisible =
             g_audioOsdVisible.load(std::memory_order_acquire);
-        if (!osdVisible && !volumeVisible && !audioVisible) return S_OK;
-        HRESULT hr = refreshOverlayLayouts(osdVisible, volumeVisible, audioVisible);
+        if (!osdVisible && !volumeVisible && !audioVisible && !recordingVisible) return S_OK;
+        hr = refreshOverlayLayouts(osdVisible, volumeVisible, audioVisible);
         if (FAILED(hr)) return hr;
 
         const D3D11_VIEWPORT viewport{
@@ -3414,6 +3579,12 @@ struct DirectD3D11Renderer {
             draw(audioOverlayShaderView, rect.left, rect.top,
                  rect.right, rect.bottom);
         }
+#ifdef LLCV_RECORDING
+        if (recordingVisible) {
+            const RECT rect = recordingIndicator.QuadRect(outputWidth, outputHeight);
+            draw(recordingIndicator.ShaderView(), rect.left, rect.top, rect.right, rect.bottom);
+        }
+#endif
         ID3D11ShaderResourceView* noTextures[2]{};
         context->PSSetShaderResources(0, hdrOutput ? 2 : 1, noTextures);
         context->OMSetBlendState(nullptr, nullptr, 0xffffffffu);
@@ -3474,7 +3645,7 @@ struct DirectD3D11Renderer {
         D3D11_VIDEO_PROCESSOR_STREAM stream{};
         stream.Enable = TRUE;
         stream.pInputSurface = inputViews[activeUploadSurface];
-        if (pixelPerfectBorders) {
+        if (pixelPerfectBorders && !skipRedundantBorderClear) {
             const float black[4]{0.0f, 0.0f, 0.0f, 1.0f};
             context->ClearRenderTargetView(backBufferRenderTarget, black);
         }
@@ -3513,8 +3684,8 @@ struct DirectD3D11Renderer {
         const bool vsync =
             llcv::presentation::UsesVSync(g_settings.presentationMode);
         const UINT syncInterval = vsync ? 1u : 0u;
-        const UINT flags = !vsync && allowTearing
-                               ? DXGI_PRESENT_ALLOW_TEARING : 0u;
+        const UINT flags = llcv::presentation::PresentFlags(
+            g_settings.presentationMode, exclusiveActive, allowTearing);
 #ifdef LLCV_VSR_EXPERIMENT
         const auto presentStart = llcv::vsr::Timing::Clock::now();
 #endif
@@ -4226,6 +4397,9 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
         if (FAILED(hr = graph->Connect(audioGrabberOut, audioNullIn))) break;
 
         initializationStage = L"connect and start capture graph";
+#ifdef LLCV_RECORDING
+        llcv::recording::recorder.Configure(sampleFormat, selectedAudioFormat, sdrColor, true, llcv::recording::sessionOptions);
+#endif
         hr = resources.events.Initialize(graph);
         if (FAILED(hr)) break;
         hr = control->Run();
@@ -4309,6 +4483,17 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
         const auto firstFrameDeadline = firstFrameStart + std::chrono::seconds(10);
         initializationStage = L"wait for first valid capture frame";
         while (g_running.load()) {
+            if (ExclusiveOutputSelected() && g_presentationClosing.load(std::memory_order_acquire))
+                break;
+            // Focus and modal-window transitions must be serviced even when
+            // capture has no new sample. Only this thread owns DXGI state.
+            if (ExclusiveOutputSelected() && renderer.outputConfigurationChanged()) {
+                hr = renderer.resizeOutput(host);
+                if (FAILED(hr) && !recoverRenderer(L"D3D11 fullscreen transition", hr)) {
+                    initialized = false;
+                    break;
+                }
+            }
             if (g_captureAudioRejected.load(std::memory_order_acquire)) {
                 initializationStage = L"capture audio format changed; restart required";
                 hr = VFW_E_TYPE_NOT_ACCEPTED;
@@ -4316,6 +4501,8 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
                 break;
             }
             hr = resources.events.Wait(frameEvent, 100, g_playbackPowerEvents.Event());
+            if (ExclusiveOutputSelected() && g_presentationClosing.load(std::memory_order_acquire))
+                break;
             if (FAILED(hr)) {
                 g_captureGraphStopped.store(true, std::memory_order_release);
                 initializationStage = L"capture device disconnected or graph aborted; restart required";
@@ -4505,6 +4692,16 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
     }
     g_screenshots.Stop();
     resources.Reset();
+    // Release exclusive ownership while the UI is still pumping, before a
+    // recording writer is allowed to take time finalizing its file.
+    if (ExclusiveOutputSelected()) renderer.reset();
+#ifdef LLCV_RECORDING
+    // Notify before joining: a stalled writer must still have a responsive
+    // close/timeout UI when capture ends without a user WM_CLOSE.
+    if (llcv::recording::recorder.Busy())
+        PostMessageW(GetAncestor(host,GA_ROOT),WM_RECORDING_CAPTURE_ENDED,0,0);
+    llcv::recording::recorder.Shutdown();
+#endif
     renderer.reset();
     compressedDecoder.reset();
     if (videoMmcss) AvRevertMmThreadCharacteristics(videoMmcss);
@@ -4529,6 +4726,9 @@ constexpr UINT WM_EXCLUSIVE_ENDPOINT_PROBE_COMPLETE = WM_APP + 79;
 constexpr UINT WM_EXCLUSIVE_SCAN_COMPLETE = WM_APP + 80;
 constexpr UINT WM_SETTINGS_VIDEO_MODES_READY = WM_APP + 81;
 constexpr UINT WM_SETTINGS_INVENTORY_READY = WM_APP + 82;
+#ifdef LLCV_RECORDING
+constexpr UINT WM_RECORD_ENCODERS_READY = WM_APP + 83;
+#endif
 
 using llcv::settings_ui::SettingsDialogOuterSize;
 using llcv::settings_ui::ApplySettingsFont;
@@ -4553,6 +4753,10 @@ struct SettingsDeviceInventory {
 };
 struct SettingsDialogState : llcv::settings_ui::SettingsControls {
     std::unique_ptr<llcv::settings_ui::SettingsModeCache<SettingsVideoModes>> videoModeCache;
+#ifdef LLCV_RECORDING
+    std::atomic<bool> recordingProbeStop{false};
+    std::unique_ptr<llcv::settings_ui::SettingsModeCache<llcv::recording::Capabilities>> recordingProbe;
+#endif
     std::optional<llcv::settings_ui::ModeQueryKey> appliedVideoModeKey;
     bool videoModesPending = false;
     llcv::settings_ui::SettingsTheme theme;
@@ -4606,6 +4810,14 @@ static void RequestSettingsSharedProbe(SettingsDialogState* state, HWND hwnd);
 // The view consumes selections, not device/probe state.
 static void UpdateAdvancedControlVisibility(SettingsDialogState* state) {
     if (!state) return;
+#ifdef LLCV_RECORDING
+    if(state->recordingLive){
+        llcv::settings_ui::UpdateAdvancedControlVisibility(state,false,VideoPixelFormat::Nv12);
+        SetSettingsText(state->startButton,state->english?L"Apply / close":L"적용 후 닫기");
+        EnableWindow(state->startButton,TRUE);
+        return;
+    }
+#endif
     llcv::settings_ui::UpdateAdvancedControlVisibility(
         state, SettingsUsesExclusiveMode(state), SelectedPixelFormat(state),
         {SettingsCanStart(state),
@@ -5522,9 +5734,7 @@ static void PopulatePixelFormatCombo(SettingsDialogState* state) {
     if (!state || !state->pixelFormatCombo || !state->frameRateCombo ||
         !state->videoCombo) return;
     const LRESULT videoIndex = SendMessageW(
-        !state->vsrGpuUnavailable &&
-        SendMessageW(state->vsrCheck, BM_GETCHECK, 0, 0) == BST_CHECKED
-            ? state->vsrCaptureCombo : state->videoCombo, CB_GETCURSEL, 0, 0);
+        state->videoCombo, CB_GETCURSEL, 0, 0);
     if (videoIndex < 0 || videoIndex >=
                             static_cast<LRESULT>(ARRAYSIZE(kVideoPresets))) {
         return;
@@ -5693,6 +5903,17 @@ static void RequestSettingsInventory(SettingsDialogState* state, HWND hwnd, bool
 
 static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool accepted) {
     if (!state) return;
+#ifdef LLCV_RECORDING
+    if(state->recordingLive){
+        if(accepted && state->recordingOptions!=llcv::recording::sessionOptions){
+            if(!llcv::recording::SaveOptions(state->recordingOptions)){
+                MessageBoxW(hwnd,state->english?L"Could not save recording settings.":L"녹화 설정을 저장하지 못했습니다.",L"LLCV",MB_OK|MB_ICONERROR);return;
+            }
+            llcv::recording::sessionOptions=state->recordingOptions;
+        }
+        DestroyWindow(hwnd);return;
+    }
+#endif
     // Enter/IDOK and direct commands must obey the same guard as mouse clicks.
     if (accepted && (!state->startButton || !IsWindowEnabled(state->startButton) ||
                      !SettingsCanStart(state))) return;
@@ -5703,12 +5924,10 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
         RememberCurrentBufferChoice(state);
         const LRESULT audioIndex = SendMessageW(
             state->audioCombo, CB_GETCURSEL, 0, 0);
-        const LRESULT videoIndex = SendMessageW(
-            state->videoCombo, CB_GETCURSEL, 0, 0);
         const LRESULT presentationIndex = SendMessageW(
             state->presentationCombo, CB_GETCURSEL, 0, 0);
         if (!llcv::presentation::SupportsCapture(
-                presentationIndex == 2 ? PresentationMode::Compatibility : PresentationMode::VSync,
+                llcv::presentation_ui::ModeFromSelection(static_cast<int>(presentationIndex)),
                 SelectedPixelFormat(state),
                 SendMessageW(state->audioOnlyCheck, BM_GETCHECK, 0, 0) == BST_CHECKED)) {
             MessageBoxW(hwnd, IsEnglishUi()
@@ -5741,6 +5960,14 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
             UpdateExclusiveVerificationUi(state);
             return;
         }
+#ifdef LLCV_RECORDING
+        if(state->recordingOptions!=llcv::recording::sessionOptions &&
+           !llcv::recording::SaveOptions(state->recordingOptions)){
+            MessageBoxW(hwnd,IsEnglishUi()?L"Could not save recording settings.":L"녹화 설정을 저장하지 못했습니다.",L"LLCV",MB_OK|MB_ICONERROR);
+            return;
+        }
+        llcv::recording::sessionOptions=state->recordingOptions;
+#endif
         g_settings.shortcuts=state->shortcutBindings;
         if (languageIndex >= 0 && languageIndex <= 2) {
             g_settings.uiLanguage = static_cast<UiLanguage>(languageIndex);
@@ -5762,22 +5989,14 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
         } else {
             g_settings.asioDriverName = state->audioSelections.asioDriver;
         }
-        if (videoIndex >= 0 && videoIndex < static_cast<LRESULT>(ARRAYSIZE(kVideoPresets))) {
-            g_settings.videoPreset = kVideoPresets[videoIndex].preset;
-        }
-        const LRESULT vsrCaptureIndex = SendMessageW(state->vsrCaptureCombo, CB_GETCURSEL, 0, 0);
-        if (vsrCaptureIndex >= 0 && vsrCaptureIndex < static_cast<LRESULT>(ARRAYSIZE(kVideoPresets)))
-            g_settings.vsrCapturePreset = kVideoPresets[vsrCaptureIndex].preset;
+        llcv::settings_ui::ApplyResolutionSelections(*state, kVideoPresets, g_settings);
         const LRESULT monitorIndex = SendMessageW(state->displayMonitorCombo, CB_GETCURSEL, 0, 0);
         if (monitorIndex == 0) g_settings.preferredDisplayMonitor.clear();
         else if (monitorIndex > 0 && static_cast<size_t>(monitorIndex) <= state->displayMonitors.size())
             g_settings.preferredDisplayMonitor = state->displayMonitors[monitorIndex - 1].id;
         // The disconnected entry preserves its saved identity until reconnected.
-        g_settings.presentationMode = presentationIndex == 2
-                                          ? PresentationMode::Compatibility
-                                          : presentationIndex == 1
-                                          ? PresentationMode::VSync
-                                          : PresentationMode::AllowTearing;
+        g_settings.presentationMode = llcv::presentation_ui::ModeFromSelection(
+            static_cast<int>(presentationIndex));
         g_settings.scalingMode = scalingIndex == 1
             ? ScalingMode::Sharp : ScalingMode::Smooth;
         g_settings.fullscreenCursorMode = fullscreenCursorIndex == 1
@@ -5948,6 +6167,16 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
     DestroyWindow(hwnd);
 }
 
+#ifdef LLCV_RECORDING
+static void RequestRecordingEncoders(SettingsDialogState* state,HWND hwnd){
+    if(state->activeTab!=SettingsTab::Recording || state->recordingProbeStop.load() ||
+        state->recordingProbe || !state->recordingProbePending || llcv::recording::recorder.Busy())return;
+    state->recordingProbe=std::make_unique<llcv::settings_ui::SettingsModeCache<llcv::recording::Capabilities>>(
+        [state](const auto&){return llcv::recording::ProbeEncoders(&state->recordingProbeStop);},
+        [hwnd]{PostMessageW(hwnd,WM_RECORD_ENCODERS_READY,0,0);});
+    state->recordingProbe->Request({});
+}
+#endif
 static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
                                          WPARAM wParam, LPARAM lParam) {
     auto* state = reinterpret_cast<SettingsDialogState*>(
@@ -5990,18 +6219,44 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
             state,
             [](void* context) {
                 auto* dialog = static_cast<SettingsDialogState*>(context);
+#ifdef LLCV_RECORDING
+                if(dialog->recordingLive)return;
+#endif
                 PopulateAudioOutputCombo(dialog);
                 dialog->selectedBufferMs = g_settings.wasapiBufferMs;
                 dialog->selectedSharedPeriodFrames = g_settings.wasapiSharedPeriodFrames;
             },
             [](void* context) {
+#ifdef LLCV_RECORDING
+                if(static_cast<SettingsDialogState*>(context)->recordingLive)return;
+#endif
                 PopulateSettingsBufferCombo(static_cast<SettingsDialogState*>(context));
             },
             [](void* context) {
+#ifdef LLCV_RECORDING
+                if(static_cast<SettingsDialogState*>(context)->recordingLive)return;
+#endif
                 PopulatePixelFormatCombo(static_cast<SettingsDialogState*>(context));
             }};
         llcv::settings_ui::CreateSettingsDialogControls(
             state, hwnd, instance, initial, population);
+#ifdef LLCV_RECORDING
+        state->recordingOptions=llcv::recording::sessionOptions;
+        llcv::settings_ui::CreateRecordingSettings(state,hwnd);
+        state->recordingSnapshot=llcv::recording::recorder.GetSnapshot();
+        if(state->recordingLive && g_recordingCapabilities){
+            state->recordingCapabilities=*g_recordingCapabilities;state->recordingProbePending=false;
+            llcv::settings_ui::RefreshRecordingSettings(state);
+        }else RequestRecordingEncoders(state,hwnd);
+        SetTimer(hwnd,2071,500,nullptr);
+        if(state->recordingLive){
+            const UINT dpi=GetDpiForWindow(hwnd);
+            ApplySettingsFont(state,hwnd,dpi);LayoutSettingsControls(state,dpi);
+            UpdateAdvancedControlVisibility(state);
+            state->theme.Attach(hwnd,state);
+            return 0;
+        }
+#endif
         UpdateVideoCapabilityStatus(state);
 
         const UINT initialDpi = GetDpiForWindow(hwnd);
@@ -6198,7 +6453,56 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
         return 0;
     }
 
+#ifdef LLCV_RECORDING
+    case WM_TIMER:
+        if(state && wParam==2071 && state->activeTab==SettingsTab::Recording){
+            state->recordingSnapshot=llcv::recording::recorder.GetSnapshot();
+            state->recordingClosing=llcv::recording::ControlsClosing();
+            llcv::settings_ui::ShowRecordingSettings(state);
+            RequestRecordingEncoders(state,hwnd);
+        }
+        return 0;
+    case WM_DESTROY:
+        KillTimer(hwnd,2071);
+        if(state)state->recordingProbeStop.store(true);
+        if(g_recordingSettingsWindow==hwnd)g_recordingSettingsWindow=nullptr;
+        break;
+    case WM_RECORD_ENCODERS_READY:
+        if(state&&state->recordingProbe){
+            if(auto result=state->recordingProbe->Request({})){
+                state->recordingCapabilities=std::move(*result);state->recordingProbePending=false;
+                g_recordingCapabilities=state->recordingCapabilities;
+                llcv::settings_ui::RefreshRecordingSettings(state);
+            }
+        }
+        return 0;
+#endif
     case WM_COMMAND:
+#ifdef LLCV_RECORDING
+        if(state)state->recordingSnapshot=llcv::recording::recorder.GetSnapshot();
+        if(state && HIWORD(wParam)==BN_CLICKED && LOWORD(wParam)==llcv::settings_ui::kRecordingPause){
+            if(state->recordingLive&&!llcv::recording::ControlsClosing())
+                llcv::recording::recorder.SetPaused(!state->recordingSnapshot.paused);
+            state->recordingSnapshot=llcv::recording::recorder.GetSnapshot();
+            llcv::settings_ui::ShowRecordingSettings(state);
+            return 0;
+        }
+        if(state && HIWORD(wParam)==BN_CLICKED && LOWORD(wParam)==llcv::settings_ui::kRecordingToggleCommand){
+            state->recordingClosing=llcv::recording::ControlsClosing();
+            if(!llcv::settings_ui::CanToggleRecordingSettings(state))return 0;
+            if(!state->recordingSnapshot.busy){
+                if(!llcv::recording::SaveOptions(state->recordingOptions)){
+                    MessageBoxW(hwnd,state->english?L"Could not save recording settings.":L"녹화 설정을 저장하지 못했습니다.",L"LLCV",MB_OK|MB_ICONERROR);return 0;
+                }
+                llcv::recording::sessionOptions=state->recordingOptions;
+            }
+            llcv::recording::ToggleRecording();
+            state->recordingSnapshot=llcv::recording::recorder.GetSnapshot();
+            llcv::settings_ui::ShowRecordingSettings(state);
+            return 0;
+        }
+        if(state&&llcv::settings_ui::RecordingSettingsCommand(state,hwnd,LOWORD(wParam),HIWORD(wParam)))return 0;
+#endif
         if (state && HIWORD(wParam)==BN_CLICKED && LOWORD(wParam)>=IDC_SETTINGS_SHORTCUT_FIRST &&
             LOWORD(wParam)<IDC_SETTINGS_SHORTCUT_FIRST+keys::Count) {
             llcv::settings_ui::BeginShortcutEdit(state,LOWORD(wParam)-IDC_SETTINGS_SHORTCUT_FIRST);
@@ -6243,6 +6547,14 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
             const int index = static_cast<int>(SendMessageW(state->tabControl, LB_GETCURSEL, 0, 0));
             if (index != LB_ERR) {
                 const auto nextTab = llcv::settings_ui::SettingsTabFromNavigationIndex(index);
+#ifdef LLCV_RECORDING
+                if(state->recordingLive && nextTab!=SettingsTab::Recording){
+                    const HWND viewer=GetWindow(hwnd,GW_OWNER);
+                    FinishSettingsDialog(hwnd,state,true);
+                    if(!IsWindow(hwnd)){g_requestedSettingsTab=static_cast<int>(nextTab);PostMessageW(viewer,WM_APP+92,1,0);}
+                    return 0;
+                }
+#endif
                 if (nextTab == state->activeTab) {
                     // No page repaint, but keep capability-dependent gates
                     // correct even if a completion changed the current state.
@@ -6253,6 +6565,9 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
                 state->activeTab = nextTab;
                 UpdateAdvancedControlVisibility(state);
                 UpdateCaptureAudioSelectionUi(state);
+#ifdef LLCV_RECORDING
+                RequestRecordingEncoders(state,hwnd);
+#endif
             }
             return 0;
         }
@@ -6349,15 +6664,10 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
             RequestSettingsInventory(state, hwnd, true);
             return 0;
         }
-        if (((LOWORD(wParam) == IDC_SETTINGS_VIDEO || LOWORD(wParam) == IDC_SETTINGS_VSR_CAPTURE) &&
+        if (((LOWORD(wParam) == IDC_SETTINGS_VIDEO || LOWORD(wParam) == IDC_SETTINGS_DISPLAY_RESOLUTION) &&
              HIWORD(wParam) == CBN_SELCHANGE) ||
             (LOWORD(wParam) == IDC_SETTINGS_VSR && HIWORD(wParam) == BN_CLICKED)) {
-            if (state && state->vsrGpuUnavailable &&
-                LOWORD(wParam) != IDC_SETTINGS_VIDEO) {
-                UpdateAdvancedControlVisibility(state);
-                return 0;
-            }
-            PopulatePixelFormatCombo(state);
+            if (LOWORD(wParam) == IDC_SETTINGS_VIDEO) PopulatePixelFormatCombo(state);
             UpdateAdvancedControlVisibility(state);
             return 0;
         }
@@ -6474,7 +6784,7 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
 }
 
 static bool ShowSettingsDialog(HINSTANCE hInst,
-                               bool preferSavedViewerMonitor) {
+                               bool preferSavedViewerMonitor,HWND liveViewer=nullptr) {
     static const wchar_t kSettingsClass[] = L"LowLatencyCaptureViewerSettingsDialogClass";
     static bool registered = false;
     if (!registered) {
@@ -6492,6 +6802,13 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
 
     SettingsDialogState state{};
     state.activeTab = g_settings.audioOnly ? SettingsTab::Audio : SettingsTab::VideoWindow;
+#ifdef LLCV_RECORDING
+    state.recordingLive=liveViewer!=nullptr;
+    if(state.recordingLive)state.activeTab=SettingsTab::Recording;
+    else if(g_requestedSettingsTab>=0 && g_requestedSettingsTab<llcv::settings_ui::kSettingsNavigationCount)
+        state.activeTab=static_cast<SettingsTab>(g_requestedSettingsTab);
+    if(!state.recordingLive){
+#endif
     state.displayMonitors = llcv::display::EnumerateMonitors(IsEnglishUi());
     state.captureDevices = EnumerateCaptureDevices();
     state.captureAudioDevices = EnumerateCaptureAudioDevices();
@@ -6527,11 +6844,14 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
             ++state.exclusiveScanCompleted;
         }
     }
+#ifdef LLCV_RECORDING
+    }
+#endif
     POINT cursor{};
     GetCursorPos(&cursor);
     const HMONITOR savedViewerMonitor = SavedViewerMonitor();
-    HMONITOR settingsMonitor = nullptr;
-    if (preferSavedViewerMonitor && savedViewerMonitor) {
+    HMONITOR settingsMonitor = liveViewer?MonitorFromWindow(liveViewer,MONITOR_DEFAULTTONEAREST):nullptr;
+    if (!settingsMonitor && preferSavedViewerMonitor && savedViewerMonitor) {
         // F2 closes the viewer before reopening settings in a child process.
         // PersistWindowPosition has just saved the viewer's monitor, so keep
         // the settings dialog with that viewer instead of following the mouse
@@ -6568,26 +6888,54 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
         settingsStyle,
         settingsRect.left, settingsRect.top, settingsRect.right-settingsRect.left,
         settingsRect.bottom-settingsRect.top,
-        nullptr, nullptr, hInst, &state);
+        liveViewer, nullptr, hInst, &state);
     if (!hwnd) return false;
+#ifdef LLCV_RECORDING
+    if(state.recordingLive)g_recordingSettingsWindow=hwnd;
+#endif
 
     // F2 reopens settings in a new process after the capture threads have
     // stopped. Briefly promote the dialog while activating it, then return it
     // to the normal z-order so it cannot remain hidden behind the previously
     // foreground application and is never permanently topmost.
     ShowWindow(hwnd, SW_SHOWNORMAL);
-    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+    if(!liveViewer)SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
     BringWindowToTop(hwnd);
     SetForegroundWindow(hwnd);
     SetActiveWindow(hwnd);
-    SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+    if(!liveViewer)SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
     UpdateWindow(hwnd);
     MSG msg{};
     while (IsWindow(hwnd)) {
         const BOOL result = GetMessageW(&msg, nullptr, 0, 0);
-        if (result <= 0) break;
+        if (result <= 0) {
+            if(liveViewer){
+                if(IsWindow(hwnd))DestroyWindow(hwnd);
+                // A nested settings loop must not consume the viewer's quit.
+                if(result==0)PostQuitMessage(static_cast<int>(msg.wParam));
+            }
+            break;
+        }
+#ifdef LLCV_RECORDING
+        if(state.recordingLive && keys::KeyDown(msg.message)){
+            const bool inDialog=msg.hwnd==hwnd || IsChild(hwnd,msg.hwnd);
+            if(inDialog && keys::Match(g_settings.shortcuts,keys::Action::Recording,
+                static_cast<UINT>(msg.wParam),keys::Modifiers())){
+                if(!(msg.lParam&(LPARAM{1}<<30)))SendMessageW(hwnd,WM_COMMAND,
+                    MAKEWPARAM(llcv::settings_ui::kRecordingToggleCommand,BN_CLICKED),0);
+                continue;
+            }
+            if(!inDialog && HandleViewerShortcut(liveViewer,msg.wParam,msg.lParam,keys::Modifiers()))continue;
+            if(!inDialog && keys::Match(g_settings.shortcuts,keys::Action::Screenshot,msg)){
+                if(llcv::viewer_help::IsScreenshotRequest(msg,g_settings.audioOnly,g_settings.shortcuts))
+                    ShowTransientHud(g_screenshots.Request(g_settings.screenshotClipboard)?
+                        TransientHudContent::ScreenshotPending:TransientHudContent::ScreenshotBusy);
+                continue;
+            }
+        }
+#endif
         if (ProcessSettingsShortcutEdit(&state,msg)) continue;
         g_viewerHelp.SetBindings(state.shortcutBindings);
         if (g_viewerHelp.ProcessMessage(msg, hwnd, IsEnglishUi(), kAppVersionLabel,
@@ -6610,6 +6958,10 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
         DispatchMessageW(&msg);
     }
     state.sharedProbeCache.reset(); // Driver waits only after the HWND closes.
+#ifdef LLCV_RECORDING
+    state.recordingProbeStop.store(true);
+    state.recordingProbe.reset();
+#endif
     state.updateCheckTask.CancelAndWait();
     state.exclusiveProbeStop.store(true, std::memory_order_release);
     // The HWND may have discarded the worker's notifications. Join, drain and
@@ -6713,7 +7065,7 @@ static SIZE DesiredClientPixelsForMonitor(HMONITOR monitor) {
 static SIZE InitialClientPixelsForMonitor(HMONITOR monitor) {
     const auto& video = CurrentVideoPreset();
     // Explicit display selection wins at startup; F6 never changes this plan.
-    if (g_vsrResolutionPlan) return SIZE{video.width, video.height};
+    if (g_splitResolutionPlan) return SIZE{video.width, video.height};
     // Monitor-relative sizing is independent from Pixel-perfect. When it is
     // enabled, restore the same monitor-relative scale that was used before
     // shutdown, including when the saved monitor is a smaller display.
@@ -7264,6 +7616,7 @@ static void ToggleFullscreen(HWND hwnd, bool automaticStartup = false,
                              bool updateOutput = true) {
     if (g_settings.audioOnly) return;
     BeginOutputTransition();
+    g_fullscreenSourceSize.store(false, std::memory_order_release);
     if (!g_fullscreen.load(std::memory_order_acquire)) {
         GetWindowRect(hwnd, &g_lastWindowedRect);
         g_haveLastWindowedRect = true;
@@ -7293,6 +7646,7 @@ static void ToggleFullscreen(HWND hwnd, bool automaticStartup = false,
         g_autoFullscreen = false;
     }
     ApplyViewerCorners(hwnd);
+    NotifyPresentationChange();
     EndOutputTransition(updateOutput);
 }
 
@@ -7349,11 +7703,14 @@ static void RestoreOneToOneWindow(HWND hwnd) {
     // fullscreen case. Prefer true fullscreen even when a borderless window
     // would happen to fit an auto-hidden-taskbar work area.
     if (SelectedResolutionMatchesMonitor(monitor, true)) {
+        BeginOutputTransition();
         if (g_settings.relativeWindowSize) {
             g_settings.relativeWindowScalePpm =
                 RelativeScaleForMonitor(monitor, true);
         }
-        if (!fullscreen) ToggleFullscreen(hwnd);
+        if (!fullscreen) ToggleFullscreen(hwnd, false, false);
+        g_fullscreenSourceSize.store(true, std::memory_order_release);
+        EndOutputTransition(true);
         ShowTransientHud(TransientHudContent::OneToOne);
         fwprintf(stderr,
                  L"[video] F5 restored 1:1 using matching-monitor fullscreen: "
@@ -7518,7 +7875,9 @@ static std::wstring BuildRuntimeOsdText(int outputWidth, int outputHeight) {
     const UINT32 paddingFrames =
         g_audioWasapiPaddingFrames.load(std::memory_order_acquire);
     const wchar_t* presentationText =
-        llcv::presentation::UsesVSync(g_settings.presentationMode)
+        g_videoExclusiveActive.load(std::memory_order_acquire)
+            ? (IsEnglishUi() ? L"Exclusive fullscreen" : L"독점 전체화면")
+        : llcv::presentation::UsesVSync(g_settings.presentationMode)
             ? L"VSync"
             : g_videoTearing.load(std::memory_order_acquire)
                   ? UI_TEXT(L"저지연") : L"Immediate";
@@ -7675,8 +8034,8 @@ static std::wstring BuildRuntimeOsdText(int outputWidth, int outputHeight) {
                    static_cast<unsigned long long>(clipEvents));
     }
 
-    const wchar_t* scaleText = g_vsrResolutionPlan
-        ? (IsEnglishUi() ? L"VSR display size" : L"VSR 표시 크기") :
+    const wchar_t* scaleText = g_splitResolutionPlan
+        ? (IsEnglishUi() ? L"Display size" : L"표시 크기") :
         g_settings.pixelPerfect && g_settings.relativeWindowSize
             ? UI_TEXT(L"Pixel-perfect 시작 · Monitor-relative 이동")
             : g_settings.pixelPerfect
@@ -7985,6 +8344,88 @@ static void HandleViewerExit(HWND hwnd) {
     }
 }
 
+#ifdef LLCV_RECORDING
+// Closing never joins the writer on the UI thread. Keep pumping messages while
+// Finalize/validation runs, and offer an explicit escape if a driver stalls.
+static bool RecordingCloseInteractive(const wchar_t* commandLine=GetCommandLineW()) {
+    // Only diagnostic runs skip interactive close confirmation.
+    return !commandLine || wcsstr(commandLine,L"--smoke-test")==nullptr;
+}
+static bool BeginRecordingClose(HWND hwnd,bool ask) {
+    if (g_recordingClosePrompt) return false;
+    if (!llcv::recording::recorder.Busy()) return true;
+    if (!g_recordingClosePending) {
+        if (ask) {
+            g_recordingClosePrompt=true;
+            const int answer=MessageBoxW(hwnd,IsEnglishUi()
+                ? L"Finish the recording and close? The app will stay open until saving completes."
+                : L"녹화를 마무리하고 닫을까요?\n파일 저장이 끝날 때까지 앱을 유지합니다.",
+                L"LLCV",MB_YESNO|MB_ICONQUESTION);
+            g_recordingClosePrompt=false;
+            if (answer!=IDYES) { g_restartToSettings=false;return false; }
+        }
+        g_recordingClosePending=true;
+        g_recordingCloseWarningAt=GetTickCount64()+15000;
+        llcv::recording::SetControlsClosing(true);
+        llcv::recording::recorder.Stop();
+        UpdateViewerRecordingIndicator(llcv::recording::recorder.GetSnapshot());
+    }
+    return false;
+}
+static bool PollRecordingClose(HWND hwnd) {
+    if (!llcv::recording::recorder.Busy()) {
+        if (g_recordingShutdownBlocked) {
+            ShutdownBlockReasonDestroy(hwnd);g_recordingShutdownBlocked=false;
+        }
+        if (g_recordingClosePending && !g_recordingClosePrompt &&
+            RecordingCloseInteractive()) {
+            const auto saved=llcv::recording::recorder.GetSnapshot();
+            if (saved.failure!=llcv::recording::Failure::None || !saved.playable) {
+                g_recordingClosePrompt=true;
+                std::wstring message=IsEnglishUi()
+                    ? L"There was a problem saving the recording.\n"
+                    : L"녹화 저장 중 문제가 있었습니다.\n";
+                message+=saved.playable ? (IsEnglishUi()
+                    ? L"A saved portion can be opened; check its final section.\n\n"
+                    : L"저장된 일부 영상은 열 수 있습니다. 마지막 구간을 확인하세요.\n\n")
+                    : (IsEnglishUi()?L"The remaining file is not verified.\n\n":L"남은 파일의 정상 저장은 확인되지 않았습니다.\n\n");
+                message+=saved.path;
+                MessageBoxW(hwnd,message.c_str(),L"LLCV",MB_OK|MB_ICONWARNING);
+                g_recordingClosePrompt=false;
+            }
+        }
+        return true;
+    }
+    if ((g_recordingClosePending || g_recordingDrainPending) && !g_recordingClosePrompt &&
+        GetTickCount64()>=g_recordingCloseWarningAt) {
+        g_recordingClosePrompt=true;
+        const int answer=MessageBoxW(hwnd,IsEnglishUi()
+            ? L"Saving is taking longer than expected. Keep waiting?\n\nYes: continue saving.\nNo: force close LLCV. The recording may be incomplete or unreadable."
+            : L"녹화 저장이 지연되고 있습니다. 계속 기다릴까요?\n\n예: 저장을 계속 기다립니다.\n아니요: LLCV를 강제로 닫습니다. 녹화 일부가 유실되거나 파일을 읽지 못할 수 있습니다.",
+            L"LLCV",MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON1);
+        g_recordingClosePrompt=false;
+        // Never terminate an individual thread or abandon live COM objects.
+        // Only the user's explicit force-close choice ends the whole process.
+        if (answer==IDNO && llcv::recording::recorder.Busy())
+            TerminateProcess(GetCurrentProcess(),ERROR_TIMEOUT);
+        g_recordingCloseWarningAt=GetTickCount64()+30000;
+    }
+    return !llcv::recording::recorder.Busy();
+}
+static void DrainRecordingBeforeDestroy(HWND hwnd) {
+    if (!llcv::recording::recorder.Busy()) return;
+    BeginRecordingClose(hwnd,false);
+    while (!PollRecordingClose(hwnd)) {
+        MsgWaitForMultipleObjects(0,nullptr,FALSE,100,QS_ALLINPUT);
+        MSG message{};
+        while (PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
+            if (message.message==WM_QUIT) continue;
+            TranslateMessage(&message);DispatchMessageW(&message);
+        }
+    }
+}
+#endif
+
 // Shared by the viewer window and child-focus message loop. Resolve modifiers
 // once per key event; no allocations or work on the capture/render threads.
 static bool HandleViewerShortcut(HWND hwnd, WPARAM key, LPARAM flags, unsigned modifiers) {
@@ -7996,6 +8437,9 @@ static bool HandleViewerShortcut(HWND hwnd, WPARAM key, LPARAM flags, unsigned m
     // These two have their own modeless-help / source-frame routing below.
     if (action==keys::Action::Help || action==keys::Action::Screenshot) return false;
     if (flags & (LPARAM{1}<<30)) return true;
+#ifdef LLCV_RECORDING
+    if ((g_recordingClosePending || g_recordingDrainPending) && action==keys::Action::Settings) return true;
+#endif
     switch (action) {
     case keys::Action::Settings: SendMessageW(hwnd,WM_OPEN_SETTINGS,0,0); break;
     case keys::Action::AudioOsd: ToggleAudioOsd(); break;
@@ -8006,6 +8450,14 @@ static bool HandleViewerShortcut(HWND hwnd, WPARAM key, LPARAM flags, unsigned m
     case keys::Action::Fullscreen: ToggleFullscreen(hwnd); break;
     case keys::Action::Diagnostics: ToggleRuntimeOsd(); break;
     case keys::Action::Exit: HandleViewerExit(hwnd); break;
+#ifdef LLCV_RECORDING
+    case keys::Action::Recording:
+        if (!g_settings.audioOnly) {
+            llcv::recording::ToggleRecording();
+            UpdateViewerRecordingIndicator(llcv::recording::recorder.GetSnapshot());
+        }
+        break;
+#endif
     default: return false;
     }
     return true;
@@ -8018,6 +8470,18 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         return TRUE;
 
     case WM_CREATE:
+        g_presentationActive.store(false, std::memory_order_release);
+        g_presentationMinimized.store(false, std::memory_order_release);
+        g_presentationBlocked.store(false, std::memory_order_release);
+        g_presentationClosing.store(false, std::memory_order_release);
+        g_presentationUiPending = false;
+        g_deferredPresentationUi.store(DeferredPresentationUi::None, std::memory_order_release);
+        g_presentationRevision.fetch_add(1, std::memory_order_release);
+#ifdef LLCV_RECORDING
+        g_recordingClosePending=false;g_recordingDrainPending=false;g_recordingClosePrompt=false;
+        g_recordingShutdownBlocked=false;g_recordingCloseWarningAt=0;
+        llcv::recording::SetControlsClosing(false);
+#endif
         // Connected/Modern Standby broadcasts are opt-in. Subscribe once for
         // this viewer, never on the capture/render path or while in Settings.
         if (const DWORD error = g_suspendResumeNotification.Initialize(
@@ -8044,12 +8508,23 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 nullptr);
             if (g_videoHost) {
                 SetWindowSubclass(g_videoHost, VideoHostSubclassProc, 1, 0);
+                if (ExclusiveOutputSelected()) ShowWindow(g_videoHost, SW_HIDE);
             }
         }
         SetTimer(hwnd, 1, g_settings.audioOnly ? 33 : 500, nullptr);
+#ifdef LLCV_RECORDING
+        if (!g_settings.audioOnly) {
+            if (!ExclusiveOutputSelected())
+                llcv::recording::AttachRecordingIndicator(g_videoHost,hwnd,IsEnglishUi(),g_settings.settingsLightTheme);
+            UpdateViewerRecordingIndicator(llcv::recording::recorder.GetSnapshot());
+        }
+#endif
         return 0;
 
     case WM_SIZE:
+        if (g_presentationMinimized.exchange(wParam == SIZE_MINIMIZED,
+                std::memory_order_acq_rel) != (wParam == SIZE_MINIMIZED))
+            NotifyPresentationChange();
         ApplyViewerCorners(hwnd);
         if (g_videoHost) {
             MoveWindow(g_videoHost, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
@@ -8174,6 +8649,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 ShowTransientHud(TransientHudContent::ScreenshotTimeout);
             }
             // All display enumeration stays off the capture/render thread.
+#ifdef LLCV_RECORDING
+            UpdateViewerRecordingIndicator(llcv::recording::recorder.GetSnapshot());
+            if (PollRecordingClose(hwnd) && g_recordingClosePending && !g_recordingClosePrompt) {
+                g_recordingClosePending=false;
+                PostMessageW(hwnd,WM_CLOSE,0,0);
+            }
+#endif
             // Also catches HDR/SDR white changes for which no resize is sent.
             static ULONGLONG nextHdrDisplayCheck = 0;
             const ULONGLONG now = GetTickCount64();
@@ -8196,6 +8678,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             }
             return 0;
         }
+        break;
+
+    case WM_ACTIVATE:
+        if (g_presentationActive.exchange(LOWORD(wParam) != WA_INACTIVE,
+                std::memory_order_acq_rel) != (LOWORD(wParam) != WA_INACTIVE))
+            NotifyPresentationChange();
         break;
 
     case WM_ACTIVATEAPP:
@@ -8266,6 +8754,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         break;
 
     case WM_LBUTTONUP:
+#ifdef LLCV_RECORDING
+        if (HandleGpuRecordingMouse(hwnd, msg, lParam)) return 0;
+#endif
+        [[fallthrough]];
     case WM_CANCELMODE:
         if (g_settings.audioOnly) {
             g_audioOnlyDragPending = false;
@@ -8282,10 +8774,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             SetCursor(nullptr);
             return TRUE;
         }
+#ifdef LLCV_RECORDING
+        if (HandleGpuRecordingMouse(hwnd, msg, lParam)) return TRUE;
+#endif
         break;
 
     case WM_DISPLAYCHANGE:
         if (g_settings.audioOnly) g_audioOnlyPaintBuffer.Release();
+        NotifyPresentationChange();
         LogDisplayChangeEvent(wParam, lParam);
         break;
 
@@ -8493,12 +8989,52 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         ToggleRuntimeOsd();
         return 0;
 
+#ifdef LLCV_RECORDING
+    case llcv::recording::kOpenRecordingSettings:
+#endif
     case WM_OPEN_SETTINGS:
+#ifdef LLCV_RECORDING
+        if (g_recordingClosePending || g_recordingDrainPending) return 0;
+        if(!g_settings.audioOnly && !wParam){
+            if(g_recordingSettingsWindow){SetForegroundWindow(g_recordingSettingsWindow);return 0;}
+            if (DeferPresentationUi(DeferredPresentationUi::RecordingSettings)) return 0;
+            g_presentationBlocked.store(true, std::memory_order_release);
+            NotifyPresentationChange();
+            ShowSettingsDialog(GetModuleHandleW(nullptr),true,hwnd);
+            g_presentationBlocked.store(false, std::memory_order_release);
+            NotifyPresentationChange();
+            return 0;
+        }
+#endif
         // The capture graph and WASAPI renderer are rebuilt only after this
         // window has closed and their threads have joined.
         g_restartToSettings.store(true, std::memory_order_release);
         PostMessageW(hwnd, WM_CLOSE, 0, 0);
         return 0;
+
+    case WM_PRESENTATION_UI_READY: {
+        if (!g_presentationUiPending || static_cast<UINT_PTR>(lParam) !=
+                g_deferredPresentationSerial.load(std::memory_order_acquire)) return 0;
+        if (!g_presentationClosing.load(std::memory_order_acquire) && g_running.load()) {
+            // Some drivers minimize the old fullscreen HWND on focus changes.
+            // The user explicitly asked to open UI, so restore its owner now.
+            if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+            const auto action = static_cast<DeferredPresentationUi>(wParam);
+            if (action == DeferredPresentationUi::Help)
+                g_viewerHelp.ProcessMessage(g_deferredHelpMessage, hwnd, IsEnglishUi(),
+                    kAppVersionLabel, g_settings.settingsLightTheme, g_deferredHelpModifiers);
+#ifdef LLCV_RECORDING
+            else if (action == DeferredPresentationUi::RecordingSettings)
+                ShowSettingsDialog(GetModuleHandleW(nullptr), true, hwnd);
+            else if (action == DeferredPresentationUi::ClosePrompt &&
+                BeginRecordingClose(hwnd, g_running.load() && RecordingCloseInteractive()))
+                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+#endif
+        }
+        g_presentationUiPending = false;
+        RefreshPresentationUiBlock();
+        return 0;
+    }
 
     case WM_RESTORE_ONE_TO_ONE:
         if (!g_settings.audioOnly) RestoreOneToOneWindow(hwnd);
@@ -8524,13 +9060,75 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         return 0;
     }
 
+#ifdef LLCV_RECORDING
+    case WM_RECORDING_CAPTURE_ENDED:
+        // Capture's caller still chooses exit vs. return to Settings. Arm the
+        // writer timeout now without racing that disposition by destroying UI.
+        if (!g_recordingDrainPending) {
+            g_recordingDrainPending=true;
+            g_recordingCloseWarningAt=GetTickCount64()+15000;
+            llcv::recording::SetControlsClosing(true);
+            llcv::recording::recorder.Stop();
+            UpdateViewerRecordingIndicator(llcv::recording::recorder.GetSnapshot());
+        }
+        return 0;
+#endif
+
+    case WM_QUERYENDSESSION:
+#ifdef LLCV_RECORDING
+        if (llcv::recording::recorder.Busy()) {
+            llcv::recording::recorder.Stop();
+            if (!(lParam & ENDSESSION_CRITICAL)) {
+                g_recordingShutdownBlocked=ShutdownBlockReasonCreate(hwnd,IsEnglishUi()
+                    ? L"Finishing the recording file" : L"녹화 파일 저장을 마무리하고 있습니다")!=FALSE;
+                return FALSE;
+            }
+        }
+#endif
+        return TRUE;
+
+    case WM_ENDSESSION:
+#ifdef LLCV_RECORDING
+        if (wParam) {
+            llcv::recording::SetControlsClosing(true);
+            llcv::recording::recorder.Stop();
+            g_running=false;
+            PostMessageW(hwnd,WM_CLOSE,0,0);
+        }
+#endif
+        return 0;
+
     case WM_CLOSE:
+#ifdef LLCV_RECORDING
+        if (llcv::recording::recorder.Busy() && !g_recordingClosePending && !g_recordingClosePrompt &&
+            DeferPresentationUi(DeferredPresentationUi::ClosePrompt)) return 0;
+        if (!BeginRecordingClose(hwnd,g_running.load() && RecordingCloseInteractive())) return 0;
+#endif
+        g_deferredPresentationUi.store(DeferredPresentationUi::None, std::memory_order_release);
+        g_presentationUiPending = false;
+        // DXGI may send synchronous window messages while leaving fullscreen.
+        // Keep this UI thread pumping until the output owner has released it.
+        if (ExclusiveOutputSelected() && g_videoOutputThreadActive.load(std::memory_order_acquire)) {
+            // Stop audio consumption with capture, rather than draining an
+            // empty ring while DXGI or a recording writer finishes teardown.
+            g_running.store(false, std::memory_order_release);
+            if (!g_presentationClosing.exchange(true, std::memory_order_acq_rel))
+                NotifyPresentationChange();
+            return 0;
+        }
         PersistWindowPosition(hwnd);
         g_windowPositionPersisted = true;
         DestroyWindow(hwnd);
         return 0;
 
     case WM_DESTROY:
+        g_deferredPresentationUi.store(DeferredPresentationUi::None, std::memory_order_release);
+        g_presentationUiPending = false;
+#ifdef LLCV_RECORDING
+        if (g_recordingShutdownBlocked) {
+            ShutdownBlockReasonDestroy(hwnd);g_recordingShutdownBlocked=false;
+        }
+#endif
         if (const DWORD error = g_suspendResumeNotification.Reset())
             LogHr(L"Unregister playback suspend/resume notification", HRESULT_FROM_WIN32(error));
         g_audioOnlyDragPending = false;
@@ -8566,9 +9164,25 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 static void RunViewerMessageLoop(HWND hwnd) {
     g_viewerHelp.SetBindings(g_settings.shortcuts);
     MSG m{};
-    while (g_running.load() && GetMessageW(&m, nullptr, 0, 0) > 0) {
+    while (g_running.load() || (ExclusiveOutputSelected() &&
+                g_videoOutputThreadActive.load(std::memory_order_acquire))) {
+        const int result = GetMessageW(&m, nullptr, 0, 0);
+        if (result <= 0) {
+            if (result == 0 && ExclusiveOutputSelected() &&
+                g_videoOutputThreadActive.load(std::memory_order_acquire)) {
+                g_running.store(false, std::memory_order_release);
+                g_presentationClosing.store(true, std::memory_order_release);
+                NotifyPresentationChange();
+                continue;
+            }
+            break;
+        }
+        if (!g_viewerHelp.Handle() && keys::Match(g_settings.shortcuts, keys::Action::Help, m) &&
+            !(m.lParam & (LPARAM{1} << 30)) &&
+            DeferPresentationUi(DeferredPresentationUi::Help, &m, keys::Modifiers())) continue;
         if (g_viewerHelp.ProcessMessage(m, hwnd, IsEnglishUi(), kAppVersionLabel,
                 g_settings.settingsLightTheme)) {
+            RefreshPresentationUiBlock();
             // Help shares the UI thread's cursor, but must not inherit the
             // fullscreen idle-hide state. Restart the grace period on close.
             g_lastFullscreenCursorActivityMs = GetTickCount64();
@@ -8604,12 +9218,16 @@ static void RunViewerMessageLoop(HWND hwnd) {
         }
         TranslateMessage(&m);
         DispatchMessageW(&m);
+        RefreshPresentationUiBlock();
     }
 
     // Capture can stop while an earlier UI message is still being handled.
     // The running guard then exits before the queued WM_CLOSE. Finish on the
     // owning UI thread so WM_DESTROY persists volume/placement exactly once.
     // A normal WM_CLOSE has already destroyed the window, so this is a no-op.
+#ifdef LLCV_RECORDING
+    DrainRecordingBeforeDestroy(hwnd);
+#endif
     if (IsWindow(hwnd)) DestroyWindow(hwnd);
 }
 
@@ -8622,6 +9240,9 @@ static void RelaunchWithSettings() {
     std::wstring commandLine = L"\"";
     commandLine += executable;
     commandLine += L"\" --force-settings";
+#ifdef LLCV_RECORDING
+    if(g_requestedSettingsTab>=0)commandLine+=L" --settings-tab "+std::to_wstring(g_requestedSettingsTab);
+#endif
 #ifdef LLCV_VSR_EXPERIMENT
     if (g_vsrMode == llcv::vsr::Mode::On) commandLine += L" --vsr-test on";
     else if (g_vsrMode == llcv::vsr::Mode::Off) commandLine += L" --vsr-test off";
@@ -8669,7 +9290,7 @@ static void ApplyVsrLiveTestSettings(AppSettings& settings) {
     // Session-only overrides; saved optional capture rates must not change
     // the fixed 1080p120 -> 1440p A/B measurement conditions.
     settings.videoPreset = VideoPreset::R2560x1440;
-    settings.vsrCapturePreset = VideoPreset::R1920x1080;
+    settings.capturePreset = VideoPreset::R1920x1080;
     settings.vsrEnabled = true;
     settings.videoFrameRate = 120;
     settings.capture40Fps = false;
@@ -8682,6 +9303,17 @@ static void ApplyVsrLiveTestSettings(AppSettings& settings) {
 }
 #endif
 
+static bool SuppressSettingsWritesForRun(const wchar_t* commandLine) {
+#if defined(LLCV_HDR_FRAME_AUDIT) || defined(LLCV_VSR_EXPERIMENT)
+    (void)commandLine;
+    return true;
+#else
+    return commandLine &&
+        (wcsstr(commandLine, L"--smoke-test") != nullptr ||
+         wcsstr(commandLine, L"--exclusive-probe") != nullptr);
+#endif
+}
+
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     INITCOMMONCONTROLSEX commonControls{
@@ -8690,15 +9322,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
 
     // Diagnostic runs must suppress migrations before loading settings, not
     // only suppress later saves after a real settings file was already changed.
-    g_suppressSettingsSave = commandLine &&
-        (wcsstr(commandLine, L"--smoke-test") != nullptr ||
-         wcsstr(commandLine, L"--exclusive-probe") != nullptr);
-#ifdef LLCV_HDR_FRAME_AUDIT
-    g_suppressSettingsSave = true;
-#endif
+    g_suppressSettingsSave = SuppressSettingsWritesForRun(commandLine);
 #ifdef LLCV_VSR_EXPERIMENT
-    // A private executable must not migrate or overwrite the user's settings.
-    g_suppressSettingsSave = true;
     const auto vsrOption = CommandLineOptionValue(L"--vsr-test");
     if (vsrOption == L"on") g_vsrMode = llcv::vsr::Mode::On;
     else if (vsrOption == L"off") g_vsrMode = llcv::vsr::Mode::Off;
@@ -8708,6 +9333,12 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
     }
 #endif
     LoadSettings();
+#ifdef LLCV_RECORDING
+    llcv::recording::sessionOptions=llcv::recording::LoadOptions();
+    const auto requestedTab=CommandLineOptionValue(L"--settings-tab");
+    if(requestedTab.size()==1 && requestedTab[0]>=L'0' && requestedTab[0]<L'0'+llcv::settings_ui::kSettingsNavigationCount)
+        g_requestedSettingsTab=requestedTab[0]-L'0';
+#endif
 #ifdef LLCV_VSR_EXPERIMENT
     // Reproducible, session-only live-capture experiment. Same input/output
     // plan for ON and OFF, no migration/profile writes and no capture restart.
@@ -8744,10 +9375,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
     const bool exclusiveProbeSelected = commandLine &&
         wcsstr(commandLine, L"--exclusive-probe") != nullptr;
     const bool exclusiveProbe = exclusiveProbeAll || exclusiveProbeSelected;
-    g_suppressSettingsSave = smokeTest || exclusiveProbe;
-#if defined(LLCV_HDR_FRAME_AUDIT) || defined(LLCV_VSR_EXPERIMENT)
-    g_suppressSettingsSave = true;
-#endif
+    g_suppressSettingsSave = SuppressSettingsWritesForRun(commandLine);
     if (!smokeTest && !exclusiveProbe &&
         g_settings.audioMode == AudioMode::WasapiExclusive) {
         const std::wstring endpointId =
@@ -8807,10 +9435,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
     }
 
     LatchVideoResolutionPlan();
-    if (g_vsrResolutionPlan) {
+    if (g_splitResolutionPlan) {
         const auto& capture = CurrentCapturePreset();
         const auto& display = CurrentVideoPreset();
-        fwprintf(stderr, L"[vsr] resolution plan: capture %d x %d -> display %d x %d; F6 preserves both.\n",
+        fwprintf(stderr, L"[video] resolution plan: capture %d x %d -> display %d x %d; VSR toggles preserve both.\n",
             capture.width, capture.height, display.width, display.height);
     }
     g_vsrMode.store(g_settings.vsrEnabled ? llcv::vsr::Mode::On
@@ -8980,7 +9608,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
         fwprintf(stderr, L"[video] window client area: %ld x %ld%s\n",
                  clientRect.right - clientRect.left,
                  clientRect.bottom - clientRect.top,
-                 g_vsrResolutionPlan ? L" (VSR display size)" : g_settings.pixelPerfect
+                 g_splitResolutionPlan ? L" (display size)" : g_settings.pixelPerfect
                      ? L" (pixel-perfect)"
                      : g_settings.relativeWindowSize
                            ? L" (monitor-relative)" : L"");
@@ -9005,10 +9633,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
         !g_settings.audioOnly &&
         g_settings.relativeWindowSize &&
         !ClientSizeFillsMonitor(initialClient, initialMonitor);
-    if (!g_settings.audioOnly && !preserveSmallerRelativeWindow &&
-        SelectedResolutionMatchesMonitor(initialMonitor)) {
+    if (!g_settings.audioOnly && (ExclusiveOutputSelected() ||
+        (!preserveSmallerRelativeWindow && SelectedResolutionMatchesMonitor(initialMonitor)))) {
         fwprintf(stderr,
-                 L"[video] selected resolution matches monitor; entering borderless fullscreen.\n");
+                 L"[video] entering fullscreen output.\n");
         ToggleFullscreen(hwnd, true);
     }
 
@@ -9032,7 +9660,16 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
     g_captureAudioRejected.store(false, std::memory_order_release);
     std::thread renderThread(AudioRenderThread);
     std::atomic<bool> smokeCaptureFailed{false};
+    g_videoOutputThreadActive.store(!g_settings.audioOnly, std::memory_order_release);
     std::thread unifiedCaptureThread([hwnd, smokeTest, &smokeCaptureFailed]() {
+        struct OutputCompletion {
+            HWND hwnd;
+            ~OutputCompletion() {
+                g_videoOutputThreadActive.store(false, std::memory_order_release);
+                if (g_presentationClosing.load(std::memory_order_acquire))
+                    PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            }
+        } completion{hwnd};
         const bool initialized = g_settings.audioOnly
             ? AudioOnlyCaptureLoop()
             : UnifiedCaptureRenderLoop(g_videoHost);

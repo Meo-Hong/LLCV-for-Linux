@@ -59,7 +59,7 @@ inline constexpr int IDC_SETTINGS_SCREENSHOT_CLIPBOARD = 2047;
 inline constexpr int IDC_SETTINGS_SCREENSHOT_FOLDER = 2048;
 inline constexpr int IDC_SETTINGS_VSR = 2049;
 inline constexpr int IDC_SETTINGS_VSR_GUIDE = 2050;
-inline constexpr int IDC_SETTINGS_VSR_CAPTURE = 2051;
+inline constexpr int IDC_SETTINGS_DISPLAY_RESOLUTION = 2051;
 inline constexpr int IDC_SETTINGS_VIDEO_REFRESH = 2052;
 inline constexpr int IDC_SETTINGS_THEME = 2053;
 inline constexpr int IDC_SETTINGS_ROUNDED_CORNERS = 2054;
@@ -69,6 +69,7 @@ inline constexpr int IDC_SETTINGS_CAPTURE_40 = 2057;
 inline constexpr int IDC_SETTINGS_CAPTURE_40_HELP = 2058;
 inline constexpr int IDC_SETTINGS_LS_GUIDE = 2059;
 inline constexpr int IDC_SETTINGS_SHORTCUT_RESET = 2060;
+inline constexpr int IDC_SETTINGS_FULLSCREEN_POSITION = 2061;
 inline constexpr int IDC_SETTINGS_SHORTCUT_FIRST = 2100;
 } // namespace control_id
 
@@ -103,5 +104,8 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
                                   const SettingsControlPopulation& population);
 void PopulateCaptureDevicePicker(HWND picker, std::span<const capture::DeviceInfo> devices,
                                  const std::wstring& selected, bool audio, bool english);
+void ApplyResolutionSelections(const SettingsControls& state,
+                              std::span<const settings::VideoPresetInfo> presets,
+                              settings::AppSettings& settings);
 
 } // namespace llcv::settings_ui

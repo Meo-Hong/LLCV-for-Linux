@@ -141,7 +141,7 @@ void CheckFields(HWND body) {
     }
     ReleaseDC(body,dc);
     // Each keyboard description is beside its key, not a prose paragraph.
-    for (int i=0;i<8;++i) {
+    for (int i=0;i<static_cast<int>(llcv::viewer_help::kShortcuts.size());++i) {
         RECT key{},action{};
         GetWindowRect(GetDlgItem(body,205+2*i),&key);
         GetWindowRect(GetDlgItem(body,206+2*i),&action);
@@ -261,7 +261,7 @@ int main(int argc,char** argv) {
             !std::wcsstr(Shortcuts(english),L"F8 "),"one shared up-to-date shortcut list");
         for (unsigned trial=0;trial<20;++trial) {
             traceResources("before-open",english,trial);
-            help.Toggle(owner,english,L"v-test",SW_HIDE,light);
+            help.Toggle(owner,english,saveSnapshots ? L"UI preview" : L"v-test",SW_HIDE,light);
             if (trial<3) traceResources("after-open",english,trial);
             HWND dialog=help.Handle(); Check(IsWindow(dialog)!=FALSE,"modeless creation");
             Check(GetWindow(dialog,GW_OWNER)==owner && IsWindowEnabled(owner),"owned, nonblocking, owner enabled");
@@ -283,7 +283,7 @@ int main(int argc,char** argv) {
             Check(!wcscmp(fontInfo.lfFaceName,llcv::settings_ui::SettingsFontFamily(FW_MEDIUM,english)) &&
                 fontInfo.lfWeight==FW_MEDIUM && fontInfo.lfQuality==CLEARTYPE_QUALITY,
                 "help matches settings font family, weight and raster quality");
-            Check(Text(GetDlgItem(edit,202))==L"v-test","runtime version badge");
+            Check(Text(GetDlgItem(edit,202))==(saveSnapshots ? L"UI preview" : L"v-test"),"runtime version badge");
             CheckFields(edit);
             CheckPalette(edit,light);
             help.SetLightTheme(!light); CheckPalette(edit,!light);
@@ -382,6 +382,9 @@ int main(int argc,char** argv) {
     for (bool english:{false,true}) {
         auto custom=llcv::shortcuts::Defaults;
         custom[0]=VK_F9;
+#ifdef LLCV_RECORDING
+        custom[static_cast<size_t>(llcv::shortcuts::Action::Recording)]=llcv::shortcuts::Ctrl|'R';
+#endif
         custom[4]=llcv::shortcuts::Ctrl|llcv::shortcuts::Alt|llcv::shortcuts::Shift|VK_SPACE;
         custom[6]=VK_F10;
         custom[static_cast<size_t>(llcv::shortcuts::Action::Exit)]=llcv::shortcuts::Ctrl|'Q';
@@ -396,6 +399,11 @@ int main(int argc,char** argv) {
               content.find(L"Ctrl+Alt+Shift+Space")!=std::wstring::npos && content.find(L"Ctrl+Q")!=std::wstring::npos,
               "help rows, video-only hint and screenshot instructions use current bindings");
         CheckFields(body);
+#ifdef LLCV_RECORDING
+        Check(content.find(L"Ctrl+R")!=std::wstring::npos &&
+            content.find(english?L"Start / stop recording":L"녹화 시작 / 종료")!=std::wstring::npos,
+            "help includes custom recording key and action");
+#endif
         auto old=Key(owner,VK_F1);
         Check(!help.ProcessMessage(old,owner,english,L"v-test") && help.Handle()==dialog,
               "old help binding no longer toggles");

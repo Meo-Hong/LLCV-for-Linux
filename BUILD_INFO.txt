@@ -1,4 +1,16 @@
-LLCV v2.0.5 x64 (continued from the v0.14.2 rework)
+LLCV v2.1.0 x64 (continued from the v0.14.2 rework)
+
+v2.1.0 SDR recording and presentation
+-----------------------------------
+- Adds SDR/stereo MP4 recording, supported MF encoders, CQP/bitrate modes, native/capped size and rate.
+- Adds recording shortcut, pause/resume, time/size splitting, asynchronous finalization and corner status.
+- Preserves written fragmented MP4 segments for H.264/HEVC/AV1; final unwritten data is not guaranteed.
+- Ships only pinned mux DLLs with source/license/build notices, not the FFmpeg programs or codecs.
+- Adds optional exclusive fullscreen with dialog/activation handover and guarded SDR clear elision.
+- Separates capture/display resolution from VSR and retains selected video size/position in fullscreen.
+- Removes the private automatic recording benchmark from the application and enables normal settings saves.
+- Retains installed executable/profile paths; recording-prototype.ini is preserved for compatibility.
+- No universal latency, encoder compatibility or calibrated HDR color/sync guarantee is claimed.
 
 v2.0.5 Customizable keyboard shortcuts
 --------------------------------------

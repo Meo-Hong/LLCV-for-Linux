@@ -157,6 +157,9 @@ void SettingsTheme::RefreshControls(UINT layoutDpi) {
 }
 bool SettingsTheme::IsHeading(HWND hwnd) const {
     const auto& c = *controls_;
+#ifdef LLCV_RECORDING
+    if(hwnd==c.recVideoTitle||hwnd==c.recSaveTitle)return true;
+#endif
     return hwnd == c.brandLabel || hwnd == c.pageTitle || hwnd == c.audioOutputSection ||
         hwnd == c.audioPlaybackSection || hwnd == c.audioStabilitySection ||
         hwnd == c.videoCaptureSection || hwnd == c.videoDisplaySection ||
@@ -166,10 +169,13 @@ bool SettingsTheme::IsHeading(HWND hwnd) const {
 }
 bool SettingsTheme::IsSecondary(HWND hwnd) const {
     const auto& c = *controls_;
+#ifdef LLCV_RECORDING
+    if(hwnd==c.recStatus||hwnd==c.recSpace||hwnd==c.recNote||hwnd==c.recSplitHint)return true;
+#endif
     return hwnd == c.pageSubtitle || hwnd == c.videoCapabilityStatus || hwnd == c.captureAudioStatus ||
         hwnd == c.vsrStatus || hwnd == c.screenshotHelp || hwnd == c.skipStartupHint ||
         hwnd == c.preventSleepHint ||
-        hwnd == c.versionWatermark || hwnd == c.fullscreenCursorHint || hwnd == c.surround51Hint ||
+        hwnd == c.versionWatermark || hwnd == c.fullscreenCursorHint || hwnd == c.fullscreenPositionHint || hwnd == c.surround51Hint ||
         hwnd == c.relativeSizeWarning || hwnd == c.guideDiagnosticsText || hwnd == c.guideVideoHint || hwnd == c.updateText ||
         hwnd == c.updateStatus || hwnd == c.audioStatus;
 }
@@ -178,7 +184,7 @@ bool SettingsTheme::IsCardControl(HWND hwnd) const {
     // Decoration follows the same functional grouping as the native controls;
     // it is never a child window and therefore cannot cover/capture input.
     return hwnd && (hwnd == c.vsrCheck || hwnd == c.vsrGuideButton || hwnd == c.vsrStatus ||
-        hwnd == c.vsrCaptureLabel || hwnd == c.vsrCaptureCombo ||
+        hwnd == c.displayResolutionLabel || hwnd == c.displayResolutionCombo ||
         hwnd == c.screenshotTitle || hwnd == c.screenshotClipboardCheck ||
         hwnd == c.screenshotFolderButton || hwnd == c.screenshotHelp ||
         hwnd == c.guideShortcutsTitle || hwnd == c.shortcutResetButton || hwnd == c.guideVideoHint ||
@@ -204,7 +210,7 @@ void SettingsTheme::PaintCards(HDC dc) {
         }
     };
     const auto& c = *controls_;
-    paintGroup({c.vsrCheck, c.vsrGuideButton, c.vsrCaptureLabel, c.vsrCaptureCombo, c.vsrStatus});
+    paintGroup({c.vsrCheck, c.vsrGuideButton, c.displayResolutionLabel, c.displayResolutionCombo, c.vsrStatus});
     paintGroup({c.screenshotTitle, c.screenshotClipboardCheck, c.screenshotFolderButton, c.screenshotHelp});
     if (SettingsCompactLayout(&c)) {
         std::vector<HWND> shortcuts{c.guideVideoHint,c.shortcutResetButton};

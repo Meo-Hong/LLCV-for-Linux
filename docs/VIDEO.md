@@ -158,8 +158,18 @@ normal capture.
 
 ## Presentation
 
-**Low latency** presents without waiting for an additional VSync interval. It is
-the minimum-latency choice but may show tearing. **VSync** reduces tearing by
+**Low latency (standard)** and **Low latency (exclusive fullscreen)** both present without
+an additional VSync wait. Standard is the default and supports a window or borderless
+fullscreen alongside other apps. Exclusive fullscreen may further reduce display latency,
+depending on the system, but other windows cannot share that screen while exclusive output is active.
+
+**Low latency (exclusive fullscreen)** is opt-in. It releases exclusive output for Alt+Tab and settings/help
+dialogs, then restores it on return; failure falls back to windowed output. OSD, HDR and VSR keep
+their existing support conditions. Use Low latency (standard) for working with other windows.
+Direct display and a fixed latency improvement are not guaranteed on every system.
+
+
+Both low-latency modes may show tearing. **VSync** reduces tearing by
 waiting for display synchronization and can add a refresh interval of latency.
 
 On desktops with mixed monitor refresh rates, Windows DWM composition can alter
@@ -168,14 +178,48 @@ displays. Low-latency presentation avoids an extra VSync wait but cannot remove
 every DWM pacing difference. Compare Input FPS and Present FPS in the Tab overlay
 on the monitor that will actually be used.
 
-**Compatibility (Blt + VSync)** uses a different swapchain path from the two Flip
-modes above. It can add latency and GPU load and does not support HDR10 output.
+**Compatibility (Blt + VSync)** uses a different swapchain path from low latency and
+VSync's Flip output. It can add latency and GPU load and does not support HDR10 output.
 Capture and audio buffering remain unchanged.
 
 **Display monitor** chooses the startup location. Auto restores the last position;
 an explicit selection starts on that monitor, or the primary monitor if it is
 disconnected. The choice does not lock the window or GPU output route: you can
 still move the window and use F11 on its current monitor.
+
+<br>
+
+### OBS and exclusive fullscreen comparison
+
+Reference results from a test PC on 2026-10-17. Windows ETW was used to compare
+the **source display event to the viewer display event for the same frame**,
+including HDMI/capture transport. This is neither a camera/photodiode measurement
+of physical input-to-photon latency nor the app-processing value in the Tab overlay.
+
+| LLCV presentation mode | OBS mean latency | LLCV mean latency | Reduction vs. OBS |
+| --- | ---: | ---: | ---: |
+| Windowed | 32.9ms | 27.9ms | 5.0ms |
+| Borderless fullscreen | 33.3ms | 27.6ms | 5.7ms |
+| Exclusive fullscreen | 33.3ms | **11.4ms** | **21.9ms** |
+
+OBS 32.2.2 used a windowed preview projector for the windowed row; both fullscreen
+rows share the same fullscreen preview projector baseline. OBS was not measured
+in exclusive fullscreen. GC573 captured 2560×1440 120fps NV12 SDR, shown on the
+same 3840×2160 144Hz monitor. The window had a 1280×720 video area; fullscreen
+output was 3840×2160. Differences between rows cannot be attributed solely to
+window decorations because output size also changed.
+
+VSR, OSD and recording were off. OBS used a 120fps composition, capture buffering
+disabled and its main preview disabled. Each path ran twice with a 25-second
+steady window per run. Means pool matched frames: windowed OBS 5,811 and LLCV
+5,921; fullscreen OBS 5,420, LLCV borderless 6,000 and LLCV exclusive 5,220.
+
+**Limitations:** The same GPU generated the HDMI test source and ran the viewer.
+Some repeats in both paths missed unique frames; averages include only matched
+displayed frames. Source-side drops were observed, but the remaining missing
+frames could not be attributed separately. This can bias the comparison: the
+results do not establish lossless playback or a universal 21.9ms advantage.
+They do not cover every OBS output path/configuration or audio latency and sync.
 
 <br>
 
@@ -245,31 +289,24 @@ guarantee for every card. Avoid concurrent capture-device use by multiple apps.
 
 ## Pixel-perfect and resizing
 
-The original-size 1:1 behavior below describes **VSR disabled in settings**. Enabling
-VSR changes this option to **Lock display size**, which keeps the selected display
-resolution. F6 toggles the effect without changing that sizing policy; F5 restores
-input size. See [VSR usage](USAGE.md#nvidia-vsr-experimental) for capture/display
-resolution choices and requirements.
-
-With **Pixel-perfect** enabled, the client area is fixed to the selected capture
-resolution and mouse resizing is disabled. With it disabled, the window remains
-freely resizable while preserving the video aspect ratio.
+**Capture resolution** and **Display resolution** are independent of VSR.
+**Pixel-perfect / Lock display size** locks the selected display size. This is source 1:1 only
+when both resolutions match. Disable it for aspect-preserving manual resizing.
+F6 toggles only the effect; F5 restores input size.
 
 Resizing updates only the necessary video-output resources and reuses resources
 that do not depend on window size. This reduces recreation work; it does not
 change capture resolution or buffering, and does not guarantee a measured
 latency improvement.
 
-Pixel-perfect fullscreen keeps a strict 1:1 mapping whenever the capture fits
-the monitor, centers the original image, and clears unused space to black. Both
-QHD and FHD input therefore remain at their original size on a 4K display. If
-the capture is larger than the monitor, it is downscaled without cropping and
-with its aspect ratio preserved.
+Borderless and exclusive fullscreen retain the selected display size and fill margins with black.
+For example, 1920×1080 on a 4K monitor remains 1080p-sized. **Window → Fullscreen video position**
+selects the center, an edge or a corner. Oversized output is aspect-fitted without cropping.
 
 `F5` restores exact 1:1 client size without changing the saved Pixel-perfect
 option. If capture and monitor resolutions match, it uses fullscreen. If a 1:1
 window cannot fit the monitor work area, the HUD reports that it is unavailable.
-`F11` toggles borderless fullscreen independently.
+`F11` toggles fullscreen using the selected presentation mode independently.
 
 The fullscreen cursor defaults to **Auto-hide**: it disappears after two seconds
 without pointer activity and returns immediately on mouse movement or wheel

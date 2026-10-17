@@ -316,7 +316,7 @@ void TestVsrLiveTestRateIsolation() {
             RequestedVideoFrameRate() == 120,
             "live VSR experiment always requests 120fps regardless of saved override");
         Require(g_settings.videoPreset == VideoPreset::R2560x1440 &&
-            g_settings.vsrCapturePreset == VideoPreset::R1920x1080 && g_settings.vsrEnabled &&
+            g_settings.capturePreset == VideoPreset::R1920x1080 && g_settings.vsrEnabled &&
             g_settings.pixelFormat == VideoPixelFormat::Nv12 &&
             g_settings.presentationMode == PresentationMode::AllowTearing &&
             g_settings.audioMode == AudioMode::WasapiShared && g_settings.volumePercent == 73,
