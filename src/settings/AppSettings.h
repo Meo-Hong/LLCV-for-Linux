@@ -45,9 +45,10 @@ struct VideoPresetInfo {
 };
 
 enum class PresentationMode {
-    AllowTearing,
-    VSync,
-    Compatibility,
+    AllowTearing = 0,
+    VSync = 1,
+    Compatibility = 2,
+    ExclusiveFullscreen = 3,
 };
 
 enum class ScalingMode {
@@ -59,6 +60,15 @@ enum class FullscreenCursorMode {
     AutoHide,
     AlwaysVisible,
 };
+
+enum class FullscreenVideoPosition {
+    Center, TopLeft, Top, TopRight, Left, Right, BottomLeft, Bottom, BottomRight,
+};
+inline constexpr int kFullscreenVideoPositionCount = 9;
+constexpr FullscreenVideoPosition FullscreenPositionFromIndex(int index) {
+    return index >= 0 && index < kFullscreenVideoPositionCount
+        ? static_cast<FullscreenVideoPosition>(index) : FullscreenVideoPosition::Center;
+}
 
 enum class VideoPixelFormat {
     Auto,
@@ -103,7 +113,9 @@ struct AppSettings {
     ScalingMode scalingMode = ScalingMode::Smooth;
     FullscreenCursorMode fullscreenCursorMode =
         FullscreenCursorMode::AutoHide;
-    VideoPreset videoPreset = VideoPreset::R1920x1080;
+    VideoPreset videoPreset = VideoPreset::R1920x1080; // Display size, independent of VSR.
+    VideoPreset capturePreset = VideoPreset::R1920x1080;
+    FullscreenVideoPosition fullscreenVideoPosition = FullscreenVideoPosition::Center;
     VideoPixelFormat pixelFormat = VideoPixelFormat::Auto;
     int videoFrameRate = 0;
     // Explicit driver request; leave the normal frame-rate preference intact.
@@ -122,7 +134,6 @@ struct AppSettings {
     bool saveLog = false;
     bool screenshotClipboard = false;
     bool vsrEnabled = false;
-    VideoPreset vsrCapturePreset = VideoPreset::R1920x1080;
     bool showDiagnosticConsole = false;
     bool skipStartupSettings = false;
     bool checkForUpdates = true;

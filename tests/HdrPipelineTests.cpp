@@ -335,6 +335,17 @@ static int TestRawSdr() {
             const double bb = yy + 2 * (1 - kb) * uu;
             const double gg = (yy - kr * rr - kb * bb) / (1 - kr - kb);
             const auto actual = Read(r, 100, 100);
+#ifdef LLCV_RECORDING
+            // UI is a child surface, never a modification of source samples,
+            // renderer back buffer, or the encoder's raw video input.
+            const auto cornerBefore=Read(r,width-40,height-24);
+            llcv::recording::AttachRecordingIndicator(hwnd,hwnd,false,false);
+            llcv::recording::Snapshot recordUi;recordUi.phase=llcv::recording::Phase::Recording;
+            recordUi.busy=true;recordUi.elapsedMs=123000;
+            llcv::recording::UpdateRecordingIndicator(hwnd,recordUi);
+            UpdateWindow(hwnd);
+            Require(Read(r,width-40,height-24)==cornerBefore,"recording UI does not modify video pixels");
+#endif
             const double expected[]{rr, gg, bb};
             for (size_t c = 0; c < 3; ++c)
                 Near(actual[c], std::clamp(expected[c], 0.0, 255.0), 3, "SDR matrix/range RGB reference");

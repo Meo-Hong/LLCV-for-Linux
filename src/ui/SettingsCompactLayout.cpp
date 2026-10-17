@@ -126,6 +126,34 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
     const auto text = [s](const wchar_t* ko, const wchar_t* en) { return s->english ? en : ko; };
     Pages pages(width, pageHeight);
     switch (s->activeTab) {
+#ifdef LLCV_RECORDING
+    case SettingsTab::Recording:
+        pages.Group(text(L"코덱",L"Codec"));
+        pages.Text(s->recCodecLabel,20);
+        for(auto codec:s->recordingCodecs)pages.Check(codec);
+        pages.Field(s->recEncoderLabel,s->recEncoder);
+        pages.Text(s->recStatus,52);
+        pages.Group(text(L"화질",L"Quality"));
+        pages.Field(s->recModeLabel,s->recMode);
+        pages.Field(s->recBitrateLabel,s->recBitrate);
+        {
+            const int half=(width-16)/2;
+            pages.Block(54,{{s->recResolutionLabel,0,0,half,20},{s->recResolution,0,24,half,30},
+                {s->recFpsLabel,half+16,0,width-half-16,20},{s->recFps,half+16,24,width-half-16,30}});
+        }
+        pages.Field(s->recAudioLabel,s->recAudio);
+        pages.Group(text(L"저장",L"Storage"));
+        pages.Text(s->recFolderLabel,20);pages.Text(s->recFolder,44);pages.Button(s->recBrowse);pages.Button(s->recOpenFolder);
+        pages.Text(s->recSpace,64);
+
+        pages.Field(s->recSplitLabel,s->recSplit);
+        pages.Field(s->recSplitValueLabel,s->recSplitValue);
+        pages.Text(s->recSplitHint,40);
+        // Keep a stable pause location without creating an empty idle page.
+        pages.Block(152,{{s->recNote,0,0,width,112},
+            {s->recPause,0,120,std::min(width,240),32}});
+        break;
+#endif
     case SettingsTab::VideoWindow:
         pages.Group(text(L"캡처 장치",L"Capture devices"));
         pages.Button(s->videoRefreshButton);
@@ -154,9 +182,9 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
         pages.Field(s->displayMonitorLabel,s->displayMonitorCombo);
         pages.Field(s->scalingLabel,s->scalingCombo);
         pages.Check(s->pixelCheck);
-        pages.Group(text(L"VSR · 스크린샷",L"VSR & screenshots"));
+        pages.Group(text(L"표시 해상도 · VSR",L"Display resolution & VSR"));
+        pages.Field(s->displayResolutionLabel,s->displayResolutionCombo);
         pages.Block(32, {{s->vsrCheck,0,0,width-120,32},{s->vsrGuideButton,width-110,0,110,32}});
-        pages.Field(s->vsrCaptureLabel,s->vsrCaptureCombo);
         pages.Text(s->vsrStatus,36);
         pages.Block(110, {{s->screenshotTitle,0,0,width,20},
             {s->screenshotClipboardCheck,0,28,width,28},
@@ -193,6 +221,9 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
         pages.Group(text(L"전체화면 커서",L"Fullscreen cursor"));
         pages.Field(s->fullscreenCursorLabel,s->fullscreenCursorCombo);
         pages.Text(s->fullscreenCursorHint,40);
+        pages.Group(text(L"전체화면 영상 위치",L"Fullscreen video position"));
+        pages.Field(s->fullscreenPositionLabel,s->fullscreenPositionCombo);
+        pages.Text(s->fullscreenPositionHint,40);
         break;
     case SettingsTab::GuideDiagnostics:
         pages.Group(text(L"키보드 단축키",L"Keyboard shortcuts"));

@@ -1,13 +1,13 @@
-; LLCV v2.0.5
+; LLCV v2.1.0
 ; Build this script with Inno Setup 7 from the installer directory.
 
 #define MyAppName "LLCV"
-#define MyAppVersion "2.0.5"
+#define MyAppVersion "2.1.0"
 #define MyAppPublisher "seria-aa"
 #define MyAppURL "https://github.com/seria-aa/LowLatencyCaptureViewer"
 #define MyAppExeName "LowLatencyCaptureViewer.exe"
 #ifndef BuildDir
-#define BuildDir "..\build-v2050-release"
+#define BuildDir "..\build-v2100-release"
 #endif
 
 [Setup]
@@ -25,9 +25,9 @@ DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
-OutputDir=..\outputs\v2.0.5
-OutputBaseFilename=LowLatencyCaptureViewer_v2.0.5_Setup
-OutputManifestFile=LowLatencyCaptureViewer_v2.0.5_Setup-manifest.txt
+OutputDir=..\outputs\v2.1.0
+OutputBaseFilename=LowLatencyCaptureViewer_v2.1.0_Setup
+OutputManifestFile=LowLatencyCaptureViewer_v2.1.0_Setup-manifest.txt
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -35,7 +35,7 @@ CloseApplications=yes
 SetupIconFile=..\assets\LowLatencyCaptureViewer.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Uninstallable=yes
-VersionInfoVersion=2.0.5.0
+VersionInfoVersion=2.1.0.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName}
 VersionInfoCopyright=Copyright (C) 2026 seria-aa
@@ -63,6 +63,10 @@ Type: files; Name: "{group}\Low Latency Capture Viewer.lnk"
 
 [Files]
 Source: "{#BuildDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildDir}\avformat-62.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildDir}\avcodec-62.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildDir}\avutil-60.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildDir}\ffmpeg-licenses\*"; DestDir: "{app}\ffmpeg-licenses"; Flags: ignoreversion recursesubdirs
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.ko.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion

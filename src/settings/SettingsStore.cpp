@@ -149,6 +149,10 @@ LoadResult LoadFromIni(const std::wstring& path) {
     AppSettings& settings = result.settings;
     for (size_t i=0;i<shortcuts::Count;++i)
         settings.shortcuts[i]=static_cast<unsigned>(ReadInt(path,L"Shortcuts",shortcuts::Names[i],shortcuts::Defaults[i]));
+#ifdef LLCV_RECORDING
+    if (ReadString(path,L"Shortcuts",L"Recording",L"missing")==L"missing")
+        shortcuts::AddRecordingDefault(settings.shortcuts);
+#endif
     if (!shortcuts::Valid(settings.shortcuts)) settings.shortcuts=shortcuts::Defaults;
     settings.settingsLightTheme = _wcsicmp(
         ReadString(path, L"General", L"SettingsTheme", L"Dark").c_str(), L"Light") == 0;
@@ -320,7 +324,9 @@ LoadResult LoadFromIni(const std::wstring& path) {
     settings.capture40Fps = ReadBool(path, L"Video", L"Capture40Fps");
     const auto presentation = ReadString(path, L"Video", L"Presentation",
                                          L"AllowTearing");
-    settings.presentationMode = _wcsicmp(presentation.c_str(), L"Compatibility") == 0
+    settings.presentationMode = _wcsicmp(presentation.c_str(), L"ExclusiveFullscreen") == 0
+        ? PresentationMode::ExclusiveFullscreen
+        : _wcsicmp(presentation.c_str(), L"Compatibility") == 0
         ? PresentationMode::Compatibility
         : _wcsicmp(presentation.c_str(), L"VSync") == 0
             ? PresentationMode::VSync : PresentationMode::AllowTearing;
@@ -347,6 +353,8 @@ LoadResult LoadFromIni(const std::wstring& path) {
             : FullscreenCursorMode::AutoHide;
 
     settings.preferredDisplayMonitor = ReadString(path, L"Video", L"DisplayMonitor");
+    settings.fullscreenVideoPosition = FullscreenPositionFromIndex(
+        ReadInt(path, L"Video", L"FullscreenVideoPosition"));
     settings.windowSnap = ReadBool(path, L"Window", L"Snap", true);
     settings.roundedCorners = ReadBool(path, L"Window", L"RoundedCorners", true);
     const std::wstring windowX = ReadString(path, L"Window", L"X");
@@ -360,13 +368,16 @@ LoadResult LoadFromIni(const std::wstring& path) {
     settings.saveLog = ReadBool(path, L"Diagnostics", L"SaveLog");
     settings.screenshotClipboard = ReadBool(path, L"Screenshot", L"CopyToClipboard");
     settings.vsrEnabled = ReadBool(path, L"Video", L"VsrEnabled");
-    // Older profiles used the same resolution for capture and display.
-    const std::wstring vsrResolution = ReadString(path, L"Video", L"VsrCaptureResolution", resolution.c_str());
-    settings.vsrCapturePreset = settings.videoPreset;
-    if (vsrResolution == L"1280x720") settings.vsrCapturePreset = VideoPreset::R1280x720;
-    else if (vsrResolution == L"1920x1080") settings.vsrCapturePreset = VideoPreset::R1920x1080;
-    else if (vsrResolution == L"2560x1440") settings.vsrCapturePreset = VideoPreset::R2560x1440;
-    else if (vsrResolution == L"3840x2160") settings.vsrCapturePreset = VideoPreset::R3840x2160;
+    // Legacy profiles used Resolution for capture while VSR was off. Do not
+    // activate a dormant VsrCaptureResolution when migrating those profiles.
+    const std::wstring legacyCapture = settings.vsrEnabled
+        ? ReadString(path, L"Video", L"VsrCaptureResolution", resolution.c_str()) : resolution;
+    const std::wstring captureResolution = ReadString(path, L"Video", L"CaptureResolution", legacyCapture.c_str());
+    settings.capturePreset = settings.videoPreset;
+    if (captureResolution == L"1280x720") settings.capturePreset = VideoPreset::R1280x720;
+    else if (captureResolution == L"1920x1080") settings.capturePreset = VideoPreset::R1920x1080;
+    else if (captureResolution == L"2560x1440") settings.capturePreset = VideoPreset::R2560x1440;
+    else if (captureResolution == L"3840x2160") settings.capturePreset = VideoPreset::R3840x2160;
     settings.showDiagnosticConsole =
         ReadBool(path, L"Diagnostics", L"ShowConsole");
     return result;
@@ -469,9 +480,9 @@ static DWORD WriteSettings(const std::wstring& file, const AppSettings& settings
     wchar_t resolution[32]{};
     swprintf_s(resolution, L"%dx%d", width, height);
     WriteString(path, L"Video", L"Resolution", resolution);
-    VideoDimensions(settings.vsrCapturePreset, width, height);
+    VideoDimensions(settings.capturePreset, width, height);
     swprintf_s(resolution, L"%dx%d", width, height);
-    WriteString(path, L"Video", L"VsrCaptureResolution", resolution);
+    WriteString(path, L"Video", L"CaptureResolution", resolution);
     WriteString(path, L"Video", L"CaptureDeviceId",
                 settings.captureDeviceId.c_str());
     WriteString(path, L"Video", L"CaptureAudioDeviceId",
@@ -481,7 +492,9 @@ static DWORD WriteSettings(const std::wstring& file, const AppSettings& settings
     WriteInt(path, L"Video", L"FrameRate", settings.videoFrameRate);
     WriteInt(path, L"Video", L"Capture40Fps", settings.capture40Fps ? 1 : 0);
     WriteString(path, L"Video", L"Presentation",
-                settings.presentationMode == PresentationMode::Compatibility
+                settings.presentationMode == PresentationMode::ExclusiveFullscreen
+                    ? L"ExclusiveFullscreen"
+                    : settings.presentationMode == PresentationMode::Compatibility
                     ? L"Compatibility"
                     : settings.presentationMode == PresentationMode::VSync
                     ? L"VSync" : L"AllowTearing");
@@ -504,6 +517,8 @@ static DWORD WriteSettings(const std::wstring& file, const AppSettings& settings
                     ? L"AlwaysVisible" : L"AutoHide");
 
     WriteString(path, L"Video", L"DisplayMonitor", settings.preferredDisplayMonitor.c_str());
+    WriteInt(path, L"Video", L"FullscreenVideoPosition",
+        static_cast<int>(FullscreenPositionFromIndex(static_cast<int>(settings.fullscreenVideoPosition))));
     WriteInt(path, L"Window", L"Snap", settings.windowSnap ? 1 : 0);
     WriteInt(path, L"Window", L"RoundedCorners", settings.roundedCorners ? 1 : 0);
     WriteInt(path, L"Diagnostics", L"SaveLog", settings.saveLog ? 1 : 0);

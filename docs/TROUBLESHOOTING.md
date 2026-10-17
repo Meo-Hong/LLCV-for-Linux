@@ -205,6 +205,15 @@ Include the capture device, source resolution/FPS, selected format, capture
 audio device, output endpoint, Windows version, and whether another capture
 application had been running.
 
+<br>
+
+## Recording fails to start or stops
+
+Check for SDR/stereo input and select a supported codec, encoder and rate-control mode.
+Check free space and folder write permissions. For overload, lower recording resolution/rate limits.
+Read the failure notice for save status. Keep files after an unexpected exit and check them in a compatible player.
+See [recording support and file protection](RECORDING.md).
+
 ---
 
 [README](../README.md) · [Documentation](INDEX.md) · [한국어](TROUBLESHOOTING.ko.md)

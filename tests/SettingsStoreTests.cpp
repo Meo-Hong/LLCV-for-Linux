@@ -216,7 +216,7 @@ void TestResolutionRoundTrips(const std::wstring& path) {
         for (int fps : {0, 60, 120}) {
             AppSettings saved{};
             saved.videoPreset = item.preset;
-            saved.vsrCapturePreset = item.preset;
+            saved.capturePreset = item.preset;
             saved.videoFrameRate = fps;
             saved.pixelFormat = VideoPixelFormat::Nv12;
             if (!CheckSaved(path, saved, "save resolution fixture")) return;
@@ -226,17 +226,40 @@ void TestResolutionRoundTrips(const std::wstring& path) {
             Check(std::wstring(value) == item.text, "exact resolution persisted");
             const auto loaded = LoadFromIni(path).settings;
             Check(loaded.videoPreset == item.preset &&
-                  loaded.vsrCapturePreset == item.preset &&
+                  loaded.capturePreset == item.preset &&
                   loaded.videoFrameRate == fps &&
                   loaded.pixelFormat == VideoPixelFormat::Nv12,
                   "all resolutions retain FPS and NV12 through save/load");
         }
+        WritePrivateProfileStringW(L"Video", L"CaptureResolution", nullptr, path.c_str());
         WritePrivateProfileStringW(L"Video", L"VsrCaptureResolution", nullptr, path.c_str());
-        Check(LoadFromIni(path).settings.vsrCapturePreset == item.preset,
+        Check(LoadFromIni(path).settings.capturePreset == item.preset,
               "legacy profiles keep their existing capture size");
         WritePrivateProfileStringW(L"Video", L"VsrCaptureResolution", L"invalid", path.c_str());
-        Check(LoadFromIni(path).settings.vsrCapturePreset == item.preset,
+        Check(LoadFromIni(path).settings.capturePreset == item.preset,
               "invalid VSR size falls back to existing resolution");
+    }
+    for (bool enabled : {false, true}) {
+        for (const auto& display : cases) for (const auto& capture : cases) {
+            WritePrivateProfileStringW(L"Video", L"Resolution", display.text, path.c_str());
+            WritePrivateProfileStringW(L"Video", L"VsrCaptureResolution", capture.text, path.c_str());
+            WritePrivateProfileStringW(L"Video", L"CaptureResolution", nullptr, path.c_str());
+            WritePrivateProfileStringW(L"Video", L"VsrEnabled", enabled ? L"1" : L"0", path.c_str());
+            auto migrated = LoadFromIni(path).settings;
+            Check(migrated.videoPreset == display.preset &&
+                  migrated.capturePreset == (enabled ? capture.preset : display.preset),
+                  "migration preserves active legacy capture/display with VSR on or off");
+            migrated.capturePreset = capture.preset;
+            if (!CheckSaved(path, migrated, "save independent capture/display fixture")) return;
+            const auto loaded = LoadFromIni(path).settings;
+            Check(loaded.capturePreset == capture.preset && loaded.videoPreset == display.preset &&
+                  loaded.vsrEnabled == enabled,
+                  "independent capture/display round trip with VSR on or off");
+            WritePrivateProfileStringW(L"Video", L"VsrEnabled", enabled ? L"0" : L"1", path.c_str());
+            const auto toggled = LoadFromIni(path).settings;
+            Check(toggled.capturePreset == capture.preset && toggled.videoPreset == display.preset,
+                  "toggling saved VSR never reinterprets either resolution");
+        }
     }
 }
 
@@ -245,7 +268,7 @@ void TestRoundTrip(const std::wstring& path) {
     AppSettings saved{};
     saved.consoleSurround51 = true;
     saved.vsrEnabled = true;
-    saved.vsrCapturePreset = VideoPreset::R1280x720;
+    saved.capturePreset = VideoPreset::R1280x720;
     saved.preferredDisplayMonitor = L"interface:monitor-test-id";
     saved.uiLanguage = UiLanguage::English;
     saved.settingsLightTheme = true;
@@ -328,7 +351,7 @@ void TestRoundTrip(const std::wstring& path) {
     Check(loaded.asioDriverName == saved.asioDriverName,
           "ASIO driver round trip");
     Check(loaded.vsrEnabled == saved.vsrEnabled, "VSR preference saved/restored");
-    Check(loaded.vsrCapturePreset == saved.vsrCapturePreset, "VSR capture resolution saved separately");
+    Check(loaded.capturePreset == saved.capturePreset, "VSR capture resolution saved separately");
     Check(loaded.videoPreset == saved.videoPreset,
           "resolution round trip");
     Check(loaded.pixelFormat == saved.pixelFormat,
@@ -358,7 +381,8 @@ void TestPresentationModes(const std::wstring& path) {
     using namespace llcv::settings;
     for (const auto mode : {PresentationMode::AllowTearing,
                             PresentationMode::VSync,
-                            PresentationMode::Compatibility}) {
+                            PresentationMode::Compatibility,
+                            PresentationMode::ExclusiveFullscreen}) {
         AppSettings settings{};
         settings.presentationMode = mode;
         if (!CheckSaved(path, settings, "save presentation-mode fixture")) return;
@@ -366,6 +390,9 @@ void TestPresentationModes(const std::wstring& path) {
               "all presentation modes round trip");
         Check(LoadFromIni(path).settings.preventSleep, "enabled sleep preference round trips");
     }
+    WritePrivateProfileStringW(L"Video", L"Presentation", L"exclusivefullscreen", path.c_str());
+    Check(LoadFromIni(path).settings.presentationMode == PresentationMode::ExclusiveFullscreen,
+          "exclusive mode name remains case insensitive");
     WritePrivateProfileStringW(L"Video", L"Presentation", L"unknown", path.c_str());
     Check(LoadFromIni(path).settings.presentationMode == PresentationMode::AllowTearing,
           "unknown presentation mode retains original default");
@@ -577,6 +604,21 @@ int main(int argc, char** argv) {
         Check(llcv::settings::LoadFromIni(path).settings.shortcuts==llcv::shortcuts::Defaults,"default reset persists");
     }
     TestPresentationModes(path);
+    {
+        using namespace llcv::settings;
+        for (int i = 0; i < kFullscreenVideoPositionCount; ++i) {
+            AppSettings settings;
+            settings.fullscreenVideoPosition = FullscreenPositionFromIndex(i);
+            if (CheckSaved(path, settings, "save fullscreen position"))
+                Check(LoadFromIni(path).settings.fullscreenVideoPosition == settings.fullscreenVideoPosition,
+                      "all fullscreen positions round-trip");
+        }
+        for (const wchar_t* value : {L"-1", L"9", L"99999", L"invalid", static_cast<const wchar_t*>(nullptr)}) {
+            WritePrivateProfileStringW(L"Video", L"FullscreenVideoPosition", value, path.c_str());
+            Check(LoadFromIni(path).settings.fullscreenVideoPosition == FullscreenVideoPosition::Center,
+                  "missing or invalid fullscreen position defaults to center");
+        }
+    }
     TestPcmDefaultAndPreservation(path);
     TestLegacyPcmMigration(path);
     TestSaveFailures(path);

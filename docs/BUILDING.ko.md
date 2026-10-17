@@ -13,11 +13,12 @@
 - Windows 10/11 x64
 - **C++를 사용한 데스크톱 개발**이 설치된 Visual Studio 2022
 - Windows SDK와 Windows용 CMake 도구
+- FFmpeg 저장 라이브러리 빌드용 Git for Windows (Git Bash), curl·tar
 - 설치 프로그램을 만들 때만 Inno Setup 7
 
 Win32, DirectShow, D3D11, DXGI, MJPEG 디코딩용 Media Foundation과
-WASAPI 등 Windows 시스템 API를 사용합니다. FFmpeg나 서드파티 코덱 팩은
-필요하지 않습니다.
+WASAPI 등 Windows 시스템 API를 사용합니다. 녹화에는 고정 버전 FFmpeg 저장 전용
+공유 라이브러리가 필요합니다. 인코딩은 Media Foundation을 사용하며 FFmpeg 실행 파일이나 코덱 팩은 필요하지 않습니다.
 
 <br>
 
@@ -27,7 +28,8 @@ WASAPI 등 Windows 시스템 API를 사용합니다. FFmpeg나 서드파티 코�
 
 ```powershell
 chcp.com 65001 > $null
-cmake -S . -B build -A x64
+.\tools\Build-RecordingFFmpeg.ps1
+cmake -S . -B build -A x64 -DLLCV_RECORDING_FFMPEG_ROOT="$PWD/outputs/dependencies/recording-ffmpeg/install"
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
@@ -41,19 +43,27 @@ build\Release\LowLatencyCaptureViewer.exe
 Release 구성은 정적 MSVC 런타임을 사용하므로 패키지 실행에 별도 Visual C++
 재배포 패키지가 필요하지 않습니다.
 
-2.0.5에는 단축키 변경·복원·저장·키 입력 처리·한영 배치 회귀 검사를 추가했습니다.
+2.1.0에는 녹화·파일 분할·일시정지·저장 지연·강제 종료 파일 보존과 독점 전체화면·영상 배치 회귀 검사가 포함됩니다.
 기존 40fps 형식 협상·색 정보 보존·설정 페이지·장치 전환·저장 실패·스트림 종료·
 절전 요청 수명 검사도 포함됩니다.
 일부 파일 저장 테스트는 쓰기·이름 변경이 가능한 임시 폴더가
 필요합니다. GPU나 Windows 기능이 없어 건너뛴 검사는 통과한 검사와 구분해 기록하세요.
 절전 API 검사는 PC를 실제로 재우지 않으며, 실제 절전·복귀 검증을 대신하지 않습니다.
 
+독립 디코딩·분할·싱크 검사는 Python 3과 테스트용 ffmpeg/ffprobe도 필요합니다.
+PATH에 두거나 CMake의 `LLCV_TEST_FFMPEG`·`LLCV_TEST_FFPROBE`로 지정하세요.
+없으면 해당 검사가 등록되지 않으므로 전체 검증을 완료했다고 간주하지 않습니다.
+이 도구들은 앱 배포본에 넣지 않습니다.
+
 <br>
+
+재생 전용 개발 빌드는 `-DLLCV_RECORDING=OFF`로 FFmpeg 없이 만들 수 있지만 2.1.0 배포본과는 다릅니다.
+실행 파일 옆의 저장 라이브러리 DLL과 `ffmpeg-licenses` 폴더를 패키지에 유지하세요.
 
 ## 설치 프로그램과 포터블 ZIP
 
 Release 빌드 뒤 저장소 루트에서 아래 명령을 실행합니다. 다음은 위에서 만든
-`build\Release` 실행 파일을 v2.0.5로 패키징하는 예시입니다. 릴리스 스크립트의
+`build\Release` 실행 파일을 v2.1.0로 패키징하는 예시입니다. 릴리스 스크립트의
 기본 경로는 버전별 빌드 폴더이므로 아래 빌드 경로 재정의가 필요합니다.
 
 ```powershell
@@ -61,11 +71,11 @@ chcp.com 65001 > $null
 & "C:\Program Files\Inno Setup 7\ISCC.exe" `
   "--define=BuildDir=..\build\Release" ".\installer\LowLatencyCaptureViewer.iss"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-v1.ps1 `
-  -Version 2.0.5 -BuildDir ..\build\Release -OutputDir outputs\v2.0.5
+  -Version 2.1.0 -BuildDir ..\build\Release -OutputDir outputs\v2.1.0
 ```
 
-생성 파일은 `outputs\v2.0.5\LowLatencyCaptureViewer_v2.0.5_Setup.exe`와
-`outputs\v2.0.5\LowLatencyCaptureViewer_v2.0.5_x64.zip`입니다. 다른 버전은
+생성 파일은 `outputs\v2.1.0\LowLatencyCaptureViewer_v2.1.0_Setup.exe`와
+`outputs\v2.1.0\LowLatencyCaptureViewer_v2.1.0_x64.zip`입니다. 다른 버전은
 먼저 릴리스 관련 버전 표기를 맞춰야 합니다. ZIP 이름만 바꿔도 실행 파일 버전이
 바뀌지는 않습니다. 자세한 절차는 [릴리스 체크리스트](RELEASING.ko.md)를 따릅니다.
 

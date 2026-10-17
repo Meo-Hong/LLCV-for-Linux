@@ -16,7 +16,7 @@ const wchar_t* VsrSetupGuide(bool useEnglish) {
           L"Downscaling bypasses VSR. HDR requires a recent NVIDIA driver; "
           L"native HDR10 is preserved, without SDR-to-HDR conversion.\n\n"
           L"Keep in mind\n"
-          L"When enabled, the main resolution selects display size; VSR capture selects input size. "
+          L"Capture resolution selects input size; Display resolution selects video size, including fullscreen, with or without VSR. "
           L"F6 keeps both sizes unchanged. F5 restores source-size display.\n"
           L"GPU processing can increase latency. Screenshots remain unfiltered source images."
         : L"설정 방법\n"
@@ -28,7 +28,7 @@ const wchar_t* VsrSetupGuide(bool useEnglish) {
           L"축소 표시에는 적용하지 않습니다. HDR은 최신 NVIDIA 드라이버를 권장하며, "
           L"SDR→HDR 변환 없이 원래 HDR10을 유지합니다.\n\n"
           L"참고\n"
-          L"VSR을 켜면 위 해상도는 표시 크기, VSR 캡처 해상도는 입력 크기입니다. "
+          L"캡처 해상도는 입력 크기, 표시 해상도는 전체화면을 포함한 영상 크기이며 VSR을 꺼도 유지됩니다. "
           L"F6은 두 해상도를 유지합니다. F5는 입력 크기로 표시합니다.\n"
           L"GPU 처리로 지연이 늘 수 있습니다. 스크린샷에는 VSR이 적용되지 않습니다.";
 }
@@ -146,7 +146,7 @@ const wchar_t* Translate(const wchar_t* korean, bool useEnglish) {
         {L"전체화면 커서", L"Fullscreen cursor"},
         {L"자동 숨김 (권장)", L"Auto-hide (recommended)"},
         {L"항상 표시", L"Always show"},
-        {L"F11  보더리스 전체화면 켜기/끄기", L"F11  Toggle borderless fullscreen"},
+        {L"F11  전체화면 켜기/끄기", L"F11  Toggle fullscreen"},
         {L"진단 콘솔 창 표시", L"Show diagnostic console window"},
         {L"다음 실행부터 바로 시작", L"Start directly next time"},
         {L"새 버전이 있습니다. 공식 설치 파일을 다운로드하시겠습니까?", L"A new version is available. Open the official installer download?"},
