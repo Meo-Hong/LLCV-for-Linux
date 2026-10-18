@@ -5,7 +5,7 @@
 HDMI 캡처보드로 들어오는 영상과 소리를 재생하는 Windows용 저지연 뷰어입니다.
 OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리만 들을 수 있습니다.
 
-**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.1.1.md) · [English](README.md)
+**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.1.2.md) · [English](README.md)
 
 <br>
 
@@ -17,12 +17,11 @@ OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리�
 
 <br>
 
-## 2.1.1 업데이트
+## 2.1.2 업데이트
 
-**MJPEG 입력 녹화**와 재생 음량과 별개인 **녹화 음량 조절**을 추가했습니다.
-**목록에 없는 FPS 요청**을 켜면 드라이버가 나열하지 않은 30fps도 요청할 수 있습니다.
-녹화 설정 배치와 시작·종료 안정성, 저장 영상의 색 정보 처리도 보완했습니다.
-[녹화 사용 방법](docs/RECORDING.ko.md) · [전체 변경 내역](docs/release-notes-v2.1.1.md)
+녹화 인코더 확인 중 설정 창을 닫을 때의 멈춤과 녹화 시작 부분의 오디오 누락을 수정했습니다.
+MJPEG 색 정보, 남은 저장 공간 표시, 설정 창의 단축키 충돌과 최소화 후 창 위치 복원도 보완했습니다.
+[녹화 사용 방법](docs/RECORDING.ko.md) · [전체 변경 내역](docs/release-notes-v2.1.2.md)
 
 <br>
 

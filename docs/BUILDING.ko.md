@@ -43,7 +43,10 @@ build\Release\LowLatencyCaptureViewer.exe
 Release 구성은 정적 MSVC 런타임을 사용하므로 패키지 실행에 별도 Visual C++
 재배포 패키지가 필요하지 않습니다.
 
-2.1.1에는 MJPEG 녹화·녹화 음량·30fps 직접 요청, 녹화 시작·종료·설정·색 정보와
+2.1.2에는 별도 프로세스의 인코더 확인 취소·실패, 녹화 중 남은 공간 갱신,
+최종 MJPEG 연결 색 정보, 녹화 시작 오디오 겹침 처리, 설정 단축키와 최소화 창 위치
+회귀 검사를 추가했습니다.
+MJPEG 녹화·녹화 음량·30fps 직접 요청, 녹화 시작·종료·설정·색 정보와
 파일 분할·일시정지·저장 지연·강제 종료 파일 보존·독점 전체화면·영상 배치 회귀 검사가 포함됩니다.
 기존 40fps 형식 협상·색 정보 보존·설정 페이지·장치 전환·저장 실패·스트림 종료·
 절전 요청 수명 검사도 포함됩니다.
@@ -58,13 +61,13 @@ PATH에 두거나 CMake의 `LLCV_TEST_FFMPEG`·`LLCV_TEST_FFPROBE`로 지정하�
 
 <br>
 
-재생 전용 개발 빌드는 `-DLLCV_RECORDING=OFF`로 FFmpeg 없이 만들 수 있지만 2.1.1 배포본과는 다릅니다.
+재생 전용 개발 빌드는 `-DLLCV_RECORDING=OFF`로 FFmpeg 없이 만들 수 있지만 2.1.2 배포본과는 다릅니다.
 실행 파일 옆의 저장 라이브러리 DLL과 `ffmpeg-licenses` 폴더를 패키지에 유지하세요.
 
 ## 설치 프로그램과 포터블 ZIP
 
 Release 빌드 뒤 저장소 루트에서 아래 명령을 실행합니다. 다음은 위에서 만든
-`build\Release` 실행 파일을 v2.1.1로 패키징하는 예시입니다. 릴리스 스크립트의
+`build\Release` 실행 파일을 v2.1.2로 패키징하는 예시입니다. 릴리스 스크립트의
 기본 경로는 버전별 빌드 폴더이므로 아래 빌드 경로 재정의가 필요합니다.
 
 ```powershell
@@ -72,11 +75,11 @@ chcp.com 65001 > $null
 & "C:\Program Files\Inno Setup 7\ISCC.exe" `
   "--define=BuildDir=..\build\Release" ".\installer\LowLatencyCaptureViewer.iss"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-v1.ps1 `
-  -Version 2.1.1 -BuildDir ..\build\Release -OutputDir outputs\v2.1.1
+  -Version 2.1.2 -BuildDir ..\build\Release -OutputDir outputs\v2.1.2
 ```
 
-생성 파일은 `outputs\v2.1.1\LowLatencyCaptureViewer_v2.1.1_Setup.exe`와
-`outputs\v2.1.1\LowLatencyCaptureViewer_v2.1.1_x64.zip`입니다. 다른 버전은
+생성 파일은 `outputs\v2.1.2\LowLatencyCaptureViewer_v2.1.2_Setup.exe`와
+`outputs\v2.1.2\LowLatencyCaptureViewer_v2.1.2_x64.zip`입니다. 다른 버전은
 먼저 릴리스 관련 버전 표기를 맞춰야 합니다. ZIP 이름만 바꿔도 실행 파일 버전이
 바뀌지는 않습니다. 자세한 절차는 [릴리스 체크리스트](RELEASING.ko.md)를 따릅니다.
 

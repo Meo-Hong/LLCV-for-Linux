@@ -56,8 +56,11 @@ struct SettingsControls {
     recording::Options recordingOptions;
     recording::Capabilities recordingCapabilities{};
     bool recordingProbePending=true;
+    bool recordingProbeFailed=false;
     bool recordingStorageReady=false;
+    bool recordingStorageFromSnapshot=false;
     std::wstring recordingStorageFolder;
+    std::wstring recordingStoragePath;
     std::vector<HWND> recordingControls;
     std::array<HWND,3> recordingCodecs{};
     HWND recVideoTitle{},recSaveTitle{},recCodecLabel{},recStatus{},recEncoderLabel{},recEncoder{};

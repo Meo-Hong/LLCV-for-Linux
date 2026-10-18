@@ -13,19 +13,38 @@ void Item(HWND h,const wchar_t* text,int value,int selected){
     if(value==selected)SendMessageW(h,CB_SETCURSEL,i,0);
 }
 int Value(HWND h){auto i=SendMessageW(h,CB_GETCURSEL,0,0);return i==CB_ERR?-1:static_cast<int>(SendMessageW(h,CB_GETITEMDATA,i,0));}
-void RefreshStorage(SettingsControls* s){
+void SetTextIfChanged(HWND control,const wchar_t* text){
+    const auto length=GetWindowTextLengthW(control);
+    std::wstring current(static_cast<size_t>(length)+1,L'\0');
+    current.resize(GetWindowTextW(control,current.data(),length+1));
+    if(current!=text)SetWindowTextW(control,text);
+}
+void ShowStorageSpace(SettingsControls* s,bool known,uint64_t bytes){
     wchar_t line[256]{};
-    auto folder=s->recordingOptions.folder.empty()?recording::DefaultFolder():s->recordingOptions.folder;
-    SetWindowTextW(s->recFolder,folder.c_str());
-    std::filesystem::path path(folder);std::error_code error;
+    if(known)
+        swprintf_s(line,Text(s,L"남은 공간: %.1f GB\n공간이 부족해지면 녹화를 자동 마무리합니다.",L"Free space: %.1f GB\nRecording stops safely when space runs low."),bytes/1e9);
+    else wcscpy_s(line,Text(s,L"저장 위치의 남은 공간을 확인할 수 없습니다.",L"Free space is unavailable for this folder."));
+    SetTextIfChanged(s->recSpace,line);
+}
+void RefreshStorage(SettingsControls* s){
+    std::filesystem::path path(s->recordingStoragePath);std::error_code error;
     while(!path.empty()&&!std::filesystem::exists(path,error)){auto parent=path.parent_path();if(parent==path)break;path=parent;}
     ULARGE_INTEGER free{};
-    if(!path.empty()&&GetDiskFreeSpaceExW(path.c_str(),&free,nullptr,nullptr))
-        swprintf_s(line,Text(s,L"남은 공간: %.1f GB\n공간이 부족해지면 녹화를 자동 마무리합니다.",L"Free space: %.1f GB\nRecording stops safely when space runs low."),free.QuadPart/1e9);
-    else wcscpy_s(line,Text(s,L"저장 위치의 남은 공간을 확인할 수 없습니다.",L"Free space is unavailable for this folder."));
-    SetWindowTextW(s->recSpace,line);
-    s->recordingStorageFolder=s->recordingOptions.folder;
-    s->recordingStorageReady=true;
+    const bool known=!path.empty()&&GetDiskFreeSpaceExW(path.c_str(),&free,nullptr,nullptr);
+    ShowStorageSpace(s,known,free.QuadPart);
+}
+bool SnapshotMatchesStorage(const SettingsControls* s){
+    if(s->recordingSnapshot.path.empty()||s->recordingStoragePath.empty())return false;
+    // Lexical comparison only: resolving symlinks or querying the filesystem
+    // here would put storage latency back into the UI's polling timer.
+    const auto normalized=[](const std::filesystem::path& path){
+        auto value=path.lexically_normal();
+        if(value.has_relative_path()&&!value.has_filename())value=value.parent_path();
+        return value.make_preferred().wstring();
+    };
+    const auto actual=normalized(std::filesystem::path(s->recordingSnapshot.path).parent_path());
+    const auto selected=normalized(s->recordingStoragePath);
+    return CompareStringOrdinal(actual.c_str(),-1,selected.c_str(),-1,TRUE)==CSTR_EQUAL;
 }
 }
 void CreateRecordingSettings(SettingsControls* s,HWND owner){
@@ -51,7 +70,6 @@ void CreateRecordingSettings(SettingsControls* s,HWND owner){
     Item(s->recFps,L"60 fps",60,s->recordingOptions.maxFps);Item(s->recFps,L"30 fps",30,s->recordingOptions.maxFps);
     s->recAudioLabel=label(L"오디오 (AAC)",L"Audio (AAC)");s->recAudio=combo(2067);
     Item(s->recAudio,L"128 kbps",128,s->recordingOptions.audioKbps);Item(s->recAudio,L"192 kbps",192,s->recordingOptions.audioKbps);
-    // These controls belong to Audio, not the Recording page.
     s->recVolumeLabel=label(L"녹화 음량",L"Recording volume");
     s->recVolume=combo(kRecordingVolume);
     for(int percent=0;percent<=100;percent+=10)
@@ -81,7 +99,7 @@ bool CanToggleRecordingSettings(const SettingsControls* s){
     if(s->recordingSnapshot.busy)return true;
     const auto& support=s->recordingCapabilities[static_cast<int>(s->recordingOptions.codec)];
     const bool cpu=s->recordingOptions.encoder==L"cpu";
-    return !s->recordingProbePending&&support.container&&(cpu?support.software:!support.hardware.empty())&&
+    return !s->recordingProbePending&&!s->recordingProbeFailed&&support.container&&(cpu?support.software:!support.hardware.empty())&&
         support.Rates(cpu).Supports(s->recordingOptions.rateControl);
 }
 void RefreshRecordingSettings(SettingsControls* s){
@@ -91,8 +109,8 @@ void RefreshRecordingSettings(SettingsControls* s){
     // List only verified policies. An unavailable saved selection remains unset;
     // never silently fall back to CPU, a different codec, or a different mode.
     const bool cpu=s->recordingOptions.encoder==L"cpu";
-    const bool hardwareAvailable=support.container&&!support.hardware.empty()&&support.hardwareRates.Available();
-    const bool softwareAvailable=support.container&&support.software&&support.softwareRates.Available();
+    const bool hardwareAvailable=!s->recordingProbeFailed&&support.container&&!support.hardware.empty()&&support.hardwareRates.Available();
+    const bool softwareAvailable=!s->recordingProbeFailed&&support.container&&support.software&&support.softwareRates.Available();
     if(hardwareAvailable)Item(s->recEncoder,Text(s,L"자동 · 하드웨어",L"Automatic · hardware"),0,cpu?1:0);
     if(softwareAvailable)Item(s->recEncoder,Text(s,L"CPU · 소프트웨어",L"CPU · software"),1,cpu?1:0);
     const bool available=cpu?softwareAvailable:hardwareAvailable;
@@ -113,6 +131,7 @@ void RefreshRecordingSettings(SettingsControls* s){
     }else for(int rate=2;rate<=100;++rate){auto text=std::to_wstring(rate)+L" Mbps";Item(s->recBitrate,text.c_str(),rate,s->recordingOptions.videoMbps);}
     std::wstring status;
     if(s->recordingProbePending)status=Text(s,L"인코더 지원 확인 중…",L"Checking encoder support…");
+    else if(s->recordingProbeFailed)status=Text(s,L"인코더 확인을 완료하지 못했습니다.\n설정을 다시 열어 재시도하세요.",L"Encoder check could not finish.\nReopen settings to retry.");
     else if(!available)status=Text(s,L"선택한 인코더를 사용할 수 없습니다.\n다른 코덱 또는 인코더를 선택하세요.",L"Selected encoder is unavailable.\nChoose another codec or encoder.");
     else if(!rates.Supports(s->recordingOptions.rateControl))status=Text(s,L"선택한 녹화 방식을 지원하지 않습니다.\n지원되는 녹화 방식을 선택하세요.",L"Selected rate control is unavailable.\nChoose a supported rate control mode.");
     else if(s->recordingOptions.encoder==L"cpu")status=Text(s,L"CPU 인코딩 · 높은 해상도/프레임에서는 부하가 큽니다.",L"CPU encoding may be demanding at high resolutions / frame rates.");
@@ -135,11 +154,26 @@ void RefreshRecordingSettings(SettingsControls* s){
 }
 void ShowRecordingSettings(SettingsControls* s){
     const bool visible=s->activeTab==SettingsTab::Recording;
-    // Avoid filesystem queries when another page is open or a codec/quality
-    // choice changes. Recheck when this page opens or the folder changes.
+    // The recording worker already measures storage. Reuse its latest result
+    // without any disk I/O on busy UI ticks, including unavailable results.
     if(!visible)s->recordingStorageReady=false;
-    else if(!s->recordingStorageReady || s->recordingStorageFolder!=s->recordingOptions.folder)
-        RefreshStorage(s);
+    else{
+        const bool refresh=!s->recordingStorageReady || s->recordingStorageFolder!=s->recordingOptions.folder;
+        if(refresh){
+            s->recordingStorageFolder=s->recordingOptions.folder;
+            s->recordingStoragePath=s->recordingOptions.folder.empty()?recording::DefaultFolder():s->recordingOptions.folder;
+            SetTextIfChanged(s->recFolder,s->recordingStoragePath.c_str());
+            s->recordingStorageReady=true;
+        }
+        if(s->recordingSnapshot.busy){
+            ShowStorageSpace(s,s->recordingSnapshot.freeBytesKnown&&SnapshotMatchesStorage(s),s->recordingSnapshot.freeBytes);
+        }else if(refresh||s->recordingStorageFromSnapshot){
+            // Idle values refresh on page-open, folder change and recording
+            // completion, not on unrelated option changes or timer ticks.
+            RefreshStorage(s);
+        }
+        s->recordingStorageFromSnapshot=s->recordingSnapshot.busy;
+    }
     const bool editable=!s->recordingSnapshot.busy&&!s->recordingClosing;
     for(auto h:s->recordingControls){
         if(h==s->recEncoder||h==s->recMode||h==s->recBitrate||h==s->recFps||h==s->recAudio||h==s->recBrowse||
@@ -147,14 +181,15 @@ void ShowRecordingSettings(SettingsControls* s){
             std::find(s->recordingCodecs.begin(),s->recordingCodecs.end(),h)!=s->recordingCodecs.end())continue;
         SetSettingsControlVisible(h,visible);
     }
-    for(int i=0;i<3;++i){SetSettingsControlVisible(s->recordingCodecs[i],visible,editable&&!s->recordingProbePending&&s->recordingCapabilities[i].Available());
+    const bool probeReady=!s->recordingProbePending&&!s->recordingProbeFailed;
+    for(int i=0;i<3;++i){SetSettingsControlVisible(s->recordingCodecs[i],visible,editable&&probeReady&&s->recordingCapabilities[i].Available());
         const auto checked=static_cast<int>(s->recordingOptions.codec)==i?BST_CHECKED:BST_UNCHECKED;
         if(SendMessageW(s->recordingCodecs[i],BM_GETCHECK,0,0)!=checked)SendMessageW(s->recordingCodecs[i],BM_SETCHECK,checked,0);}
-    SetSettingsControlVisible(s->recEncoder,visible,editable&&!s->recordingProbePending&&s->recordingCapabilities[static_cast<int>(s->recordingOptions.codec)].Available());
+    SetSettingsControlVisible(s->recEncoder,visible,editable&&probeReady&&s->recordingCapabilities[static_cast<int>(s->recordingOptions.codec)].Available());
     const auto& support=s->recordingCapabilities[static_cast<int>(s->recordingOptions.codec)];
     const bool cpu=s->recordingOptions.encoder==L"cpu";
     const auto& rates=support.Rates(cpu);
-    const bool available=!s->recordingProbePending&&support.container&&(cpu?support.software:!support.hardware.empty())&&rates.Available();
+    const bool available=probeReady&&support.container&&(cpu?support.software:!support.hardware.empty())&&rates.Available();
     SetSettingsControlVisible(s->recMode,visible,editable&&available);
     SetSettingsControlVisible(s->recBitrate,visible,editable&&available&&rates.Supports(s->recordingOptions.rateControl));
     for(auto h:{s->recFps,s->recAudio,s->recVolume,s->recBrowse,s->recResolution,s->recSplit})SetSettingsControlVisible(h,visible,editable);
@@ -218,7 +253,7 @@ bool RecordingSettingsCommand(SettingsControls* s,HWND owner,int id,int notifica
     else if(id==2064&&notification==CBN_SELCHANGE){
         const int selected=Value(s->recEncoder);const bool cpu=selected==1;
         const auto& c=s->recordingCapabilities[static_cast<int>(s->recordingOptions.codec)];
-        if(!s->recordingProbePending&&(selected==0||selected==1)&&c.container&&c.Rates(cpu).Available()&&(cpu?c.software:!c.hardware.empty()))s->recordingOptions.encoder=cpu?L"cpu":L"";
+        if(!s->recordingProbePending&&!s->recordingProbeFailed&&(selected==0||selected==1)&&c.container&&c.Rates(cpu).Available()&&(cpu?c.software:!c.hardware.empty()))s->recordingOptions.encoder=cpu?L"cpu":L"";
     }else if(id==2065&&notification==CBN_SELCHANGE)s->recordingOptions.maxFps=Value(s->recFps);
     else if(id==2066&&notification==CBN_SELCHANGE){
         const int value=Value(s->recBitrate);

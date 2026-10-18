@@ -1,5 +1,6 @@
 #include "recording/EncoderProbe.h"
 #include "recording/EncoderSupport.h"
+#include "recording/EncoderProbeProcess.h"
 #include <mfapi.h>
 #include <mfidl.h>
 #include <mferror.h>
@@ -79,7 +80,11 @@ static void Dump(IMFByteStream* bytes){
         if(FAILED(hr)||(flags&MF_SOURCE_READERF_ENDOFSTREAM))break;
     }
 }
-int main(int argc,char** argv){
+int wmain(int argc,wchar_t** argv){
+    if(argc==2){
+        const int child=RunEncoderProbeChild(argv[1],[]{return ProbeEncoders();});
+        if(child>=0)return child;
+    }
     std::atomic<bool> cancelled{true};
     for(const auto& support:ProbeEncoders(&cancelled))
         Check(!support.container&&!support.software&&support.hardware.empty(),
@@ -91,12 +96,16 @@ int main(int argc,char** argv){
         // Exercise the actual UI support probe, not a parallel test-only
         // factory. HGLOBAL-backed MF streams can advertise read-only access
         // and previously hid working HEVC/AV1 containers from the settings.
-        const auto support=ProbeEncoders();
+        const auto isolated=probe_process::Run(nullptr,25000);
+        Check(isolated.completed,"real encoder discovery completes in the isolated helper");
+        const auto& support=isolated.capabilities;
         Check(support[1].container,"HEVC file container remains selectable when an encoder exists");
         Check(support[2].container,"AV1 container support does not require an installed encoder");
+        Check(support[0].software&&support[0].softwareRates.bitrate,
+            "isolated discovery preserves the working software H.264 encoder");
     }
 #endif
-    if(argc>1&&strcmp(argv[1],"--hardware")==0){
+    if(argc>1&&wcscmp(argv[1],L"--hardware")==0){
         // Opt-in diagnostic for installed hardware; absent codecs are reported,
         // not interpreted as a regression on machines with different GPUs.
         int outputFailures=0;
