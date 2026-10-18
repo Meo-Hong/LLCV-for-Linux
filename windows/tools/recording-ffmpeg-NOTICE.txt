@@ -1,0 +1,28 @@
+FFmpeg recording mux dependency
+
+FFmpeg 8.1.3, Copyright (c) the FFmpeg developers.
+https://ffmpeg.org/
+
+This build is licensed under the GNU Lesser General Public License version 2.1
+or later. See COPYING.LGPLv2.1 and LICENSE.md for the complete licensing terms.
+No GPL, nonfree, or optional external library is enabled. FFmpeg remains a
+replaceable shared-library dependency; it does not encode or decode recordings
+in LLCV. Windows Media Foundation provides the encoders.
+
+This software is based in part on the work of the Independent JPEG Group.
+LLCV makes no modifications to the FFmpeg source, including its IJG-derived
+files. The complete original notices are retained in the source archive.
+
+Source: https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz
+Source SHA256:
+7138D28C96D9D3E3AF4EE3D8CAD72741F8FFB40DA90C1112235DEA3ECD3178A3
+
+Rebuild instructions: tools/Build-RecordingFFmpeg.ps1 in the LLCV source tree.
+The build uses MSVC x64, shared libraries, /MT, no assembly, and the MP4/MOV
+muxer with its required helpers plus extract_extradata and av1_metadata bitstream
+filters. No FFmpeg encoders, decoders, demuxers, protocols, programs, or optional
+external libraries are enabled. Generated configuration is in config.mak.
+
+For redistribution, provide these notices and the LGPL license, together with
+access to the corresponding source and build instructions. Build tools and
+download caches are not required at runtime.

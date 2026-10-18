@@ -195,8 +195,9 @@ void TestChangingDriverCapabilities() {
     std::puts("range-only enumeration/selection and distinct failure logging passed.");
 }
 
-void TestExplicit40Fps() {
+void TestExplicitFrameRates() {
     using namespace llcv::video;
+    for (const int requested : {30,40}) {
     for (const auto format : {VideoPixelFormat::Nv12, VideoPixelFormat::Yuy2,
                               VideoPixelFormat::P010, VideoPixelFormat::Mjpeg}) {
         FakeVideoPin pin;
@@ -212,26 +213,27 @@ void TestExplicit40Fps() {
         VideoPixelFormat actual{};
         auto configure = [&](bool enabled) {
             pin.attemptedRates.clear();
-            return ConfigureVideoPin(&pin,1920,1080,40,format,
+            return ConfigureVideoPin(&pin,1920,1080,requested,format,
                 bytes,stride,fps,actual,nullptr,enabled);
         };
-        Check(SUCCEEDED(configure(true)) && fps == 40 && actual == format &&
-            pin.attemptedRates == std::vector<int>{40},
-            "opt-in negotiates unlisted 40fps for each supported pixel format");
+        Check(SUCCEEDED(configure(true)) && fps == requested && actual == format &&
+            pin.attemptedRates == std::vector<int>{requested},
+            "opt-in negotiates unlisted 30/40fps for each supported pixel format");
         const auto caps = ProbePixelFormats(&pin,1920,1080);
         Check(caps.size()==1 && caps.front().selectedFps==60,
             "40fps request never contaminates advertised capabilities");
-        pin.rejectedRate = 40;
-        Check(FAILED(configure(true)) && pin.attemptedRates==std::vector<int>{40},
+        pin.rejectedRate = requested;
+        Check(FAILED(configure(true)) && pin.attemptedRates==std::vector<int>{requested},
             "40fps refusal cannot fall back to 60fps");
         pin.rejectedRate = 0; pin.echoAcceptedFormat = false;
-        Check(FAILED(configure(true)), "driver silently returning 60fps is rejected");
+        Check(configure(true)==kRequestedFrameRateMismatch, "driver silently returning 60fps is identified");
         pin.nullActiveFormat = true;
         Check(FAILED(configure(true)), "missing driver readback is rejected");
         pin.nullActiveFormat = false;
         Check(SUCCEEDED(configure(false)) && fps==60,
             "disabled opt-in preserves legacy negotiation and fallback");
         Check(pin.references==1,"40fps negotiation releases COM references");
+    }
     }
     VIDEOINFOHEADER2 info{};
     info.bmiHeader.biWidth=1920; info.bmiHeader.biHeight=1080;
@@ -241,11 +243,19 @@ void TestExplicit40Fps() {
     media.pbFormat=reinterpret_cast<BYTE*>(&info);
     for (REFERENCE_TIME duration : {0LL,166667LL,248999LL,251001LL,333333LL}) {
         info.AvgTimePerFrame=duration;
-        Check(!Is40FpsMediaType(&media),"connected timing outside 40fps tolerance is rejected");
+        Check(!IsRequestedFrameRate(&media,40),"connected timing outside 40fps tolerance is rejected");
     }
     for (REFERENCE_TIME duration : {249000LL,250000LL,251000LL}) {
         info.AvgTimePerFrame=duration;
-        Check(Is40FpsMediaType(&media),"valid 40fps connected timing accepted");
+        Check(IsRequestedFrameRate(&media,40),"valid 40fps connected timing accepted");
+    }
+    for (REFERENCE_TIME duration : {332333LL,333333LL,333667LL,334333LL}) {
+        info.AvgTimePerFrame=duration;
+        Check(IsRequestedFrameRate(&media,30),"30fps and 29.97 readback accepted");
+    }
+    for (REFERENCE_TIME duration : {0LL,166667LL,250000LL,332332LL,334334LL}) {
+        info.AvgTimePerFrame=duration;
+        Check(!IsRequestedFrameRate(&media,30),"30fps rejects missing timing or a substituted rate");
     }
 }
 
@@ -475,7 +485,7 @@ int main(int argc, char** argv) {
     TestColorMetadataMerge();
     TestChangingDriverCapabilities();
     TestSelectedVersusActiveFormat();
-    TestExplicit40Fps();
+    TestExplicitFrameRates();
     TestAcceptedCandidateColorMetadata();
     TestLayoutBoundariesAndProbeErrors();
     if (failures != 0) {

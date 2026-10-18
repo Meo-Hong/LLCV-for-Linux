@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(LowLatencyCaptureViewer VERSION 2.0.5 LANGUAGES CXX)
+project(LowLatencyCaptureViewer VERSION 2.1.3 LANGUAGES CXX)
 
 include(cmake/MsvcDependencies.cmake)
 
@@ -58,8 +58,19 @@ set_property(SOURCE tests/VsrExperimentTests.cpp APPEND PROPERTY OBJECT_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/VsrTimingValidation.inl")
 
 option(LLCV_HDR_FRAME_AUDIT "Build a private F8 single-frame HDR diagnostic (not for release)" OFF)
+option(LLCV_RECORDING "Enable SDR video and stereo audio recording" ON)
+if(LLCV_RECORDING)
+    target_compile_definitions(LowLatencyCaptureViewer PRIVATE LLCV_RECORDING)
+    target_sources(LowLatencyCaptureViewer PRIVATE src/recording/Recorder.cpp src/recording/RecordingControls.cpp
+        src/recording/RecordingGpuIndicator.cpp
+        src/recording/RecordingOptions.cpp src/recording/EncoderSupport.cpp src/recording/RecordingSettingsView.cpp)
+    target_link_libraries(LowLatencyCaptureViewer PRIVATE mfreadwrite)
+endif()
 option(LLCV_HDR_SCRGB_PROTOTYPE "Private direct P010 shader/scRGB comparison (not for release)" OFF)
 option(LLCV_VSR_EXPERIMENT "Private NVIDIA VSR A/B experiment (not for release)" OFF)
+if(LLCV_RECORDING AND (LLCV_HDR_FRAME_AUDIT OR LLCV_HDR_SCRGB_PROTOTYPE OR LLCV_VSR_EXPERIMENT))
+    message(FATAL_ERROR "Disable LLCV_RECORDING when building private HDR/VSR experiments")
+endif()
 if (LLCV_VSR_EXPERIMENT)
     target_compile_definitions(LowLatencyCaptureViewer PRIVATE LLCV_VSR_EXPERIMENT)
     set_property(SOURCE src/main.cpp APPEND PROPERTY OBJECT_DEPENDS
@@ -134,6 +145,187 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(RecordingQualityBenchmark tests/RecordingQualityBenchmark.cpp src/recording/Recorder.cpp
+        src/recording/RecordingOptions.cpp src/recording/EncoderSupport.cpp)
+    target_include_directories(RecordingQualityBenchmark PRIVATE src)
+    target_compile_definitions(RecordingQualityBenchmark PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(RecordingQualityBenchmark PRIVATE ole32 oleaut32 shell32 strmiids mfplat mfreadwrite mfuuid)
+    target_compile_options(RecordingQualityBenchmark PRIVATE /W4 /EHsc /utf-8)
+    set_target_properties(RecordingQualityBenchmark PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_executable(RecordingRateControlTests tests/RecordingRateControlTests.cpp src/recording/EncoderSupport.cpp)
+    target_include_directories(RecordingRateControlTests PRIVATE src)
+    target_compile_definitions(RecordingRateControlTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(RecordingRateControlTests PRIVATE ole32 oleaut32 mfplat mfreadwrite mfuuid strmiids)
+    target_compile_options(RecordingRateControlTests PRIVATE /W4 /EHsc /utf-8)
+    set_target_properties(RecordingRateControlTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingRateControlTests COMMAND RecordingRateControlTests)
+    set_tests_properties(RecordingRateControlTests PROPERTIES TIMEOUT 15)
+    add_executable(RecordingEncoderProbeTests tests/RecordingEncoderProbeTests.cpp src/recording/EncoderSupport.cpp)
+    target_include_directories(RecordingEncoderProbeTests PRIVATE src)
+    target_compile_definitions(RecordingEncoderProbeTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(RecordingEncoderProbeTests PRIVATE ole32 oleaut32 mfplat mfreadwrite mfuuid strmiids)
+    target_compile_options(RecordingEncoderProbeTests PRIVATE /W4 /EHsc /utf-8)
+    set_target_properties(RecordingEncoderProbeTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingEncoderProbeTests COMMAND RecordingEncoderProbeTests)
+    set_tests_properties(RecordingEncoderProbeTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    add_executable(EncoderProbeProcessTests tests/EncoderProbeProcessTests.cpp)
+    target_include_directories(EncoderProbeProcessTests PRIVATE src)
+    target_compile_definitions(EncoderProbeProcessTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(EncoderProbeProcessTests PRIVATE /W4 /EHsc /utf-8)
+    set_target_properties(EncoderProbeProcessTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME EncoderProbeProcessTests COMMAND EncoderProbeProcessTests)
+    set_tests_properties(EncoderProbeProcessTests PROPERTIES TIMEOUT 15)
+    add_executable(RecordingTests tests/RecordingTests.cpp src/recording/Recorder.cpp
+        src/recording/RecordingOptions.cpp src/recording/EncoderSupport.cpp)
+    target_include_directories(RecordingTests PRIVATE src)
+    target_compile_definitions(RecordingTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(RecordingTests PRIVATE ole32 oleaut32 shell32 strmiids mfplat mfreadwrite mfuuid)
+    set_target_properties(RecordingTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    if(MSVC)
+        target_compile_options(RecordingTests PRIVATE /W4 /EHsc /utf-8)
+    endif()
+    add_test(NAME RecordingTests COMMAND RecordingTests)
+    if(LLCV_RECORDING_FFMPEG_ROOT)
+        foreach(case mjpeg mjpeg-pause mjpeg-limited mjpeg-scale mjpeg-arrival mjpeg-invalid
+                     mjpeg-color mjpeg-color-scale raw-color raw-color-scale
+                     raw-yuy2-color raw-yuy2-color-scale)
+            add_test(NAME Recording_${case} COMMAND RecordingTests --${case})
+            set_tests_properties(Recording_${case} PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+        endforeach()
+        add_test(NAME Recording_mjpeg-split COMMAND RecordingTests --mjpeg-split)
+        set_tests_properties(Recording_mjpeg-split PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+        add_test(NAME Recording_mjpeg-hevc COMMAND RecordingTests --mjpeg-hevc)
+        set_tests_properties(Recording_mjpeg-hevc PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        add_test(NAME Recording_mjpeg-hd COMMAND RecordingTests --mjpeg-hd)
+        set_tests_properties(Recording_mjpeg-hd PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+    endif()
+    add_test(NAME RecordingGainTests COMMAND RecordingTests --gain)
+    add_test(NAME RecordingMuteTests COMMAND RecordingTests --mute)
+    set_tests_properties(RecordingGainTests RecordingMuteTests
+        PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    add_test(NAME RecordingPauseTests COMMAND RecordingTests --pause)
+    add_test(NAME RecordingPauseUnalignedTests COMMAND RecordingTests --pause-unaligned)
+    set_tests_properties(RecordingPauseUnalignedTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    if(LLCV_RECORDING_FFMPEG_ROOT)
+        add_test(NAME RecordingGainSplitTests COMMAND RecordingTests --gain-split)
+        set_tests_properties(RecordingGainSplitTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+        add_test(NAME RecordingSplitPauseTests COMMAND RecordingTests --split-pause)
+        set_tests_properties(RecordingSplitPauseTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    endif()
+    add_test(NAME RecordingScaleTests COMMAND RecordingTests --scale)
+    set_tests_properties(RecordingPauseTests RecordingScaleTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    add_test(NAME RecordingArrivalClockTests COMMAND RecordingTests --arrival)
+    add_test(NAME RecordingRateLimitTests COMMAND RecordingTests --limited)
+    add_test(NAME RecordingQualityTests COMMAND RecordingTests --quality)
+    add_test(NAME RecordingQualityYuy2Tests COMMAND RecordingTests --quality-yuy2)
+    set_tests_properties(RecordingQualityTests RecordingQualityYuy2Tests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    add_test(NAME RecordingPaddedInputTests COMMAND RecordingTests --padded)
+    add_test(NAME RecordingYuy2InputTests COMMAND RecordingTests --yuy2)
+    add_test(NAME RecordingLifecycleTests COMMAND RecordingTests --lifecycle)
+    set_tests_properties(RecordingLifecycleTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    add_executable(RecordingAdmissionTests tests/RecordingAdmissionTests.cpp)
+    target_include_directories(RecordingAdmissionTests PRIVATE src)
+    target_compile_definitions(RecordingAdmissionTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(RecordingAdmissionTests PRIVATE /W4 /EHsc /utf-8)
+    set_target_properties(RecordingAdmissionTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingAdmissionTests COMMAND RecordingAdmissionTests)
+    set_tests_properties(RecordingAdmissionTests PROPERTIES TIMEOUT 15)
+    add_executable(RecordingStartupOptionsTests tests/RecordingStartupOptionsTests.cpp
+        src/recording/Recorder.cpp src/recording/RecordingOptions.cpp src/recording/EncoderSupport.cpp)
+    target_include_directories(RecordingStartupOptionsTests PRIVATE src)
+    target_compile_definitions(RecordingStartupOptionsTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(RecordingStartupOptionsTests PRIVATE ole32 oleaut32 shell32 strmiids mfplat mfreadwrite mfuuid)
+    target_compile_options(RecordingStartupOptionsTests PRIVATE /W4 /EHsc /utf-8)
+    set_target_properties(RecordingStartupOptionsTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingStartupOptionsTests COMMAND RecordingStartupOptionsTests)
+    set_tests_properties(RecordingStartupOptionsTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    set_tests_properties(RecordingPaddedInputTests RecordingYuy2InputTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    add_executable(RecordingBufferTests tests/RecordingBufferTests.cpp)
+    target_include_directories(RecordingBufferTests PRIVATE src)
+    target_compile_definitions(RecordingBufferTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(RecordingBufferTests PRIVATE /W4 /EHsc /utf-8)
+    target_link_libraries(RecordingBufferTests PRIVATE ole32 mfplat mfuuid)
+    set_target_properties(RecordingBufferTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingBufferTests COMMAND RecordingBufferTests)
+    set_tests_properties(RecordingBufferTests PROPERTIES TIMEOUT 20)
+    set_tests_properties(RecordingRateLimitTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    add_executable(RecordingSettingsTests tests/RecordingSettingsTests.cpp
+        src/recording/RecordingSettingsView.cpp src/recording/RecordingOptions.cpp
+        src/ui/SettingsView.cpp src/ui/PresentationModeUi.cpp)
+    target_include_directories(RecordingSettingsTests PRIVATE src)
+    target_compile_definitions(RecordingSettingsTests PRIVATE LLCV_RECORDING UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(RecordingSettingsTests PRIVATE comctl32 ole32 shell32)
+    set_target_properties(RecordingSettingsTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    target_compile_options(RecordingSettingsTests PRIVATE /W4 /EHsc /utf-8)
+    add_test(NAME RecordingSettingsTests COMMAND RecordingSettingsTests)
+    set_tests_properties(RecordingSettingsTests PROPERTIES TIMEOUT 45)
+    add_executable(RecordingShortcutTests tests/RecordingShortcutTests.cpp
+        src/settings/SettingsStore.cpp src/ui/SettingsView.cpp src/ui/PresentationModeUi.cpp
+        src/ui/SettingsDialogControls.cpp src/ui/UiText.cpp
+        src/recording/RecordingSettingsView.cpp src/recording/RecordingOptions.cpp)
+    target_include_directories(RecordingShortcutTests PRIVATE src)
+    target_compile_definitions(RecordingShortcutTests PRIVATE LLCV_RECORDING UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(RecordingShortcutTests PRIVATE comctl32 ole32 shell32)
+    target_compile_options(RecordingShortcutTests PRIVATE /W4 /EHsc /utf-8)
+    set_target_properties(RecordingShortcutTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingShortcutTests COMMAND RecordingShortcutTests)
+    set_tests_properties(RecordingShortcutTests PROPERTIES TIMEOUT 60)
+    add_executable(RecordingSafetyPolicyTests tests/RecordingSafetyPolicyTests.cpp)
+    target_include_directories(RecordingSafetyPolicyTests PRIVATE src)
+    target_compile_definitions(RecordingSafetyPolicyTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(RecordingSafetyPolicyTests PRIVATE /W4 /EHsc /utf-8)
+    set_target_properties(RecordingSafetyPolicyTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingSafetyPolicyTests COMMAND RecordingSafetyPolicyTests)
+    set_tests_properties(RecordingSafetyPolicyTests PROPERTIES TIMEOUT 15)
+    foreach(recording_test RecordingStateTests RecordingStatusTests RecordingControlsTests RecordingContainerTests)
+        add_executable(${recording_test} tests/${recording_test}.cpp)
+        target_include_directories(${recording_test} PRIVATE src)
+        target_compile_definitions(${recording_test} PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+        target_compile_options(${recording_test} PRIVATE /W4 /EHsc /utf-8)
+        set_target_properties(${recording_test} PROPERTIES WIN32_EXECUTABLE FALSE)
+        add_test(NAME ${recording_test} COMMAND ${recording_test})
+        set_tests_properties(${recording_test} PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    endforeach()
+    target_sources(RecordingStateTests PRIVATE src/recording/Recorder.cpp
+        src/recording/RecordingOptions.cpp src/recording/EncoderSupport.cpp)
+    target_link_libraries(RecordingStateTests PRIVATE ole32 oleaut32 shell32 strmiids mfplat mfreadwrite mfuuid)
+    # The controls fixture includes the production view with a snapshot-only recorder stub.
+    target_link_libraries(RecordingControlsTests PRIVATE user32 gdi32 shell32 ole32 comctl32 dwmapi)
+    add_executable(RecordingGpuIndicatorTests tests/RecordingGpuIndicatorTests.cpp
+        src/recording/RecordingGpuIndicator.cpp)
+    target_include_directories(RecordingGpuIndicatorTests PRIVATE src)
+    target_compile_definitions(RecordingGpuIndicatorTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(RecordingGpuIndicatorTests PRIVATE /W4 /EHsc /utf-8)
+    target_link_libraries(RecordingGpuIndicatorTests PRIVATE user32 ole32 d3d11 d2d1 dwrite)
+    set_target_properties(RecordingGpuIndicatorTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingGpuIndicatorTests COMMAND RecordingGpuIndicatorTests)
+    add_test(NAME RecordingGpuIndicatorGpuTests COMMAND RecordingGpuIndicatorTests --gpu)
+    set_tests_properties(RecordingGpuIndicatorTests RecordingGpuIndicatorGpuTests
+        PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE)
+    add_executable(RecordingIndicatorPreview WIN32 tests/RecordingControlsTests.cpp)
+    target_include_directories(RecordingIndicatorPreview PRIVATE src)
+    target_compile_definitions(RecordingIndicatorPreview PRIVATE LLCV_RECORDING_INDICATOR_PREVIEW UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(RecordingIndicatorPreview PRIVATE /W4 /EHsc /utf-8)
+    target_link_libraries(RecordingIndicatorPreview PRIVATE user32 gdi32 shell32 ole32 comctl32)
+    target_sources(RecordingContainerTests PRIVATE src/recording/EncoderSupport.cpp)
+    target_link_libraries(RecordingContainerTests PRIVATE ole32 oleaut32 mfplat mfreadwrite mfuuid strmiids)
+    add_executable(RecordingOptionsTests tests/RecordingOptionsTests.cpp src/recording/RecordingOptions.cpp)
+    target_include_directories(RecordingOptionsTests PRIVATE src)
+    target_compile_definitions(RecordingOptionsTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(RecordingOptionsTests PRIVATE /W4 /EHsc /utf-8)
+    target_link_libraries(RecordingOptionsTests PRIVATE ole32 shell32)
+    set_target_properties(RecordingOptionsTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingOptionsTests COMMAND RecordingOptionsTests)
+    add_executable(RecordingProcessingTests tests/RecordingProcessingTests.cpp src/recording/RecordingOptions.cpp)
+    target_include_directories(RecordingProcessingTests PRIVATE src)
+    target_compile_definitions(RecordingProcessingTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(RecordingProcessingTests PRIVATE /W4 /EHsc /utf-8)
+    target_link_libraries(RecordingProcessingTests PRIVATE mfplat mfuuid ole32 shell32)
+    set_target_properties(RecordingProcessingTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingProcessingTests COMMAND RecordingProcessingTests)
+    set_tests_properties(RecordingProcessingTests PROPERTIES TIMEOUT 15)
+    set_tests_properties(RecordingOptionsTests PROPERTIES TIMEOUT 15)
+    set_tests_properties(RecordingTests RecordingArrivalClockTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
     add_executable(PlaybackPowerRequestTests tests/PlaybackPowerRequestTests.cpp)
     target_include_directories(PlaybackPowerRequestTests PRIVATE src)
     target_compile_definitions(PlaybackPowerRequestTests PRIVATE
@@ -185,6 +377,14 @@ if (BUILD_TESTING)
         target_compile_options(ViewerHelpTests PRIVATE /W4 /EHsc /permissive- /utf-8)
     endif()
     add_test(NAME ViewerHelpTests COMMAND ViewerHelpTests)
+    add_executable(RecordingHelpTests tests/ViewerHelpTests.cpp src/ui/ViewerHelpWindow.cpp)
+    target_include_directories(RecordingHelpTests PRIVATE src)
+    target_compile_definitions(RecordingHelpTests PRIVATE LLCV_RECORDING UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN WINVER=0x0A00 _WIN32_WINNT=0x0A00)
+    target_link_libraries(RecordingHelpTests PRIVATE user32 gdi32 dwmapi gdiplus imm32)
+    target_compile_options(RecordingHelpTests PRIVATE /W4 /EHsc /utf-8)
+    set_target_properties(RecordingHelpTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingHelpTests COMMAND RecordingHelpTests)
+    set_tests_properties(RecordingHelpTests PROPERTIES TIMEOUT 120)
     add_test(NAME ViewerHelpImeTests COMMAND ViewerHelpTests --with-ime)
     # Each stress test opens/closes 320 native help windows. Preserve the full
     # coverage while allowing headroom alongside CPU-heavy parallel replays.
@@ -277,6 +477,18 @@ if (BUILD_TESTING)
     target_include_directories(OutputTransitionStateTests PRIVATE src)
     set_target_properties(OutputTransitionStateTests PROPERTIES WIN32_EXECUTABLE FALSE)
     add_test(NAME OutputTransitionStateTests COMMAND OutputTransitionStateTests)
+    foreach(policy_test ExclusivePresentationStateTests VideoClearPolicyTests VideoPlacementTests)
+        add_executable(${policy_test} tests/${policy_test}.cpp)
+        target_include_directories(${policy_test} PRIVATE src)
+        target_compile_definitions(${policy_test} PRIVATE
+            UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+        set_target_properties(${policy_test} PROPERTIES WIN32_EXECUTABLE FALSE)
+        if(MSVC)
+            target_compile_options(${policy_test} PRIVATE /W4 /EHsc /permissive- /utf-8)
+        endif()
+        add_test(NAME ${policy_test} COMMAND ${policy_test})
+        set_tests_properties(${policy_test} PROPERTIES TIMEOUT 15)
+    endforeach()
 
     add_executable(SettingsViewTests tests/SettingsViewTests.cpp
         src/ui/SettingsView.cpp src/ui/PresentationModeUi.cpp
@@ -299,7 +511,7 @@ if (BUILD_TESTING)
     set_tests_properties(SettingsModeCacheTests PROPERTIES TIMEOUT 15)
     # Native control creation is substantially slower than pure geometry tests,
     # especially when other replay tests run concurrently on CI.
-    set_tests_properties(SettingsViewTests PROPERTIES TIMEOUT 120)
+    set_tests_properties(SettingsViewTests PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
     add_executable(SettingsThemeTests tests/SettingsThemeTests.cpp
         src/ui/SettingsTheme.cpp src/ui/SettingsView.cpp src/ui/PresentationModeUi.cpp
         src/ui/SettingsDialogControls.cpp src/ui/UiText.cpp)
@@ -324,6 +536,23 @@ if (BUILD_TESTING)
     target_compile_definitions(SettingsPreview PRIVATE LLCV_SETTINGS_PREVIEW
         $<TARGET_PROPERTY:SettingsThemeTests,COMPILE_DEFINITIONS>)
     target_link_libraries(SettingsPreview PRIVATE comctl32 dwmapi)
+    if(LLCV_RECORDING)
+        target_compile_definitions(SettingsPreview PRIVATE LLCV_RECORDING)
+        target_sources(SettingsPreview PRIVATE src/recording/RecordingSettingsView.cpp src/recording/RecordingOptions.cpp)
+        target_link_libraries(SettingsPreview PRIVATE ole32 shell32)
+        # Exercise the actual six-page / ten-shortcut theme as well as the
+        # playback-only layout. Preview-only coverage cannot catch regressions.
+        add_executable(RecordingThemeTests ${settings_preview_sources}
+            src/recording/RecordingSettingsView.cpp src/recording/RecordingOptions.cpp)
+        target_include_directories(RecordingThemeTests PRIVATE src)
+        target_compile_definitions(RecordingThemeTests PRIVATE LLCV_RECORDING
+            $<TARGET_PROPERTY:SettingsThemeTests,COMPILE_DEFINITIONS>)
+        target_compile_options(RecordingThemeTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+        target_link_libraries(RecordingThemeTests PRIVATE comctl32 dwmapi ole32 shell32)
+        set_target_properties(RecordingThemeTests PROPERTIES WIN32_EXECUTABLE FALSE)
+        add_test(NAME RecordingThemeTests COMMAND RecordingThemeTests)
+        set_tests_properties(RecordingThemeTests PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+    endif()
     if (MSVC)
         target_compile_options(SettingsPreview PRIVATE /W4 /EHsc /permissive- /utf-8)
     endif()
@@ -346,6 +575,7 @@ if (BUILD_TESTING)
     # These test translation units include the implementation directly. Keep
     # that dependency explicit even when a localized MSVC include scan misses it.
     set_property(SOURCE tests/AudioCallbackTests.cpp tests/HdrPipelineTests.cpp
+        tests/MjpegRecordingPlaybackTests.cpp
         tests/MonitorMoveTests.cpp tests/SharedReplayTests.cpp
         APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/ViewerHelpWindow.h"
@@ -357,7 +587,10 @@ if (BUILD_TESTING)
         target_compile_definitions(VsrExperimentTests PRIVATE LLCV_SETTINGS_MODE_TEST)
         set_property(SOURCE tests/VsrExperimentTests.cpp APPEND PROPERTY OBJECT_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
-            "${CMAKE_CURRENT_SOURCE_DIR}/src/video/VsrExperiment.h")
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/video/VsrExperiment.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/ExclusiveViewerLifecycleTests.inl"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/ExclusiveRendererRegression.inl"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/VideoClearRegression.inl")
         target_include_directories(VsrExperimentTests PRIVATE
             $<TARGET_PROPERTY:LowLatencyCaptureViewer,INCLUDE_DIRECTORIES>)
         target_compile_definitions(VsrExperimentTests PRIVATE
@@ -370,9 +603,14 @@ if (BUILD_TESTING)
         endif()
         add_test(NAME VsrExperimentTests COMMAND VsrExperimentTests)
         set_tests_properties(VsrExperimentTests PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77 LABELS GPU)
+        add_test(NAME VideoClearRegression COMMAND VsrExperimentTests --video-clear-regression)
+        set_tests_properties(VideoClearRegression PROPERTIES
+            TIMEOUT 90 RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS GPU)
         add_test(NAME SettingsControllerTests COMMAND VsrExperimentTests --settings-controller)
-        add_test(NAME ViewerLifecycleTests COMMAND VsrExperimentTests --viewer-lifecycle)
-        set_tests_properties(ViewerLifecycleTests PROPERTIES TIMEOUT 30)
+        add_test(NAME ViewerLifecycleTests COMMAND VsrExperimentTests --viewer-lifecycle --smoke-test)
+        set_tests_properties(ViewerLifecycleTests PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+        add_test(NAME ExclusiveViewerLifecycleTests COMMAND VsrExperimentTests --exclusive-viewer-lifecycle)
+        set_tests_properties(ExclusiveViewerLifecycleTests PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE)
         # Hidden-window interaction and worker handover timings are distorted
         # by concurrent UI/GPU replay suites. Keep the deadline, but isolate it.
         set_tests_properties(SettingsControllerTests PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE)
@@ -389,6 +627,26 @@ if (BUILD_TESTING)
         target_compile_options(AudioCallbackTests PRIVATE /W4 /EHsc /permissive- /utf-8)
     endif()
     add_test(NAME AudioCallbackTests COMMAND AudioCallbackTests)
+
+    if(LLCV_RECORDING)
+        add_executable(MjpegRecordingPlaybackTests tests/MjpegRecordingPlaybackTests.cpp
+            ${audio_callback_sources})
+        target_include_directories(MjpegRecordingPlaybackTests PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,INCLUDE_DIRECTORIES>)
+        target_compile_definitions(MjpegRecordingPlaybackTests PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,COMPILE_DEFINITIONS>)
+        target_link_libraries(MjpegRecordingPlaybackTests PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,LINK_LIBRARIES>)
+        set_target_properties(MjpegRecordingPlaybackTests PROPERTIES WIN32_EXECUTABLE FALSE)
+        if(MSVC)
+            target_compile_options(MjpegRecordingPlaybackTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+        endif()
+        add_test(NAME MjpegRecordingPlaybackTests COMMAND MjpegRecordingPlaybackTests)
+        set_tests_properties(MjpegRecordingPlaybackTests PROPERTIES
+            TIMEOUT 45 RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS GPU)
+        add_test(NAME PlaybackMuteRecordingTests COMMAND AudioCallbackTests --mute-recording)
+        set_tests_properties(PlaybackMuteRecordingTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    endif()
 
     add_executable(HdrPipelineTests tests/HdrPipelineTests.cpp ${audio_callback_sources})
     target_include_directories(HdrPipelineTests PRIVATE
@@ -683,12 +941,158 @@ if (BUILD_TESTING)
         VideoMailboxStress VideoTransitionStress PROPERTIES TIMEOUT 30)
 endif()
 
+add_library(LLCV_RecordingStorage STATIC EXCLUDE_FROM_ALL src/recording/RecordingStorage.cpp)
+target_include_directories(LLCV_RecordingStorage PUBLIC src)
+target_compile_definitions(LLCV_RecordingStorage PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_compile_options(LLCV_RecordingStorage PRIVATE /W4 /EHsc /permissive- /utf-8)
+target_link_libraries(LLCV_RecordingStorage PUBLIC ole32 mfplat mfuuid)
+include(cmake/RecordingFFmpeg.cmake)
+if(BUILD_TESTING)
+    add_executable(RecordingStorageTests tests/RecordingStorageTests.cpp)
+    target_link_libraries(RecordingStorageTests PRIVATE LLCV_RecordingStorage)
+    target_compile_definitions(RecordingStorageTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(RecordingStorageTests PRIVATE /W4 /EHsc /utf-8)
+    set_target_properties(RecordingStorageTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingStorageTests COMMAND RecordingStorageTests)
+    set_tests_properties(RecordingStorageTests PROPERTIES TIMEOUT 30)
+
+    add_executable(RecordingStorageDelayTests tests/RecordingTests.cpp src/recording/Recorder.cpp
+        src/recording/RecordingOptions.cpp src/recording/EncoderSupport.cpp src/recording/RecordingStorage.cpp)
+    target_include_directories(RecordingStorageDelayTests PRIVATE src)
+    target_compile_definitions(RecordingStorageDelayTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN LLCV_RECORDING_STORAGE_DELAY_TEST)
+    target_compile_options(RecordingStorageDelayTests PRIVATE /W4 /EHsc /utf-8)
+    target_link_libraries(RecordingStorageDelayTests PRIVATE ole32 oleaut32 shell32 strmiids mfplat mfreadwrite mfuuid)
+    set_target_properties(RecordingStorageDelayTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    foreach(case arrival pause-unaligned split-pause)
+        if(NOT case STREQUAL "split-pause" OR LLCV_RECORDING_FFMPEG_ROOT)
+            add_test(NAME RecordingStorageDelay_${case} COMMAND RecordingStorageDelayTests --${case})
+            set_tests_properties(RecordingStorageDelay_${case} PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+        endif()
+    endforeach()
+    if(LLCV_RECORDING_FFMPEG_ROOT)
+        foreach(case hevc hevc-arrival)
+            add_test(NAME RecordingStorageDelay_${case} COMMAND RecordingStorageDelayTests --${case})
+            set_tests_properties(RecordingStorageDelay_${case} PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+        endforeach()
+    endif()
+endif()
+if(BUILD_TESTING AND LLCV_RECORDING_FFMPEG_ROOT)
+    add_executable(RecordingMuxFaultTests tests/RecordingMuxFaultTests.cpp src/recording/RecordingContainer.cpp)
+    target_include_directories(RecordingMuxFaultTests PRIVATE src)
+    target_compile_definitions(RecordingMuxFaultTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(RecordingMuxFaultTests PRIVATE /W4 /EHsc /utf-8)
+    target_link_libraries(RecordingMuxFaultTests PRIVATE ole32 mf mfplat mfreadwrite mfuuid)
+    set_target_properties(RecordingMuxFaultTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME RecordingMuxFaultTests COMMAND RecordingMuxFaultTests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/recording/mux-hevc-flash-tone.mp4")
+    set_tests_properties(RecordingMuxFaultTests PROPERTIES TIMEOUT 30)
+    add_test(NAME RecordingColorNegotiationTests COMMAND RecordingMuxFaultTests --color-negotiation)
+    set_tests_properties(RecordingColorNegotiationTests PROPERTIES TIMEOUT 15)
+    add_test(NAME RecordingHevcSyncTests COMMAND RecordingTests --hevc)
+    add_test(NAME RecordingHevcArrivalSyncTests COMMAND RecordingTests --hevc-arrival)
+    set_tests_properties(RecordingHevcSyncTests RecordingHevcArrivalSyncTests PROPERTIES
+        TIMEOUT 45 RUN_SERIAL TRUE LABELS GPU SKIP_RETURN_CODE 77)
+    add_executable(RecordingModernContainerTests tests/RecordingModernContainerTests.cpp
+        src/recording/EncoderSupport.cpp src/recording/RecordingOptions.cpp)
+    target_include_directories(RecordingModernContainerTests PRIVATE src)
+    target_compile_definitions(RecordingModernContainerTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(RecordingModernContainerTests PRIVATE /W4 /EHsc /utf-8)
+    target_link_libraries(RecordingModernContainerTests PRIVATE ole32 oleaut32 mfplat mfreadwrite mfuuid strmiids)
+    set_target_properties(RecordingModernContainerTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_executable(RecordingStorageCrashTests tests/RecordingModernContainerTests.cpp
+        src/recording/EncoderSupport.cpp src/recording/RecordingOptions.cpp src/recording/RecordingStorage.cpp)
+    target_include_directories(RecordingStorageCrashTests PRIVATE src)
+    target_compile_definitions(RecordingStorageCrashTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN LLCV_RECORDING_STORAGE_DELAY_TEST)
+    target_compile_options(RecordingStorageCrashTests PRIVATE /W4 /EHsc /utf-8)
+    target_link_libraries(RecordingStorageCrashTests PRIVATE ole32 oleaut32 mfplat mfreadwrite mfuuid strmiids)
+    set_target_properties(RecordingStorageCrashTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    foreach(codec av1 hevc hevc-bframes)
+        add_test(NAME RecordingModern_${codec}_Recovery COMMAND RecordingModernContainerTests
+            --fixture "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/recording/mux-${codec}-flash-tone.mp4")
+        set_tests_properties(RecordingModern_${codec}_Recovery PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+    endforeach()
+    # Independent decoding is test-only; these programs are never distributed
+    # with the app. MF's reader normalizes some fragmented track start times,
+    # so absolute PTS/DTS and visible/audible sync need a second implementation.
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    find_program(LLCV_TEST_FFMPEG NAMES ffmpeg DOC "FFmpeg executable for independent recording regression tests")
+    find_program(LLCV_TEST_FFPROBE NAMES ffprobe DOC "FFprobe executable for independent recording regression tests")
+    if(Python3_Interpreter_FOUND AND LLCV_TEST_FFMPEG AND LLCV_TEST_FFPROBE)
+        foreach(codec av1 hevc)
+            add_test(NAME RecordingSegments_${codec}_Crash COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/Verify-RecordingSegments.py"
+                --test-exe "$<TARGET_FILE:RecordingModernContainerTests>"
+                --fixture "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/recording/mux-${codec}-flash-tone.mp4"
+                --ffmpeg "${LLCV_TEST_FFMPEG}" --ffprobe "${LLCV_TEST_FFPROBE}" --mode time --crash)
+            set_tests_properties(RecordingSegments_${codec}_Crash PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+            add_test(NAME RecordingStorageCrash_${codec} COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/Verify-RecordingSegments.py"
+                --test-exe "$<TARGET_FILE:RecordingStorageCrashTests>"
+                --fixture "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/recording/mux-${codec}-flash-tone.mp4"
+                --ffmpeg "${LLCV_TEST_FFMPEG}" --ffprobe "${LLCV_TEST_FFPROBE}" --mode time --crash)
+            set_tests_properties(RecordingStorageCrash_${codec} PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+        endforeach()
+        foreach(codec av1 hevc hevc-bframes hevc-closed-bframes)
+            set(split_args)
+            if(codec STREQUAL "hevc-bframes")
+                set(split_args --allow-deferred)
+            endif()
+            foreach(mode time size)
+                add_test(NAME RecordingSegments_${codec}_${mode} COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/Verify-RecordingSegments.py"
+                    --test-exe "$<TARGET_FILE:RecordingModernContainerTests>"
+                    --fixture "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/recording/mux-${codec}-flash-tone.mp4"
+                    --ffmpeg "${LLCV_TEST_FFMPEG}" --ffprobe "${LLCV_TEST_FFPROBE}" --mode ${mode} ${split_args})
+                set_tests_properties(RecordingSegments_${codec}_${mode} PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
+            endforeach()
+        endforeach()
+        foreach(case av1 hevc hevc-bframes audio-offset video-offset)
+            set(fixture_codec "${case}")
+            set(offset_args)
+            if(case STREQUAL "audio-offset")
+                set(fixture_codec hevc)
+                set(offset_args --audio-offset-ms 10)
+            elseif(case STREQUAL "video-offset")
+                set(fixture_codec av1)
+                set(offset_args --video-offset-ms 15)
+            endif()
+            add_test(NAME RecordingIndependent_${case} COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/Verify-RecordingMux.py"
+                --test-exe "$<TARGET_FILE:RecordingModernContainerTests>"
+                --fixture "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/recording/mux-${fixture_codec}-flash-tone.mp4"
+                --ffmpeg "${LLCV_TEST_FFMPEG}" --ffprobe "${LLCV_TEST_FFPROBE}" ${offset_args})
+            set_tests_properties(RecordingIndependent_${case} PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
+        endforeach()
+    else()
+        message(STATUS "Independent recording media tests disabled: set LLCV_TEST_FFMPEG/LLCV_TEST_FFPROBE and install Python 3.")
+    endif()
+endif()
+
 get_property(llcv_build_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 foreach(llcv_target IN LISTS llcv_build_targets)
     get_target_property(llcv_sources ${llcv_target} SOURCES)
+    if("tests/RecordingTests.cpp" IN_LIST llcv_sources)
+        target_link_libraries(${llcv_target} PRIVATE windowscodecs)
+    endif()
+    if("src/recording/Recorder.cpp" IN_LIST llcv_sources)
+        foreach(llcv_decode_source src/video/MjpegDecoder.cpp src/video/VideoColor.cpp)
+            if(NOT "${llcv_decode_source}" IN_LIST llcv_sources)
+                target_sources(${llcv_target} PRIVATE ${llcv_decode_source})
+            endif()
+        endforeach()
+    endif()
+    if("src/recording/EncoderSupport.cpp" IN_LIST llcv_sources AND
+       NOT "src/recording/RecordingContainer.cpp" IN_LIST llcv_sources)
+        target_sources(${llcv_target} PRIVATE src/recording/RecordingContainer.cpp)
+    endif()
+    if("src/recording/EncoderSupport.cpp" IN_LIST llcv_sources OR
+       "src/recording/RecordingContainer.cpp" IN_LIST llcv_sources)
+        llcv_enable_recording_mux(${llcv_target})
+    endif()
     if("src/ui/SettingsView.cpp" IN_LIST llcv_sources OR
        "src/ui/ViewerHelpWindow.cpp" IN_LIST llcv_sources OR
-       "src/ui/AudioOnlyView.cpp" IN_LIST llcv_sources)
+       "src/ui/AudioOnlyView.cpp" IN_LIST llcv_sources OR
+       "tests/RecordingControlsTests.cpp" IN_LIST llcv_sources)
         target_sources(${llcv_target} PRIVATE src/ui/SettingsFonts.cpp src/ui/SettingsFonts.rc)
     endif()
     if("src/ui/SettingsTheme.cpp" IN_LIST llcv_sources)
@@ -705,9 +1109,31 @@ if(BUILD_TESTING)
     set_tests_properties(RendererResizeTests PROPERTIES LABELS GPU SKIP_RETURN_CODE 77 TIMEOUT 120)
     find_program(LLCV_POWERSHELL NAMES pwsh powershell)
     if(LLCV_POWERSHELL)
+        if(LLCV_RECORDING_FFMPEG_ROOT AND LLCV_TEST_FFPROBE)
+            add_test(NAME RecordingMjpegCrashRecovery COMMAND "${LLCV_POWERSHELL}"
+                -NoProfile -ExecutionPolicy Bypass -File
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-MjpegRecordingRecovery.ps1"
+                -Recorder "$<TARGET_FILE:RecordingTests>" -Probe "${LLCV_TEST_FFPROBE}")
+            set_tests_properties(RecordingMjpegCrashRecovery PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+            foreach(raw_input Nv12 Yuy2)
+                add_test(NAME Recording${raw_input}CrashRecovery COMMAND "${LLCV_POWERSHELL}"
+                    -NoProfile -ExecutionPolicy Bypass -File
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-MjpegRecordingRecovery.ps1"
+                    -Recorder "$<TARGET_FILE:RecordingTests>" -Probe "${LLCV_TEST_FFPROBE}"
+                    -InputFormat ${raw_input})
+                set_tests_properties(Recording${raw_input}CrashRecovery PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+            endforeach()
+        endif()
         add_test(NAME PackageDocsTests COMMAND "${LLCV_POWERSHELL}"
             -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/PackageDocsTests.ps1")
         set_tests_properties(PackageDocsTests PROPERTIES TIMEOUT 60)
+        if(LLCV_RECORDING)
+            add_test(NAME ReleasePackageTests COMMAND "${LLCV_POWERSHELL}"
+                -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/ReleasePackageTests.ps1"
+                -BuildRoot "${CMAKE_CURRENT_BINARY_DIR}" -SourceRoot "${CMAKE_CURRENT_SOURCE_DIR}"
+                -Version "${PROJECT_VERSION}" -Configuration "$<CONFIG>")
+            set_tests_properties(ReleasePackageTests PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+        endif()
     endif()
 endif()
 
@@ -753,6 +1179,16 @@ if(BUILD_TESTING AND MSVC)
 endif()
 
 install(TARGETS LowLatencyCaptureViewer RUNTIME DESTINATION .)
+if(LLCV_RECORDING)
+    if(NOT EXISTS "${LLCV_RECORDING_FFMPEG_ROOT}/licenses/COPYING.LGPLv2.1")
+        message(FATAL_ERROR "Recording distribution needs the pinned SDK licenses directory")
+    endif()
+    add_custom_command(TARGET LowLatencyCaptureViewer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${LLCV_RECORDING_FFMPEG_ROOT}/licenses"
+            "$<TARGET_FILE_DIR:LowLatencyCaptureViewer>/ffmpeg-licenses" VERBATIM)
+    install(FILES ${llcv_recording_runtime_dlls} DESTINATION .)
+    install(DIRECTORY "${LLCV_RECORDING_FFMPEG_ROOT}/licenses/" DESTINATION ffmpeg-licenses)
+endif()
 install(FILES LICENSE README.md README.ko.md DEPENDENCIES.txt
         "실행안내.txt" DESTINATION .)
 install(FILES third_party/asio/LICENSE.txt DESTINATION . RENAME ASIO-SDK-LICENSE.txt)

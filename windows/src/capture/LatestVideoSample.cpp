@@ -1,4 +1,7 @@
 #include "capture/LatestVideoSample.h"
+#ifdef LLCV_RECORDING
+#include "recording/Recorder.h"
+#endif
 
 #include <dvdmedia.h>
 
@@ -155,6 +158,9 @@ STDMETHODIMP VideoSampleGrabberCallback::SampleCB(
     // GetMediaType above is the required change notification (normally S_FALSE,
     // no allocation). Keep optional COM probes and I/O off this callback.
     sampleSlot_->Push(sample);
+#ifdef LLCV_RECORDING
+    recording::recorder.Push(true, sample);
+#endif
     return S_OK;
 }
 

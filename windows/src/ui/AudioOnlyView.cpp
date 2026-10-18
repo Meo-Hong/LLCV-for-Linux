@@ -1,6 +1,7 @@
 #include "ui/AudioOnlyView.h"
 #include "ui/AppPalette.h"
 #include "ui/SettingsFonts.h"
+#include "ui/SpeakerIcon.h"
 
 #include <algorithm>
 #include <cmath>
@@ -9,11 +10,6 @@
 
 namespace llcv::audio_only_view {
 namespace {
-// Painting and hit-testing share the same full-card interaction bounds.
-constexpr Rect kMaster{12, 38, 368, 100};
-constexpr Rect kLeft{12, 107, 186, 195};
-constexpr Rect kRight{194, 107, 368, 195};
-
 Rect ScaleRect(const Rect& content, const Rect& logical) noexcept {
     const int width = content.right - content.left;
     const int height = content.bottom - content.top;
@@ -77,6 +73,8 @@ audio_osd::HitTarget HitTest(int clientWidth, int clientHeight,
         return audio_osd::HitTarget::Left;
     if (Contains(ScaleRect(rect, kRight), clientX, clientY))
         return audio_osd::HitTarget::Right;
+    if (Contains(ScaleRect(rect, kMute), clientX, clientY))
+        return audio_osd::HitTarget::Mute;
     if (Contains(ScaleRect(rect, kMaster), clientX, clientY))
         return audio_osd::HitTarget::Master;
     return audio_osd::HitTarget::Panel;
@@ -179,12 +177,28 @@ void Paint(HDC dc, const Rect& content, const State& state) {
                   (std::max)(1, x(radius) - x(0)),
                   (std::max)(1, y(radius) - y(0)));
     };
+    const auto baselineFor = [&](HFONT selectedFont, int top, int bottom) {
+        SelectObject(dc, selectedFont);
+        TEXTMETRICW metrics{};
+        GetTextMetricsW(dc, &metrics);
+        return y(top) + (y(bottom) - y(top) - metrics.tmHeight) / 2 + metrics.tmAscent;
+    };
+    const auto baselineText = [&](const wchar_t* value, RECT bounds, int baseline,
+                                   COLORREF color, bool rightAligned = false) {
+        SetTextColor(dc, color);
+        const UINT previous = SetTextAlign(dc, TA_BASELINE | (rightAligned ? TA_RIGHT : TA_LEFT));
+        ExtTextOutW(dc, rightAligned ? bounds.right : bounds.left, baseline,
+                    ETO_CLIPPED, &bounds, value, static_cast<UINT>(wcslen(value)), nullptr);
+        SetTextAlign(dc, previous);
+    };
 
+    const int headerBaseline = baselineFor(bodyFont, 10, 32);
     SelectObject(dc, bodyFont);
-    label(state.english ? L"Audio" : L"오디오", 14, 10, 150, 32, textColor);
+    baselineText(state.english ? L"Audio" : L"오디오", rect(12, 8, 150, 34),
+                 headerBaseline, textColor);
     SelectObject(dc, smallFont);
-    label(state.outputLabel ? state.outputLabel : L"",
-          152, 12, 366, 30, secondaryColor, DT_RIGHT);
+    baselineText(state.outputLabel ? state.outputLabel : L"", rect(152, 8, 368, 34),
+                 headerBaseline, secondaryColor, true);
 
     const auto card = [&](const Rect& bounds, int target, HBRUSH normal) {
         SelectObject(dc, state.hoveredTarget == target ? hoverEdge : cardEdge);
@@ -196,64 +210,77 @@ void Paint(HDC dc, const Rect& content, const State& state) {
                                  int right, int bottom, bool isMaster) {
         wchar_t value[16]{};
         swprintf_s(value, L"%d", std::clamp(percent, 0, 200));
-        SelectObject(dc, isMaster ? masterFont : numberFont);
+        const HFONT valueFont = isMaster ? masterFont : numberFont;
+        const int baseline = baselineFor(valueFont, top, bottom);
         const COLORREF valueColor = isMaster && state.allowBoost && percent > 100
             ? boostColor : textColor;
-        label(value, left, top - 2, right - 15, bottom + 2, valueColor, DT_RIGHT);
         SelectObject(dc, smallFont);
-        label(L"%", right - 12, bottom - 20, right, bottom - 2,
-              secondaryColor, DT_RIGHT);
+        SIZE unit{};
+        GetTextExtentPoint32W(dc, L"%", 1, &unit);
+        RECT valueBounds = rect(left, top, right, bottom);
+        valueBounds.right -= unit.cx + (std::max)(1, x(4) - x(0));
+        baselineText(L"%", rect(left, top, right, bottom), baseline, secondaryColor, true);
+        SelectObject(dc, valueFont);
+        baselineText(value, valueBounds, baseline, valueColor, true);
     };
     card(kMaster, 3, master);
+    card(kMute, static_cast<int>(audio_osd::HitTarget::Mute), cardBrush);
+    HPEN speakerPen = CreatePen(PS_SOLID, (std::max)(1, y(2)-y(0)), textColor);
+    SelectObject(dc, speakerPen);
+    constexpr int iconLeft = kMute.left + (kMute.right - kMute.left - ui::kSpeakerIconSize) / 2;
+    constexpr int iconTop = kMute.top + (kMute.bottom - kMute.top - ui::kSpeakerIconSize) / 2;
+    ui::DrawSpeakerIcon(state.muted, [&](int x1,int y1,int x2,int y2) {
+        MoveToEx(dc,x(iconLeft+x1),y(iconTop+y1),nullptr);
+        LineTo(dc,x(iconLeft+x2),y(iconTop+y2));
+    });
+    SelectObject(dc, GetStockObject(NULL_PEN));
+    DeleteObject(speakerPen);
     SelectObject(dc, bodyFont);
-    if (state.allowBoost) {
-        label(state.english ? L"Master volume" : L"마스터 음량",
-              26, 46, 216, 69, textColor);
-        SelectObject(dc, smallFont);
-        label(state.english ? L"Up to 200%" : L"최대 200%",
-              26, 70, 216, 89, secondaryColor);
-    } else {
-        label(state.english ? L"Master volume" : L"마스터 음량",
-              26, 48, 216, 90, textColor);
-    }
-    percentage(state.masterPercent, 218, 48, 354, 90, true);
+    label(state.english ? L"Master volume" : L"마스터 음량",
+          kMute.right + kCardPadding, 48, 216, 69, textColor);
+    SelectObject(dc, smallFont);
+    label(state.muted ? (state.english ? L"Muted" : L"음소거")
+                      : (state.allowBoost ? (state.english ? L"Up to 200%" : L"최대 200%")
+                                          : (state.english ? L"Up to 100%" : L"최대 100%")),
+          kMute.right + kCardPadding, 71, 216, 90, secondaryColor);
+    percentage(state.masterPercent, 218, 48, kMaster.right - kCardPadding, 90, true);
 
     const auto channel = [&](int target, const wchar_t* name, int percent,
                              double peakDb, const Rect& bounds) {
         const int left = bounds.left;
         const int right = bounds.right;
         card(bounds, target, cardBrush);
+        percentage(percent, left + 44, 118, right - kCardPadding, 150, false);
         SelectObject(dc, bodyFont);
-        label(name, left + 12, 115, left + 40, 151, textColor);
-        percentage(percent, left + 44, 115, right - 12, 151, false);
+        label(name, left + kCardPadding, 118, left + 40, 150, textColor);
         const double validPeak = std::isfinite(peakDb)
             ? std::clamp(peakDb, -96.0, 0.0) : -96.0;
         wchar_t peak[48]{};
         swprintf_s(peak, L"%.1f dBFS", validPeak);
         SelectObject(dc, smallFont);
         label(state.english ? L"Output level" : L"출력 레벨",
-              left + 12, 159, left + 82, 177, secondaryColor);
-        label(peak, left + 82, 159, right - 12, 177, textColor, DT_RIGHT);
-        rounded(track, left + 12, 181, right - 12, 187, 4);
+              left + 12, 156, left + 82, 174, secondaryColor);
+        label(peak, left + 82, 156, right - 12, 174, textColor, DT_RIGHT);
+        rounded(track, left + 12, 178, right - 12, 184, 4);
         const double level = std::clamp((validPeak + 60.0) / 60.0, 0.0, 1.0);
         const int fillRight = left + 12 + static_cast<int>(
             std::lround((right - left - 24) * level));
         if (fillRight > left + 12)
-            rounded(accent, left + 12, 181, fillRight, 187, 4);
+            rounded(accent, left + 12, 178, fillRight, 184, 4);
     };
     channel(1, L"L", state.leftPercent, state.leftPeakDb, kLeft);
     channel(2, L"R", state.rightPercent, state.rightPeakDb, kRight);
 
     SelectObject(dc, clipping);
-    Ellipse(dc, x(14), y(209), x(18), y(213));
+    Ellipse(dc, x(12), y(210), x(16), y(214));
     SelectObject(dc, smallFont);
     label(state.clipping ? (state.english ? L"Clipping" : L"클리핑")
                          : (state.english ? L"No clipping" : L"클리핑 없음"),
-          23, 203, 117, 220,
+          21, 204, 117, 222,
           state.clipping ? clipColor : secondaryColor);
     label(state.english ? L"Wheel: volume · Double-click: reset"
                         : L"휠 조절 · 두 번 클릭 초기화",
-          119, 203, 366, 220, secondaryColor, DT_RIGHT);
+          121, 204, 368, 222, secondaryColor, DT_RIGHT);
 
     SelectObject(dc, oldFont);
     RestoreDC(dc, saved);

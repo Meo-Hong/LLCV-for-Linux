@@ -1,4 +1,48 @@
-LLCV v2.0.5 x64 (continued from the v0.14.2 rework)
+LLCV v2.1.3 x64 (continued from the v0.14.2 rework)
+
+v2.1.3 Playback mute
+-------------------
+- Adds speaker buttons to the audio OSD and audio-only view, plus a customizable M shortcut.
+- Shows a cached translucent top-right indicator while muted with the audio OSD hidden; display only, not recorded.
+- Aligns audio card spacing, percentage baselines and vertically centered L/R labels.
+- Preserves master/channel volume and recorded audio while muting playback.
+- Keeps manual mute independent of background auto-mute and resets it on process exit.
+- Retains existing custom M bindings by choosing an unused function key for mute.
+- Covers PCM gain ramps, recording isolation, shortcut routing and bilingual high-DPI layout.
+- Retains existing settings, installation paths and 1080p/60fps recording defaults.
+- Automated checks do not establish physical HDMI latency or universal device compatibility.
+
+v2.1.2 Settings and recording reliability
+----------------------------------------
+- Isolates encoder discovery in a cancellable child process and distinguishes failed queries from unsupported codecs.
+- Refreshes recording free-space information without querying storage on every active UI update.
+- Preserves final connected MJPEG color metadata for playback and recording.
+- Retains usable audio samples when the first recording packet overlaps the video start.
+- Keeps normal settings navigation separate from recording shortcuts; F4 remains reserved for controls.
+- Saves the restored window position when exiting while minimized.
+- Extends automated coverage for these paths; no physical HDMI latency retest is claimed.
+- Preserves recording defaults, existing settings and installation paths.
+
+v2.1.1 Recording and capture options
+------------------------------------
+- Adds MJPEG SDR input recording through supported H.264/HEVC/AV1 encoders.
+- Adds independent recording volume (0-100%, default 100%) and refines recording settings layout.
+- Adds opt-in unlisted 30 fps requests with a distinct status line and strict driver negotiation.
+- Improves recording start/stop reliability, first-session settings and NV12/YUY2 color metadata.
+- Preserves recording defaults (1080p/60fps limits), existing settings and installation paths.
+- MJPEG decoding can increase CPU load; unlisted rates and encoders remain device-dependent.
+
+v2.1.0 SDR recording and presentation
+-----------------------------------
+- Adds SDR/stereo MP4 recording, supported MF encoders, CQP/bitrate modes, native/capped size and rate.
+- Adds recording shortcut, pause/resume, time/size splitting, asynchronous finalization and corner status.
+- Preserves written fragmented MP4 segments for H.264/HEVC/AV1; final unwritten data is not guaranteed.
+- Ships only pinned mux DLLs with source/license/build notices, not the FFmpeg programs or codecs.
+- Adds optional exclusive fullscreen with dialog/activation handover and guarded SDR clear elision.
+- Separates capture/display resolution from VSR and retains selected video size/position in fullscreen.
+- Removes the private automatic recording benchmark from the application and enables normal settings saves.
+- Retains installed executable/profile paths; recording-prototype.ini is preserved for compatibility.
+- No universal latency, encoder compatibility or calibrated HDR color/sync guarantee is claimed.
 
 v2.0.5 Customizable keyboard shortcuts
 --------------------------------------

@@ -4,6 +4,10 @@
 #include <string>
 #include <vector>
 #include "ViewerShortcuts.h"
+#ifdef LLCV_RECORDING
+#include "recording/EncoderSupport.h"
+#include "recording/RecordingStatus.h"
+#endif
 
 namespace llcv::settings { enum class VideoPixelFormat; }
 
@@ -15,9 +19,17 @@ enum class SettingsTab : int {
     GuideDiagnostics = 2,
     Updates = 3,
     Window = 4,
+#ifdef LLCV_RECORDING
+    Recording = 5,
+#endif
 };
 
-inline constexpr int kSettingsNavigationCount = 5;
+inline constexpr int kSettingsNavigationCount =
+#ifdef LLCV_RECORDING
+    6;
+#else
+    5;
+#endif
 // Keep native strings, item data and input behavior; only row painting is custom.
 inline constexpr DWORD kSettingsDropdownStyle = WS_CHILD | WS_VISIBLE | WS_TABSTOP |
     CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS | WS_VSCROLL;
@@ -39,7 +51,28 @@ struct SettingsControls {
     int clientHeightDip = 650;
     int sidebarWidthDip = 156;
     int footerTopDip = 590;
-    std::array<int, 5> compactPages{};
+    std::array<int, kSettingsNavigationCount> compactPages{};
+#ifdef LLCV_RECORDING
+    recording::Options recordingOptions;
+    recording::Capabilities recordingCapabilities{};
+    bool recordingProbePending=true;
+    bool recordingProbeFailed=false;
+    bool recordingStorageReady=false;
+    bool recordingStorageFromSnapshot=false;
+    std::wstring recordingStorageFolder;
+    std::wstring recordingStoragePath;
+    std::vector<HWND> recordingControls;
+    std::array<HWND,3> recordingCodecs{};
+    HWND recVideoTitle{},recSaveTitle{},recCodecLabel{},recStatus{},recEncoderLabel{},recEncoder{};
+    HWND recFpsLabel{},recFps{},recBitrateLabel{},recBitrate{},recAudioLabel{},recAudio{};
+    HWND recModeLabel{},recMode{};
+    HWND recVolumeLabel{},recVolume{};
+    HWND recFolderLabel{},recFolder{},recBrowse{},recSpace{},recNote{};
+    HWND recOpenFolder{};
+    HWND recResolutionLabel{},recResolution{},recSplitLabel{},recSplit{},recSplitValueLabel{},recSplitValue{},recPause{},recSplitHint{};
+    recording::Snapshot recordingSnapshot{};
+    bool recordingLive=false,recordingClosing=false;
+#endif
     std::vector<std::wstring> compactPageNames;
     bool compactPropertiesApplied = false;
     HWND sectionNavigationLabel = nullptr;
@@ -63,6 +96,8 @@ struct SettingsControls {
     HWND guideLogFolderButton = nullptr;
     HWND screenshotClipboardCheck = nullptr;
     HWND capture40Check = nullptr;
+    HWND unlistedFpsCheck = nullptr;
+    HWND unlistedFpsStatus = nullptr;
     HWND capture40Help = nullptr;
     HWND guideLsButton = nullptr;
     HWND screenshotTitle = nullptr;
@@ -71,8 +106,8 @@ struct SettingsControls {
     HWND vsrCheck = nullptr;
     HWND vsrGuideButton = nullptr;
     HWND vsrStatus = nullptr;
-    HWND vsrCaptureLabel = nullptr;
-    HWND vsrCaptureCombo = nullptr;
+    HWND displayResolutionLabel = nullptr;
+    HWND displayResolutionCombo = nullptr;
     HWND updateTitle = nullptr;
     HWND updateText = nullptr;
     HWND updateNowButton = nullptr;
@@ -102,6 +137,9 @@ struct SettingsControls {
     HWND presentationHelp = nullptr;
     HWND fullscreenCursorLabel = nullptr;
     HWND fullscreenCursorHint = nullptr;
+    HWND fullscreenPositionLabel = nullptr;
+    HWND fullscreenPositionCombo = nullptr;
+    HWND fullscreenPositionHint = nullptr;
     HWND scalingLabel = nullptr;
     HWND videoLabel = nullptr;
     HWND captureDeviceLabel = nullptr;
@@ -209,8 +247,13 @@ void ApplySettingsFont(SettingsControls* state, HWND hwnd, UINT dpi);
 void LayoutSettingsControls(SettingsControls* state, UINT dpi);
 void RefreshSettingsPageHeader(SettingsControls* state);
 void RefreshShortcutCaptions(SettingsControls* state);
-struct ShortcutLayout { int keyWidth = 80; int hintHeight = 36; };
-ShortcutLayout MeasureShortcutLayout(const SettingsControls* state, UINT dpi);
+struct ShortcutLayout {
+    int keyWidth = 80;
+    int hintHeight = 36;
+    std::array<int, shortcuts::Count> descriptionHeights{};
+};
+ShortcutLayout MeasureShortcutLayout(const SettingsControls* state, UINT dpi,
+                                     int rowWidth = 336);
 void BeginShortcutEdit(SettingsControls* state, size_t index);
 void CancelShortcutEdit(SettingsControls* state);
 bool ProcessShortcutEdit(SettingsControls* state, const MSG& message,

@@ -249,9 +249,10 @@ void TestCaptureColorStartupFallback() {
         (9u << DXVA_VideoPrimariesShift) | (15u << DXVA_VideoTransFuncShift);
     constexpr DWORD hlgLeft = (pqLeft & ~(31u << DXVA_VideoTransFuncShift)) |
         (16u << DXVA_VideoTransFuncShift);
-    for (bool request40 : {false, true}) for (bool legacy : {false, true})
+    for (int requested : {60,30,40}) for (bool legacy : {false, true})
     for (DWORD flags : {pqLeft, hlgLeft}) {
-        g_settings.capture40Fps = request40;
+        g_settings.capture40Fps = requested==40;
+        g_settings.videoFrameRate = requested;
         FakeVideoPin pin;
         pin.modes = {{60}};
         pin.modes[0].subtype = MFVideoFormat_P010;
@@ -264,16 +265,16 @@ void TestCaptureColorStartupFallback() {
         int fps = 0;
         VideoPixelFormat format{};
         DirectShowColorMetadata candidate{}, effective{};
-        Require(SUCCEEDED(ConfigureVideoPin(&pin, 1920, 1080, request40 ? 40 : 60,
+        Require(SUCCEEDED(ConfigureVideoPin(&pin, 1920, 1080, requested,
             VideoPixelFormat::P010, bytes, stride, fps, format, candidate)),
             "production wrapper negotiates caps-only color driver");
-        Require(candidate.present == request40,
+        Require(candidate.present == (requested!=60),
             "ordinary capture retains its existing metadata lookup path");
         AM_MEDIA_TYPE* active = nullptr;
         Require(SUCCEEDED(GetActiveVideoPinFormat(&pin, &active)), "read active color fixture");
         Require(ResolveInitialVideoColorMetadata(&pin, active, format, 1920, 1080,
             fps, candidate, effective) && effective.controlFlags == flags,
-            "startup preserves caps-only color at ordinary 60 and unlisted 40fps");
+            "startup preserves caps-only color at ordinary 60 and unlisted 30/40fps");
         const auto input = llcv::hdr::ResolveInput(effective, false);
         Require(flags == pqLeft
             ? input.kind == llcv::hdr::InputKind::Hdr10 && !input.assumed &&
@@ -316,7 +317,7 @@ void TestVsrLiveTestRateIsolation() {
             RequestedVideoFrameRate() == 120,
             "live VSR experiment always requests 120fps regardless of saved override");
         Require(g_settings.videoPreset == VideoPreset::R2560x1440 &&
-            g_settings.vsrCapturePreset == VideoPreset::R1920x1080 && g_settings.vsrEnabled &&
+            g_settings.capturePreset == VideoPreset::R1920x1080 && g_settings.vsrEnabled &&
             g_settings.pixelFormat == VideoPixelFormat::Nv12 &&
             g_settings.presentationMode == PresentationMode::AllowTearing &&
             g_settings.audioMode == AudioMode::WasapiShared && g_settings.volumePercent == 73,
@@ -920,6 +921,8 @@ int TestPresentationDebug() {
 }
 
 #include "VideoTransitionStress.inl"
+#include "PlaybackMuteTests.inl"
+#include "PlaybackMuteRecordingTests.inl"
 
 static void TestSurroundWasapiFill() {
     const auto settings = g_settings;
@@ -930,6 +933,7 @@ static void TestSurroundWasapiFill() {
     g_backgroundAudioMuted.store(false);
     g_audioTrackingStartMs.store(UINT64_MAX);
     g_ring.ConfigureChannels(6);
+    for (bool manual : {false,true})
     for (auto correction : {DriftCorrectionMode::Off, DriftCorrectionMode::Resample}) {
         g_settings.driftCorrection = correction;
         g_ring.Clear();
@@ -949,12 +953,14 @@ static void TestSurroundWasapiFill() {
             Require(output[1 + f * 6 + c] == (c + 1) * 1000,
                 "production callback preserves all channels with drift off/on");
         Require(output.front() == 111 && output.back() == 222, "5.1 fill bounds");
-        g_backgroundAudioMuted.store(true);
+        g_playbackMuted.store(manual);
+        g_backgroundAudioMuted.store(!manual);
         FillWasapiPcm(&state, output.data() + 1, 480); // click-free ramp
         result = FillWasapiPcm(&state, output.data() + 1, 480);
         Require(result.writtenFrames == 480, "5.1 mute does not stop consuming capture");
         for (size_t i = 1; i <= 480 * 6; ++i)
-            Require(output[i] == 0, "background mute includes center and LFE");
+            Require(output[i] == 0, "manual and background mute include center and LFE");
+        g_playbackMuted.store(false);
         g_backgroundAudioMuted.store(false);
     }
     g_ring.ConfigureChannels(2);
@@ -963,6 +969,9 @@ static void TestSurroundWasapiFill() {
 }
 
 int main(int argc, char** argv) {
+#ifdef LLCV_RECORDING
+    if(argc==2 && std::string(argv[1])=="--mute-recording") return TestPlaybackMuteRecording();
+#endif
     TestInvalidHdrOutputStartup();
     if (argc == 2 && std::string(argv[1]) == "--transition-stress") return RunTransitionStress(false);
     if (argc == 2 && std::string(argv[1]) == "--transition-faults") return RunTransitionStress(true);
@@ -987,6 +996,7 @@ int main(int argc, char** argv) {
     TestExclusiveScanResultLifetime();
     TestOutputTransitions();
     TestShortcutRouting();
+    TestPlaybackMute();
     TestSurroundWasapiFill();
     g_settings.driftCorrection = DriftCorrectionMode::Off;
     g_audioQueueTargetFrames.store(960);

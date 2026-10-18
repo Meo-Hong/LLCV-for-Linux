@@ -464,23 +464,25 @@ bool FindMatchingDirectShowColorMetadata(
     return found;
 }
 
-bool Is40FpsMediaType(const AM_MEDIA_TYPE* mediaType) {
+bool IsRequestedFrameRate(const AM_MEDIA_TYPE* mediaType, int fps) {
+    if (fps != 30 && fps != 40) return false;
     int width = 0, height = 0;
     REFERENCE_TIME duration = 0;
     DWORD bytes = 0;
     return VideoFormatDetails(mediaType, width, height, duration, bytes) &&
-        duration >= 249000 && duration <= 251000;
+        duration >= FrameDurationForRate(fps) - 1000 &&
+        duration <= FrameDurationForRate(fps) + 1000;
 }
 
 HRESULT ConfigureVideoPin(
     IPin* videoPin, int wantedWidth, int wantedHeight, int wantedFps,
     VideoPixelFormat wantedFormat, DWORD& imageBytes, UINT32& stride,
     int& configuredFps, VideoPixelFormat& configuredFormat,
-    LogCallback logCallback, bool request40Fps,
+    LogCallback logCallback, bool requestExactFps,
     CaptureColorMetadata* acceptedCandidateColor) {
     if (acceptedCandidateColor) *acceptedCandidateColor = {};
     if (!videoPin) return E_POINTER;
-    if (request40Fps && wantedFps != 40) return E_INVALIDARG;
+    if (requestExactFps && wantedFps != 30 && wantedFps != 40) return E_INVALIDARG;
     IAMStreamConfig* config = nullptr;
     HRESULT hr = videoPin->QueryInterface(IID_PPV_ARGS(&config));
     if (FAILED(hr)) return hr;
@@ -529,7 +531,7 @@ HRESULT ConfigureVideoPin(
             height == wantedHeight && duration >= 0) {
             LogMode(logCallback, i, format, width, height, duration, streamCaps);
             if (wantedFps > 0 && fps != wantedFps &&
-                (FrameRateAllowedByCaps(streamCaps, wantedFps) || request40Fps)) {
+                (FrameRateAllowedByCaps(streamCaps, wantedFps) || requestExactFps)) {
                 auto* adjusted = CloneMediaType(candidate);
                 if (adjusted && SetVideoFrameDuration(adjusted, FrameDurationForRate(wantedFps)))
                     candidates.push_back({adjusted, wantedFps, bytes, format});
@@ -577,7 +579,7 @@ HRESULT ConfigureVideoPin(
     for (auto& candidate : candidates) {
         // Explicit opt-in only: never substitute another rate or advertise
         // synthetic capabilities. Some drivers accept rates absent from caps.
-        if (request40Fps && candidate.fps != 40) continue;
+        if (requestExactFps && candidate.fps != wantedFps) continue;
         DWORD candidateBytes = 0;
         UINT32 candidateStride = 0;
         int candidateFps = candidate.fps;
@@ -589,17 +591,17 @@ HRESULT ConfigureVideoPin(
         }
         hr = config->SetFormat(candidate.mediaType);
         LogQuery(logCallback, L"SetFormat/fps", candidate.fps, hr);
-        if (SUCCEEDED(hr) && request40Fps) {
+        if (SUCCEEDED(hr) && requestExactFps) {
             AM_MEDIA_TYPE* actual = nullptr;
             hr = config->GetFormat(&actual);
             if (SUCCEEDED(hr)) {
-                hr = Is40FpsMediaType(actual)
+                hr = IsRequestedFrameRate(actual, wantedFps)
                     ? ValidateVideoLayout(actual, wantedWidth, wantedHeight,
                         candidate.format, candidateBytes, candidateStride, candidateFps)
-                    : VFW_E_TYPE_NOT_ACCEPTED;
+                    : kRequestedFrameRateMismatch;
             }
             DeleteMediaType(actual);
-            LogQuery(logCallback, L"40fps/readback", 40, hr);
+            LogQuery(logCallback, L"exact-fps/readback", wantedFps, hr);
         }
         if (SUCCEEDED(hr)) {
             selected = &candidate;

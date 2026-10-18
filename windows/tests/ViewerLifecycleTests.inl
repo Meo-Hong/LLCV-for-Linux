@@ -28,6 +28,248 @@ static LRESULT CALLBACK ViewerLifecycleTestProc(HWND hwnd, UINT message, WPARAM 
     return WndProc(hwnd, message, w, l);
 }
 
+#ifdef LLCV_RECORDING
+// Run the real recording worker with tiny CPU-encoded synthetic input. These
+// cases exercise the actual viewer close protocol without modal interaction,
+// physical capture devices, or writes outside the owned lifecycle directory.
+static void TestRecordingViewerLifecycle(const wchar_t* windowClass,HINSTANCE instance,
+                                        const std::wstring& directory) {
+    using namespace llcv::recording;
+    const bool savedSuppress=g_suppressSettingsSave;
+    g_suppressSettingsSave=true;
+    Require(RecordingCloseInteractive(L"LLCV.exe"),
+            "profile isolation alone does not disable user close confirmation");
+    Require(!RecordingCloseInteractive(L"LLCV.exe --smoke-test"),
+            "explicit diagnostic run disables modal test interaction");
+    Require(!RecordingCloseInteractive(),"lifecycle fixture must use --smoke-test");
+    enum class Exit { StartupClose,ActiveClose,CaptureEnded,Eos,Quit,SessionCancelled,SessionCritical };
+    unsigned sequence=0;
+    for(const Exit exit:{Exit::StartupClose,Exit::ActiveClose,Exit::CaptureEnded,Exit::Eos,Exit::Quit,
+                        Exit::SessionCancelled,Exit::SessionCritical}) {
+        recorder.Shutdown();
+        ViewerLifecycleFixture fixture;g_viewerLifecycleFixture=&fixture;
+        g_settings={};g_settings.audioOnly=false;g_settings.preventSleep=false;
+        g_fullscreen=false;g_autoFullscreen=false;g_videoHost=nullptr;
+        g_running=true;g_restartToSettings=false;g_windowPositionPersisted=false;
+        HWND hwnd=CreateWindowW(windowClass,L"Hidden recording-close fixture",WS_POPUP,
+            -10000,-10000,400,240,nullptr,nullptr,instance,nullptr);
+        Require(hwnd!=nullptr,"recording-close hidden viewer created");
+        Require(BeginRecordingClose(hwnd,false) && !g_recordingClosePending,
+                "idle close does not fabricate pending finalization");
+        Require(SendMessageW(hwnd,WM_QUERYENDSESSION,0,0)==TRUE,
+                "idle viewer does not block Windows shutdown");
+
+        llcv::video::VideoSampleFormat video{};
+        video.valid=true;video.width=160;video.height=90;video.fps=30;video.stride=160;
+        video.format=llcv::settings::VideoPixelFormat::Nv12;
+        llcv::capture_audio::Format audio{};
+        audio.channels=2;audio.containerBits=audio.validBits=16;audio.blockAlign=4;
+        audio.path=llcv::capture_audio::Path::Direct16BitStereo;
+        Options options;options.encoder=L"cpu";options.rateControl=RateControl::Bitrate;
+        options.videoMbps=2;
+        const auto path=directory+L"\\recording-close-"+std::to_wstring(sequence++)+L".mp4";
+        recorder.Configure(video,audio,{},false,options);
+        Require(recorder.Start(path),"recording close fixture starts asynchronously");
+
+        if(exit!=Exit::StartupClose) {
+            const auto deadline=GetTickCount64()+5000;
+            while(recorder.Busy() && !recorder.Recording() && GetTickCount64()<deadline)Sleep(2);
+            Require(recorder.Recording(),"CPU recorder reaches active state before lifecycle test");
+            Microsoft::WRL::ComPtr<IMemAllocator> allocator;
+            Check(CoCreateInstance(CLSID_MemoryAllocator,nullptr,CLSCTX_INPROC_SERVER,
+                IID_PPV_ARGS(&allocator)),"recording-close sample allocator");
+            constexpr LONG frameBytes=160*90*3/2;
+            ALLOCATOR_PROPERTIES requested{2,frameBytes,1,0},actual{};
+            Check(allocator->SetProperties(&requested,&actual),"recording-close allocator properties");
+            Check(allocator->Commit(),"recording-close allocator commit");
+            for(int frame=0;frame<4;++frame) {
+                LONGLONG start=frame*10000000LL/30,end=(frame+1)*10000000LL/30;
+                for(bool isVideo:{true,false}) {
+                    Microsoft::WRL::ComPtr<IMediaSample> sample;
+                    Check(allocator->GetBuffer(&sample,nullptr,nullptr,0),"recording-close synthetic sample");
+                    const LONG bytes=isVideo?frameBytes:1600*4;
+                    Check(sample->SetActualDataLength(bytes),"recording-close sample length");
+                    Check(sample->SetTime(&start,&end),"recording-close sample time");
+                    BYTE* data=nullptr;Check(sample->GetPointer(&data),"recording-close sample data");
+                    std::memset(data,isVideo?128:0,bytes);
+                    recorder.Push(isVideo,sample.Get());
+                }
+                Sleep(20);
+            }
+            Require(recorder.Recording(),"short recording remains active before close");
+            if(exit==Exit::ActiveClose){
+                WNDCLASSW settingsClass{};settingsClass.lpfnWndProc=SettingsWndProc;
+                settingsClass.hInstance=instance;settingsClass.lpszClassName=L"LLCV.LiveRecordingSettings.Test";
+                RegisterClassW(&settingsClass);
+                const auto previousCapabilities=g_recordingCapabilities;
+                g_recordingCapabilities=Capabilities{};
+                (*g_recordingCapabilities)[0]={true,true,{{L"Fixture",L"test"}},{true,true},{true,true}};
+                SettingsDialogState live;live.recordingLive=true;live.activeTab=SettingsTab::Recording;
+                HWND dialog=CreateWindowW(settingsClass.lpszClassName,L"Live recording tab test",WS_OVERLAPPED,
+                    -10000,-10000,1000,650,hwnd,nullptr,instance,&live);
+                Require(dialog!=nullptr,"live recording tab creates without restarting playback");
+                Require(!live.recordingProbe && !live.videoModeCache && !live.captureAudioProbeCache &&
+                    !live.sharedProbeCache && !live.inventoryCache && !live.exclusiveScanRunning,
+                    "live recording tab never rescans capture/audio devices or cached encoders");
+                SendMessageW(dialog,WM_TIMER,2071,0);
+                Require(llcv::settings_ui::CanToggleRecordingSettings(&live) && IsWindowEnabled(live.recOpenFolder) &&
+                    !IsWindowEnabled(live.recEncoder),"live tab keeps recording shortcut and folder access, blocks option edits");
+                SendMessageW(dialog,WM_CLOSE,0,0);
+                Require(!IsWindow(dialog) && recorder.Recording() && IsWindow(hwnd),
+                    "closing settings leaves recording and playback active");
+                for(auto font:live.uiFonts)DeleteObject(font);
+                g_recordingCapabilities=previousCapabilities;
+                UnregisterClassW(settingsClass.lpszClassName,instance);
+            }
+        }
+
+        if(exit==Exit::CaptureEnded) {
+            const auto start=GetTickCount64();
+            SendMessageW(hwnd,WM_RECORDING_CAPTURE_ENDED,0,0);
+            Require(GetTickCount64()-start<1000 && IsWindow(hwnd) && g_running.load(),
+                    "capture teardown requests finalization without joining the writer");
+            Require(g_recordingDrainPending && !g_recordingClosePending && fixture.closed==0,
+                    "capture teardown arms drain timeout without deciding viewer exit");
+            const auto before=recorder.GetSnapshot().path;
+            Require(ToggleRecording()==ToggleResult::Stopping && recorder.GetSnapshot().path==before,
+                    "late shortcut cannot restart recording during capture drain");
+            const auto deadline=GetTickCount64()+8000;
+            while(recorder.Busy() && GetTickCount64()<deadline) {
+                MSG message{};
+                while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
+                    if(message.message==WM_QUIT)continue;
+                    TranslateMessage(&message);DispatchMessageW(&message);
+                }
+                Sleep(2);
+            }
+            Require(!recorder.Busy(),"capture drain completes within deadline");
+            SendMessageW(hwnd,WM_TIMER,1,0);
+            Require(IsWindow(hwnd) && g_running.load() && fixture.closed==0,
+                    "completed recording alone cannot destroy viewer before capture restart decision");
+            // The real capture thread makes this decision only after Shutdown
+            // returns. Its explicit restart intent must survive the final close.
+            g_restartToSettings=true;g_running=false;
+            PostMessageW(hwnd,WM_CLOSE,0,0);
+            RunViewerMessageLoop(hwnd);
+            Require(g_restartToSettings.load(),"capture restart intent survives delayed viewer destruction");
+        } else if(exit==Exit::SessionCancelled) {
+            Require(SendMessageW(hwnd,WM_QUERYENDSESSION,0,0)==FALSE,
+                    "noncritical Windows shutdown defers while recording is busy");
+            SendMessageW(hwnd,WM_ENDSESSION,FALSE,0);
+            Require(IsWindow(hwnd) && g_running.load() && !g_recordingClosePending,
+                    "cancelled Windows shutdown leaves viewer open");
+            const auto deadline=GetTickCount64()+8000;
+            while(recorder.Busy() && GetTickCount64()<deadline)Sleep(2);
+            Require(!recorder.Busy() && PollRecordingClose(hwnd),
+                    "cancelled shutdown still finishes recording without hanging");
+            Require(!g_recordingShutdownBlocked && IsWindow(hwnd) && g_running.load(),
+                    "completed file releases shutdown block without closing playback");
+            DestroyWindow(hwnd);
+        } else if(exit==Exit::SessionCritical) {
+            Require(SendMessageW(hwnd,WM_QUERYENDSESSION,0,ENDSESSION_CRITICAL)==TRUE,
+                    "critical system shutdown is not vetoed");
+            SendMessageW(hwnd,WM_ENDSESSION,TRUE,0);
+            Require(!g_running.load(),"confirmed session end leaves the normal viewer loop");
+            RunViewerMessageLoop(hwnd);
+        } else if(exit==Exit::Eos || exit==Exit::Quit) {
+            if(exit==Exit::Eos) {
+                g_running=false;
+                PostMessageW(hwnd,WM_CLOSE,0,0);
+            } else PostQuitMessage(0);
+            RunViewerMessageLoop(hwnd);
+        } else {
+            const auto start=GetTickCount64();
+            SendMessageW(hwnd,WM_CLOSE,0,0);
+            Require(GetTickCount64()-start<1000 && IsWindow(hwnd) && g_running.load(),
+                    "close requests finalization without joining the recording worker");
+            Require(g_recordingClosePending,"active/startup close retains pending state");
+            const auto before=recorder.GetSnapshot().path;
+            Require(ToggleRecording()==ToggleResult::Stopping && recorder.GetSnapshot().path==before,
+                    "late shortcut cannot start another recording while owner is closing");
+            const auto deadline=GetTickCount64()+8000;
+            while(IsWindow(hwnd) && GetTickCount64()<deadline) {
+                MSG message{};
+                while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
+                    if(message.message==WM_QUIT)continue;
+                    TranslateMessage(&message);DispatchMessageW(&message);
+                }
+                if(IsWindow(hwnd) && !recorder.Busy())SendMessageW(hwnd,WM_TIMER,1,0);
+                Sleep(2);
+            }
+            Require(!IsWindow(hwnd),"timer completes close after asynchronous file finalization");
+        }
+        Require(!recorder.Busy() && !IsWindow(hwnd) && fixture.destroyed==1,
+                "every recording shutdown finalizes before destroying the viewer exactly once");
+        if(exit!=Exit::StartupClose) {
+            const auto saved=recorder.GetSnapshot();
+            Require(saved.playable && saved.phase==Phase::Saved,
+                    "recording survives normal EOS quit and session-end close paths");
+        }
+        recorder.Shutdown();
+        Require(DeleteFileW(path.c_str())!=FALSE || GetLastError()==ERROR_FILE_NOT_FOUND,
+                "remove only the recording created by the lifecycle fixture");
+        MSG pending{};while(PeekMessageW(&pending,nullptr,WM_QUIT,WM_QUIT,PM_REMOVE)){}
+        g_videoHost=nullptr;
+    }
+    SetControlsClosing(false);
+    g_suppressSettingsSave=savedSuppress;
+    g_viewerLifecycleFixture=nullptr;
+    std::puts("Recording viewer lifecycle: 7 asynchronous shutdown cases passed.");
+}
+#endif
+
+static void TestMinimizedWindowPlacement() {
+    const bool savedFullscreen=g_fullscreen, savedHaveWindowed=g_haveLastWindowedRect;
+    const RECT savedWindowed=g_lastWindowedRect;
+    g_fullscreen=false;
+    // Synthetic monitor origins cover left/top taskbars and negative desktop
+    // coordinates without changing the user's monitor or taskbar settings.
+    for(POINT origin:{POINT{0,0},POINT{-1920,-1080},POINT{1920,0}})
+    for(POINT inset:{POINT{0,0},POINT{48,0},POINT{0,40},POINT{48,40}}) {
+        MONITORINFO monitor{sizeof(monitor)};
+        monitor.rcMonitor={origin.x,origin.y,origin.x+1920,origin.y+1080};
+        monitor.rcWork={origin.x+inset.x,origin.y+inset.y,origin.x+1920,origin.y+1040};
+        const RECT normal{origin.x+100,origin.y+120,origin.x+500,origin.y+360};
+        const RECT screen=NormalPlacementScreenRect(normal,0,monitor);
+        Require(screen.left==normal.left+inset.x && screen.top==normal.top+inset.y &&
+            screen.right-screen.left==400 && screen.bottom-screen.top==240,
+            "ordinary placement converts workspace origin once while preserving extent");
+        const RECT tool=NormalPlacementScreenRect(normal,WS_EX_TOOLWINDOW,monitor);
+        Require(EqualRect(&normal,&tool),"tool-window placement is already in screen coordinates");
+    }
+    std::vector<HMONITOR> monitors;
+    EnumDisplayMonitors(nullptr,nullptr,[](HMONITOR monitor,HDC,LPRECT,LPARAM data)->BOOL {
+        reinterpret_cast<std::vector<HMONITOR>*>(data)->push_back(monitor);return TRUE;
+    },reinterpret_cast<LPARAM>(&monitors));
+    Require(!monitors.empty(),"placement fixture enumerates display work areas");
+    for(HMONITOR monitor:monitors) for(DWORD exStyle:{DWORD{0},DWORD{WS_EX_TOOLWINDOW}}) {
+        MONITORINFOEXW info{};info.cbSize=sizeof(info);
+        Require(GetMonitorInfoW(monitor,&info)!=FALSE,"placement fixture monitor information");
+        HWND hwnd=CreateWindowExW(exStyle|WS_EX_NOACTIVATE,L"STATIC",L"Hidden placement regression",
+            WS_POPUP|WS_MINIMIZEBOX,info.rcWork.left+60,info.rcWork.top+80,400,240,
+            nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+        Require(hwnd!=nullptr,"placement fixture window");
+        RECT expected{};Require(GetWindowRect(hwnd,&expected)!=FALSE,"normal fixture rectangle");
+        ShowWindow(hwnd,SW_SHOWMINNOACTIVE);ShowWindow(hwnd,SW_HIDE);
+        Require(IsIconic(hwnd)!=FALSE,"fixture remains iconic while hidden");
+        PersistWindowPosition(hwnd);
+        auto loaded=llcv::settings::LoadFromIni(SettingsPath()).settings;
+        Require(loaded.hasWindowPosition && loaded.windowX==expected.left && loaded.windowY==expected.top &&
+            loaded.monitorDevice==info.szDevice,
+            "minimized close persists the normal rectangle and its original monitor, never -32000");
+        g_fullscreen=true;g_haveLastWindowedRect=true;
+        g_lastWindowedRect=expected;OffsetRect(&g_lastWindowedRect,10,15);
+        PersistWindowPosition(hwnd);
+        loaded=llcv::settings::LoadFromIni(SettingsPath()).settings;
+        Require(loaded.windowX==expected.left+10 && loaded.windowY==expected.top+15,
+            "fullscreen retains the saved windowed rectangle even when minimized");
+        g_fullscreen=false;DestroyWindow(hwnd);
+    }
+    g_fullscreen=savedFullscreen;g_haveLastWindowedRect=savedHaveWindowed;
+    g_lastWindowedRect=savedWindowed;
+    std::puts("Window placement: workspace/tool-window conversion and minimized/fullscreen persistence passed.");
+}
+
 static void TestViewerLifecycle() {
     const auto savedSettings = g_settings;
     const bool savedSuppress = g_suppressSettingsSave;
@@ -47,6 +289,7 @@ static void TestViewerLifecycle() {
     wc.lpfnWndProc = ViewerLifecycleTestProc;
     wc.lpszClassName = L"LLCV_VIEWER_LIFECYCLE_TEST";
     Require(RegisterClassW(&wc) != 0, "register lifecycle fixture");
+    TestMinimizedWindowPlacement();
 
     enum class Stop { BeforeLoop, DuringMessage, NormalClose, SettingsAction, ExitShortcut, Quit, MissingClose };
     for (bool audioOnly : {false, true}) {
@@ -61,8 +304,9 @@ static void TestViewerLifecycle() {
                 g_settings = {};
                 g_settings.audioOnly = audioOnly;
                 g_settings.preventSleep = preventSleep;
-                if (preventSleep) g_settings.shortcuts[static_cast<size_t>(keys::Action::Settings)]=VK_F9;
+                if (preventSleep) g_settings.shortcuts[static_cast<size_t>(keys::Action::Settings)]=VK_F10;
                 if (preventSleep) g_settings.shortcuts[static_cast<size_t>(keys::Action::Exit)]=keys::Ctrl|'Q';
+                Require(keys::Valid(g_settings.shortcuts),"lifecycle fixture uses distinct shortcuts");
                 g_settings.allowVolumeBoost = true;
                 g_settings.volumePercent = 20;
                 g_windowPositionPersisted = false;
@@ -106,8 +350,14 @@ static void TestViewerLifecycle() {
                     const auto action=stop==Stop::SettingsAction ? keys::Action::Settings : keys::Action::Exit;
                     if (stop==Stop::ExitShortcut && preventSleep)
                         Require(!HandleViewerShortcut(hwnd,VK_ESCAPE,0,0),"old Esc does not close after remapping");
-                    Require(PostMessageW(hwnd,shortcut ? kLifecycleShortcutMessage : WM_CLOSE,
-                        shortcut ? g_settings.shortcuts[static_cast<size_t>(action)] : 0,0) != FALSE,
+                    UINT message=shortcut?kLifecycleShortcutMessage:WM_CLOSE;
+                    WPARAM argument=shortcut?g_settings.shortcuts[static_cast<size_t>(action)]:0;
+#ifdef LLCV_RECORDING
+                    // F2 now opens the live Recording tab. Its other tabs still
+                    // use the existing capture-stop/relaunch route tested here.
+                    if(stop==Stop::SettingsAction && !audioOnly){message=WM_OPEN_SETTINGS;argument=1;}
+#endif
+                    Require(PostMessageW(hwnd,message,argument,0) != FALSE,
                             "queue normal viewer shutdown");
                 }
                 RunViewerMessageLoop(hwnd);
@@ -140,6 +390,9 @@ static void TestViewerLifecycle() {
             }
         }
     }
+#ifdef LLCV_RECORDING
+    TestRecordingViewerLifecycle(wc.lpszClassName,wc.hInstance,temporary);
+#endif
     g_viewerLifecycleFixture = nullptr;
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
     Require(DeleteFileW(SettingsPath().c_str()) != FALSE, "remove only owned lifecycle profile");

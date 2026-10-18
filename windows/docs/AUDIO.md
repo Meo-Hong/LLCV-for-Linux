@@ -206,8 +206,8 @@ short startup or scheduling disturbances can distort the estimate.
 
 ## Volume and background mute
 
-The mouse wheel changes volume in 5% steps. At 100%, PCM volume processing is
-bypassed. **Allow volume boost above 100%** permits up to 200% digital gain
+The mouse wheel changes volume in 5% steps. With mute off and master/L/R all at
+100%, PCM volume processing is bypassed. **Allow volume boost above 100%** permits up to 200% digital gain
 without adding an audio buffer, but loud signals may clip.
 
 To adjust channels independently, show the meter with `F3` in video mode or
@@ -217,6 +217,12 @@ area or outside the channel cards changes master volume. In audio-only mode,
 the wheel acts only inside master/L/R controls; the header, footer, and gaps
 do not change volume. Independent L/R gain remains
 limited to 100%; the optional 200% boost applies only to the master volume.
+
+The **speaker button in the F3 audio OSD or audio-only view**, or **M** (customizable), toggles
+playback mute without changing the previous volume or recorded audio. Wheel adjustments
+and volume resets also unmute. Mute state resets on app exit and is independent of background auto-mute.
+With the audio OSD hidden, a small translucent mute icon remains at the top-right of the video.
+It disappears on unmute and is not included in recordings.
 
 Background auto-mute changes output gain only. Capture and WASAPI consumption
 continue while the window is inactive, preventing accumulated PCM latency when

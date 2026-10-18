@@ -335,6 +335,17 @@ static int TestRawSdr() {
             const double bb = yy + 2 * (1 - kb) * uu;
             const double gg = (yy - kr * rr - kb * bb) / (1 - kr - kb);
             const auto actual = Read(r, 100, 100);
+#ifdef LLCV_RECORDING
+            // UI is a child surface, never a modification of source samples,
+            // renderer back buffer, or the encoder's raw video input.
+            const auto cornerBefore=Read(r,width-40,height-24);
+            llcv::recording::AttachRecordingIndicator(hwnd,hwnd,false,false);
+            llcv::recording::Snapshot recordUi;recordUi.phase=llcv::recording::Phase::Recording;
+            recordUi.busy=true;recordUi.elapsedMs=123000;
+            llcv::recording::UpdateRecordingIndicator(hwnd,recordUi);
+            UpdateWindow(hwnd);
+            Require(Read(r,width-40,height-24)==cornerBefore,"recording UI does not modify video pixels");
+#endif
             const double expected[]{rr, gg, bb};
             for (size_t c = 0; c < 3; ++c)
                 Near(actual[c], std::clamp(expected[c], 0.0, 255.0), 3, "SDR matrix/range RGB reference");
@@ -479,6 +490,84 @@ static void TestOverlayRefreshIsolation(DirectD3D11Renderer& r) {
     g_overlayGeneration.fetch_add(1);
 }
 
+static void TestMuteIndicator(DirectD3D11Renderer& r, const std::filesystem::path& preview = {}) {
+    const bool savedOsd=g_osdVisible.load(), savedAudio=g_audioOsdVisible.load();
+    const bool savedMute=g_playbackMuted.load();
+    const auto savedHud=g_volumeHudUntilMs.load();
+    g_osdVisible=false; g_audioOsdVisible=false; g_volumeHudUntilMs=0; g_playbackMuted=false;
+    Require(!r.muteIndicatorTexture && !r.muteIndicatorShaderView,"mute badge has no eager GPU allocation");
+    const float background[]{0.08f,0.12f,0.18f,1.0f};
+    const auto clear=[&] { r.context->ClearRenderTargetView(r.backBufferRenderTarget,background); };
+    clear();
+    auto frames=g_overlayRenderedFrames.load();
+    Check(r.drawOverlayQuads(),"unmuted UI-free output");
+    Require(g_overlayRenderedFrames.load()==frames && !r.muteIndicatorTexture,
+            "normal hidden-OSD playback keeps its zero-overlay path");
+    g_playbackMuted=true; g_audioOsdVisible=true;
+    Check(r.drawOverlayQuads(),"mute shown in existing audio OSD");
+    Require(!r.muteIndicatorTexture,"audio OSD suppresses redundant corner badge");
+    g_audioOsdVisible=false;
+    clear();
+    llcv::hdr_audit::Image before,after,icon,restored;
+    Check(llcv::hdr_audit::Read(r.context,r.backBuffer,before),"mute badge background");
+    const auto cachedGeneration=r.cachedOverlayGeneration;
+    const auto cachedMask=r.cachedOverlayMask;
+    Check(r.drawOverlayQuads(),"persistent mute with no other overlay");
+    Check(llcv::hdr_audit::Read(r.context,r.backBuffer,after),"mute badge output");
+    Require(before.bytes!=after.bytes,"mute remains visible after transient HUD expires");
+    const auto rect=llcv::audio_osd::MuteIndicatorRect(r.outputWidth,r.outputHeight);
+    const UINT bpp=before.rowBytes/before.desc.Width;
+    bool outsideUnchanged=true;
+    for (UINT y=0;y<before.desc.Height;++y) for (UINT x=0;x<before.desc.Width;++x) {
+        if (x>=static_cast<UINT>(rect.left) && x<static_cast<UINT>(rect.right) &&
+            y>=static_cast<UINT>(rect.top) && y<static_cast<UINT>(rect.bottom)) continue;
+        const auto offset=y*before.rowBytes+x*bpp;
+        outsideUnchanged &= memcmp(before.bytes.data()+offset,after.bytes.data()+offset,bpp)==0;
+    }
+    Require(outsideUnchanged,"mute badge changes only its small top-right rectangle");
+    Check(llcv::hdr_audit::Read(r.context,r.muteIndicatorTexture,icon),"mute badge alpha");
+    bool transparent=false,translucent=false,opaque=false;
+    for(size_t i=3;i<icon.bytes.size();i+=4) {
+        transparent |= icon.bytes[i]==0;
+        translucent |= icon.bytes[i]>0 && icon.bytes[i]<255;
+        opaque |= icon.bytes[i]==255;
+    }
+    Require(transparent && translucent && !opaque,"badge and speaker strokes remain translucent");
+    const auto* texture=r.muteIndicatorTexture;
+    for(int i=0;i<3;++i) { clear(); Check(r.drawOverlayQuads(),"cached mute indicator"); }
+    Require(texture==r.muteIndicatorTexture && cachedGeneration==r.cachedOverlayGeneration &&
+            cachedMask==r.cachedOverlayMask,"persistent mute reuses its texture and leaves hidden text caches untouched");
+    if(!preview.empty()) SaveOverlayPreview(r,r.backBuffer,preview);
+    const auto savedPosition=g_settings.volumeHudPosition;
+    const auto savedContent=g_transientHudContent.load();
+    g_settings.volumeHudPosition=VolumeHudPosition::TopRight;
+    g_transientHudContent=TransientHudContent::Volume;
+    g_volumeHudUntilMs=GetTickCount64()+60000; g_overlayGeneration.fetch_add(1);
+    clear(); Check(r.drawOverlayQuads(),"top-right HUD beside persistent mute");
+    llcv::hdr_audit::Image withHud;
+    Check(llcv::hdr_audit::Read(r.context,r.backBuffer,withHud),"HUD and mute coexistence");
+    bool badgeUnchanged=true;
+    for(int y=rect.top;y<rect.bottom;++y) for(int x=rect.left;x<rect.right;++x) {
+        const auto offset=y*before.rowBytes+x*bpp;
+        badgeUnchanged &= memcmp(after.bytes.data()+offset,withHud.bytes.data()+offset,bpp)==0;
+    }
+    Require(badgeUnchanged,"top-right volume notification never overlaps the mute badge");
+    g_settings.volumeHudPosition=savedPosition; g_transientHudContent=savedContent;
+    g_volumeHudUntilMs=0;
+    g_playbackMuted=false; clear();
+    Check(r.drawOverlayQuads(),"unmute hides persistent badge");
+    Check(llcv::hdr_audit::Read(r.context,r.backBuffer,restored),"unmuted background");
+    Require(before.bytes==restored.bytes,"unmuting leaves no icon pixels");
+    r.muteIndicatorUnavailable=true; g_playbackMuted=true;
+    frames=g_overlayRenderedFrames.load();
+    Check(r.drawOverlayQuads(),"unavailable cosmetic indicator does not stop playback");
+    Require(g_overlayRenderedFrames.load()==frames,"unavailable badge is not retried every frame");
+    r.muteIndicatorUnavailable=false;
+    RequireCleanGpu(r);
+    g_playbackMuted=savedMute; g_osdVisible=savedOsd; g_audioOsdVisible=savedAudio;
+    g_volumeHudUntilMs=savedHud; g_overlayGeneration.fetch_add(1);
+}
+
 static int TestOverlayUi(const char* directory) {
     Check(CoInitializeEx(nullptr, COINIT_MULTITHREADED), "overlay COM");
     HWND hwnd = CreateWindowExW(0, L"STATIC", L"Hidden OSD UI test", WS_POPUP,
@@ -494,6 +583,8 @@ static int TestOverlayUi(const char* directory) {
         DirectD3D11Renderer r;
         Check(r.initialize(hwnd, 64, 64, 60, VideoPixelFormat::Nv12), "overlay initialize");
         TestOverlayRefreshIsolation(r);
+        TestMuteIndicator(r, root.empty() ? std::filesystem::path{} :
+            root/(english ? "persistent-mute-en.bmp" : "persistent-mute-ko.bmp"));
         Require(r.overlayFonts.Available(), "embedded DirectWrite fonts loaded");
         for (auto* format : {r.osdTextFormat, r.volumeTextFormat, r.audioTextFormat,
                             r.audioValueFormat, r.audioSmallFormat}) {
@@ -631,6 +722,25 @@ static int TestOverlayUi(const char* directory) {
                 verifyBoost(enabled && percent > 100);
             }
         }
+        g_volumePercent=50;g_audioClipUntilMs=0;g_audioOsdHoverTarget=0;
+        g_transientHudContent=TransientHudContent::Volume;
+        g_overlayGeneration.fetch_add(1);
+        Check(r.refreshOverlayLayouts(),"unmuted audio overlay reference");
+        llcv::hdr_audit::Image audible,muted,restored;
+        Check(llcv::hdr_audit::Read(r.context,r.audioOverlayTexture,audible),"audible overlay readback");
+        SetPlaybackMuted(nullptr,true);
+        Check(r.refreshOverlayLayouts(),"muted audio overlay");
+        Check(llcv::hdr_audit::Read(r.context,r.audioOverlayTexture,muted),"muted overlay readback");
+        Require(audible.bytes!=muted.bytes && g_volumePercent==50,
+            "mute changes speaker/text/bar pixels but preserves original volume");
+        DWRITE_TEXT_METRICS muteMetrics{};
+        Check(r.volumeTextLayout->GetMetrics(&muteMetrics),"mute notification metrics");
+        Require(muteMetrics.height<=62 && muteMetrics.width<=228,"KO/EN muted notification fits");
+        if(!root.empty()) SaveOverlayPreview(r,r.audioOverlayTexture,root/(english?"audio-muted-en.bmp":"audio-muted-ko.bmp"));
+        SetPlaybackMuted(nullptr,false);
+        Check(r.refreshOverlayLayouts(),"unmuted audio overlay restored");
+        Check(llcv::hdr_audit::Read(r.context,r.audioOverlayTexture,restored),"restored overlay readback");
+        Require(audible.bytes==restored.bytes,"unmute restores exactly the cached audio panel");
         g_settings.allowVolumeBoost = true; g_volumePercent = 200;
         for (bool custom:{false,true}) {
         g_settings.shortcuts=keys::Defaults;
@@ -680,6 +790,7 @@ static int TestOverlayUi(const char* directory) {
         g_settings.volumeHudPosition = VolumeHudPosition::TopLeft;
         r.reset();
         Require(!r.overlayFonts.Available() && !r.audioValueFormat && !r.audioSmallFormat &&
+            !r.muteIndicatorTexture && !r.muteIndicatorShaderView && !r.muteIndicatorUnavailable &&
             !r.audioCacheCardBrush && !r.osdCacheEdgeBrush &&
             !r.audioCacheBoostBrush && !r.volumeCacheBoostBrush, "OSD resources released on reset");
         Require(r.cachedOverlayGeneration == 0 && r.cachedOverlayMask == 0,
@@ -885,6 +996,8 @@ int main(int argc, char** argv) {
             Check(r.videoContext->VideoProcessorBlt(r.processor, r.outputView, 0, 1, &stream), "HDR VP blit");
         };
         blit(); VerifyFrameAudit(r, p); RequireCleanGpu(r);
+        TestMuteIndicator(r);
+        blit();
         llcv::video::CaptureColorMetadata reportedChroma6{};
         reportedChroma6.present = true;
         reportedChroma6.chromaSubsampling = 6;

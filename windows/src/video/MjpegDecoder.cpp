@@ -153,10 +153,24 @@ HRESULT MjpegDecoder::decode(IMediaSample* directShowSample,
     if (FAILED(hr) || !source || sourceLength <= 0) {
         return FAILED(hr) ? hr : E_FAIL;
     }
+    REFERENCE_TIME start = 0, stop = 0;
+    const bool timed = SUCCEEDED(directShowSample->GetTime(&start, &stop));
+    return decode(source, static_cast<DWORD>(sourceLength),
+                  timed ? std::optional<LONGLONG>(start) : std::nullopt,
+                  timed && stop > start ? stop - start : 0, output);
+}
+
+HRESULT MjpegDecoder::decode(const BYTE* source, DWORD sourceLength,
+                             std::optional<LONGLONG> time, LONGLONG duration,
+                             IMFMediaBuffer** output, bool requireSingleFrame) {
+    if (!output) return E_POINTER;
+    *output = nullptr;
+    if (!transform_) return MF_E_NOT_INITIALIZED;
+    if (!source || !sourceLength) return E_INVALIDARG;
 
     IMFSample* inputSample = nullptr;
     IMFMediaBuffer* inputBuffer = nullptr;
-    hr = MFCreateSample(&inputSample);
+    HRESULT hr = MFCreateSample(&inputSample);
     if (SUCCEEDED(hr)) {
         hr = inputBuffers_.Acquire((std::max)(static_cast<DWORD>(sourceLength), inputInfo_.cbSize),
                                    inputInfo_.cbAlignment, &inputBuffer);
@@ -170,11 +184,9 @@ HRESULT MjpegDecoder::decode(IMediaSample* directShowSample,
         hr = inputBuffer->SetCurrentLength(static_cast<DWORD>(sourceLength));
     }
     if (SUCCEEDED(hr)) hr = inputSample->AddBuffer(inputBuffer);
-    REFERENCE_TIME start = 0;
-    REFERENCE_TIME stop = 0;
-    if (SUCCEEDED(hr) && SUCCEEDED(directShowSample->GetTime(&start, &stop))) {
-        inputSample->SetSampleTime(start);
-        if (stop > start) inputSample->SetSampleDuration(stop - start);
+    if (SUCCEEDED(hr) && time) {
+        inputSample->SetSampleTime(*time);
+        if (duration > 0) inputSample->SetSampleDuration(duration);
     }
     if (FAILED(hr)) {
         if (destination) inputBuffer->Unlock();
@@ -184,10 +196,11 @@ HRESULT MjpegDecoder::decode(IMediaSample* directShowSample,
     }
 
     IMFMediaBuffer* newest = nullptr;
+    unsigned frames = 0;
     for (;;) {
         hr = transform_->ProcessInput(0, inputSample, 0);
         if (hr != MF_E_NOTACCEPTING) break;
-        const HRESULT drainHr = PullOutput(&newest);
+        const HRESULT drainHr = PullOutput(&newest, requireSingleFrame ? &frames : nullptr);
         if (drainHr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
             hr = MF_E_NOTACCEPTING;
             break;
@@ -205,12 +218,16 @@ HRESULT MjpegDecoder::decode(IMediaSample* directShowSample,
     }
 
     for (;;) {
-        const HRESULT outputHr = PullOutput(&newest);
+        const HRESULT outputHr = PullOutput(&newest, requireSingleFrame ? &frames : nullptr);
         if (outputHr == MF_E_TRANSFORM_NEED_MORE_INPUT) break;
         if (FAILED(outputHr)) {
             SafeRelease(newest);
             return outputHr;
         }
+    }
+    if (requireSingleFrame && (frames != 1 || !newest)) {
+        SafeRelease(newest);
+        return MF_E_INVALID_STREAM_DATA;
     }
     *output = newest;
     return S_OK;
@@ -382,7 +399,7 @@ HRESULT MjpegDecoder::SetNv12OutputType(IMFTransform* transform) {
     }
 }
 
-HRESULT MjpegDecoder::PullOutput(IMFMediaBuffer** newest) {
+HRESULT MjpegDecoder::PullOutput(IMFMediaBuffer** newest, unsigned* frameCount) {
     if (!newest) return E_POINTER;
     IMFSample* suppliedSample = nullptr;
     MFT_OUTPUT_DATA_BUFFER output{};
@@ -413,6 +430,7 @@ HRESULT MjpegDecoder::PullOutput(IMFMediaBuffer** newest) {
         IMFMediaBuffer* buffer = nullptr;
         hr = output.pSample->ConvertToContiguousBuffer(&buffer);
         if (SUCCEEDED(hr)) {
+            if (frameCount) ++*frameCount;
             SafeRelease(*newest);
             *newest = buffer;
         }

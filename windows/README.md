@@ -5,7 +5,7 @@
 A low-latency Windows viewer for video and audio from HDMI capture devices.
 Use it to play console games without OBS, or listen in audio-only mode.
 
-**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.0.5.md) · [한국어](README.ko.md)
+**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.1.3.md) · [한국어](README.ko.md)
 
 <br>
 
@@ -13,23 +13,23 @@ Use it to play console games without OBS, or listen in audio-only mode.
 | --- | --- |
 | [![Video settings](docs/images/settings-video-en.png)](docs/images/settings-video-en.png) | [![Audio settings](docs/images/settings-audio-en.png)](docs/images/settings-audio-en.png) |
 
-<sub>Settings examples rendered from the 2.0.5 UI code. Click an image to view it at full resolution.</sub>
+<sub>Settings examples rendered from the 2.1.3 UI code. Click an image to view it at full resolution.</sub>
 
 <br>
 
-## What's new in 2.0.5
+## What's new in 2.1.3
 
-**Guide & logs** now lets you change all nine keyboard shortcuts, including Esc,
-and restore their defaults. Ctrl/Alt/Shift combinations are supported, and help,
-settings, and OSD labels follow your bindings. Existing defaults and settings are retained.
-[Changing shortcuts](docs/USAGE.md#changing-shortcuts) · [Full release notes](docs/release-notes-v2.0.5.md)
+Mute playback with the speaker button or **M**, without changing your volume levels or recorded audio.
+The shortcut is customizable under **Guide & logs**.
+[Audio guide](docs/AUDIO.md) · [Full release notes](docs/release-notes-v2.1.3.md)
 
 <br>
 
 ## Install and run
 
 Requires Windows 10/11 x64 and a capture-device driver.
-No codec pack, FFmpeg, or separate Visual C++ Redistributable is needed.
+No codec pack or separate Visual C++ Redistributable installation is needed.
+The FFmpeg mux libraries required for recording are included.
 
 Download the installer ending in **Setup.exe** from the [latest release](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest).
 For the portable version, extract **x64.zip** and run `LowLatencyCaptureViewer.exe`.
@@ -38,7 +38,7 @@ For the portable version, extract **x64.zip** and run `LowLatencyCaptureViewer.e
 2. Check **Capture device** in LLCV and select **Start**.
 3. If audio is missing, check **Capture audio device**.
 
-<kbd>F1</kbd> Help · <kbd>F2</kbd> Settings · <kbd>F6</kbd> VSR · <kbd>F11</kbd> Fullscreen · <kbd>F12</kbd> Screenshot · <kbd>Tab</kbd> Diagnostics
+<kbd>F1</kbd> Help · <kbd>F2</kbd> Settings · <kbd>F6</kbd> VSR · <kbd>F9</kbd> Record · <kbd>F11</kbd> Fullscreen · <kbd>F12</kbd> Screenshot · <kbd>Tab</kbd> Diagnostics
 
 These are the default keys; change them under **Guide & logs**.
 
@@ -46,14 +46,15 @@ These are the default keys; change them under **Guide & logs**.
 
 ## Features
 
-- Latest-frame-first presentation with Immediate or VSync output
+- Latest-frame-first presentation with low latency (standard or exclusive fullscreen) and VSync
 - NV12/YUY2, MJPEG, and P010 HDR10 input
-- Optional 40 fps capture where supported by the device and driver
+- Optional 40 fps capture and unlisted 30 fps requests, subject to driver acceptance
 - NVIDIA VSR (experimental), with separate capture and display resolutions
 - WASAPI Shared/Exclusive, ASIO, console LPCM 5.1, and audio-only mode
+- NV12/YUY2/MJPEG SDR/stereo MP4 recording — codec, quality, volume, pause and splitting
 - Source-resolution PNG screenshots with optional clipboard copy
 - Sleep prevention during playback, with display sleep allowed in audio-only mode
-- Dark/light themes, fullscreen, window size locking, volume controls, Korean/English UI
+- Dark/light themes, fullscreen, window size locking, volume controls/playback mute, Korean/English UI
 
 HDR10 needs compatible hardware and an HDR display; ASIO needs its driver.
 LPCM 5.1 requires multichannel capture and Shared output.
@@ -68,6 +69,7 @@ See the [feature requirements](docs/USAGE.md#compatibility-and-feature-requireme
 The [documentation index](docs/INDEX.md) also lists release notes and development/validation records.
 
 - [User guide](docs/USAGE.md) — settings, sleep prevention, shortcuts, VSR, and screenshots
+- [Recording](docs/RECORDING.md) — requirements, quality, splitting and file protection
 - [Video and HDR](docs/VIDEO.md) / [Audio and 5.1](docs/AUDIO.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md) / [Diagnostics and logs](docs/DIAGNOSTICS.md) / [Build from source](docs/BUILDING.md)
 

@@ -30,6 +30,7 @@ static LRESULT CALLBACK CountEnableTransitions(HWND hwnd, UINT message, WPARAM w
 }
 static constexpr Member kMembers[] = {
     {&SettingsControls::capture40Check, "capture40Check"},
+    {&SettingsControls::unlistedFpsCheck, "unlistedFpsCheck"},
     {&SettingsControls::capture40Help, "capture40Help"},
     {&SettingsControls::guideLsButton, "guideLsButton"},
     {&SettingsControls::videoRefreshButton, "videoRefreshButton"},
@@ -40,8 +41,8 @@ static constexpr Member kMembers[] = {
     {&SettingsControls::vsrCheck, "vsrCheck"},
     {&SettingsControls::vsrGuideButton, "vsrGuideButton"},
     {&SettingsControls::vsrStatus, "vsrStatus"},
-    {&SettingsControls::vsrCaptureLabel, "vsrCaptureLabel"},
-    {&SettingsControls::vsrCaptureCombo, "vsrCaptureCombo"},
+    {&SettingsControls::displayResolutionLabel, "displayResolutionLabel"},
+    {&SettingsControls::displayResolutionCombo, "displayResolutionCombo"},
     {&SettingsControls::tabControl, "tabControl"},
     {&SettingsControls::guideVideoHint, "guideVideoHint"},
     {&SettingsControls::guideShortcutsTitle, "guideShortcutsTitle"},
@@ -81,6 +82,9 @@ static constexpr Member kMembers[] = {
     {&SettingsControls::presentationHelp, "presentationHelp"},
     {&SettingsControls::fullscreenCursorLabel, "fullscreenCursorLabel"},
     {&SettingsControls::fullscreenCursorHint, "fullscreenCursorHint"},
+    {&SettingsControls::fullscreenPositionLabel, "fullscreenPositionLabel"},
+    {&SettingsControls::fullscreenPositionCombo, "fullscreenPositionCombo"},
+    {&SettingsControls::fullscreenPositionHint, "fullscreenPositionHint"},
     {&SettingsControls::scalingLabel, "scalingLabel"},
     {&SettingsControls::videoLabel, "videoLabel"},
     {&SettingsControls::captureDeviceLabel, "captureDeviceLabel"},
@@ -89,6 +93,7 @@ static constexpr Member kMembers[] = {
     {&SettingsControls::pixelFormatLabel, "pixelFormatLabel"},
     {&SettingsControls::frameRateLabel, "frameRateLabel"},
     {&SettingsControls::videoCapabilityStatus, "videoCapabilityStatus"},
+    {&SettingsControls::unlistedFpsStatus, "unlistedFpsStatus"},
     {&SettingsControls::audioCombo, "audioCombo"},
     {&SettingsControls::bufferCombo, "bufferCombo"},
     {&SettingsControls::audioOutputCombo, "audioOutputCombo"},
@@ -171,15 +176,17 @@ static constexpr Geometry kGeometry[] = {
     {&SettingsControls::captureAudioDeviceCombo, "captureAudioDeviceCombo", 184, 228, 228, 376, 30},
     {&SettingsControls::videoCombo, "videoCombo", 184, 292, 292, 180, 30},
     {&SettingsControls::frameRateCombo, "frameRateCombo", 380, 292, 292, 180, 30},
-    {&SettingsControls::pixelFormatCombo, "pixelFormatCombo", 184, 356, 356, 376, 30},
-    {&SettingsControls::videoCapabilityStatus, "videoCapabilityStatus", 184, 392, 392, 376, 84},
+    {&SettingsControls::pixelFormatCombo, "pixelFormatCombo", 184, 352, 352, 376, 30},
+    {&SettingsControls::videoCapabilityStatus, "videoCapabilityStatus", 184, 388, 388, 376, 76},
+    {&SettingsControls::unlistedFpsStatus, "unlistedFpsStatus", 184, 464, 464, 376, 16},
     {&SettingsControls::hdrChromaCombo, "hdrChromaCombo", 304, 520, 520, 224, 30},
-    {&SettingsControls::capture40Check, "capture40Check", 184, 554, 554, 344, 28},
+    {&SettingsControls::capture40Check, "capture40Check", 400, 554, 554, 128, 28},
+    {&SettingsControls::unlistedFpsCheck, "unlistedFpsCheck", 184, 554, 554, 208, 28},
     {&SettingsControls::capture40Help, "capture40Help", 536, 556, 556, 24, 24},
     {&SettingsControls::guideLsButton, "guideLsButton", 600, 360, 360, 376, 32},
-    {&SettingsControls::vsrCheck, "vsrCheck", 600, 376, 376, 264, 32},
-    {&SettingsControls::vsrGuideButton, "vsrGuideButton", 876, 376, 376, 100, 32},
-    {&SettingsControls::vsrCaptureCombo, "vsrCaptureCombo", 786, 412, 412, 190, 30},
+    {&SettingsControls::vsrCheck, "vsrCheck", 600, 412, 412, 264, 32},
+    {&SettingsControls::vsrGuideButton, "vsrGuideButton", 876, 412, 412, 100, 32},
+    {&SettingsControls::displayResolutionCombo, "displayResolutionCombo", 786, 376, 376, 190, 30},
     {&SettingsControls::vsrStatus, "vsrStatus", 600, 448, 448, 376, 20},
     {&SettingsControls::screenshotTitle, "screenshotTitle", 600, 492, 492, 376, 20},
     {&SettingsControls::screenshotHelp, "screenshotHelp", 794, 542, 542, 182, 32},
@@ -190,7 +197,9 @@ static constexpr Geometry kGeometry[] = {
     {&SettingsControls::windowSnapCheck, "windowSnapCheck", 184, 260, 260, 760, 32},
     {&SettingsControls::fullscreenCursorLabel, "fullscreenCursorLabel", 184, 316, 316, 376, 20},
     {&SettingsControls::fullscreenCursorCombo, "fullscreenCursorCombo", 184, 340, 340, 376, 30},
-    {&SettingsControls::guideVideoHint, "guideVideoHint", 204, 501, 501, 336, 36},
+    {&SettingsControls::fullscreenPositionLabel, "fullscreenPositionLabel", 600, 316, 316, 376, 20},
+    {&SettingsControls::fullscreenPositionCombo, "fullscreenPositionCombo", 600, 340, 340, 376, 30},
+    {&SettingsControls::guideVideoHint, "guideVideoHint", 204, 528, 528, 336, 36},
     {&SettingsControls::guideDiagnosticsText, "guideDiagnosticsText", 600, 160, 160, 376, 32},
     {&SettingsControls::saveLogCheck, "saveLogCheck", 600, 208, 208, 376, 32},
     {&SettingsControls::showConsoleCheck, "showConsoleCheck", 600, 248, 248, 376, 32},
@@ -223,7 +232,7 @@ static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
           "update status remains above the footer");
     const HWND centered[][2] = {
         {state.videoCaptureSection, state.videoRefreshButton},
-        {state.vsrCaptureLabel, state.vsrCaptureCombo},
+        {state.displayResolutionLabel, state.displayResolutionCombo},
         {state.driftLabel, state.driftHelp},
         {state.pcmQueueLabel, state.pcmQueueHelp},
         {state.presentationLabel, state.presentationHelp},
@@ -254,6 +263,7 @@ static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
         {state.hdrChromaLabel, state.hdrChromaCombo},
         {state.mjpegColorLabel, state.mjpegColorCombo},
         {state.fullscreenCursorLabel, state.fullscreenCursorCombo},
+        {state.fullscreenPositionLabel, state.fullscreenPositionCombo},
         {state.languageLabel, state.languageCombo},
         {state.themeLabel, state.themeCombo},
     };
@@ -318,6 +328,7 @@ static void CheckFontHierarchy(const SettingsControls& state, UINT dpi, bool eng
         {state.startButton, 10, FW_SEMIBOLD},
         {state.pageSubtitle, 9, FW_NORMAL},
         {state.videoCapabilityStatus, 9, FW_NORMAL},
+        {state.unlistedFpsStatus, 9, FW_NORMAL},
         {state.vsrStatus, 9, FW_NORMAL},
         {state.pageTitle, 20, FW_SEMIBOLD},
     };
@@ -470,7 +481,8 @@ static void CheckAllCaptionsFit(SettingsControls& state, UINT dpi, bool english)
         // ellipsis intentionally; expanded device lists retain wider fields.
     }
     wchar_t guide[2048]{}; GetWindowTextW(state.guideVideoHint, guide, ARRAYSIZE(guide));
-    Check(std::wcsstr(guide,english ? L"Click" : L"키 버튼") && std::wcsstr(guide,L"F3"),
+    Check(std::wcsstr(guide,english ? L"Click" : L"키 버튼") &&
+          std::wcsstr(guide,english ? L"* Video mode only" : L"* 영상 모드 전용"),
           "shortcut editor explains editing and video-only keys");
     const HWND parent = GetParent(state.guideVideoHint);
     for (size_t i = 0; i < llcv::viewer_help::kShortcuts.size(); ++i) {
@@ -486,12 +498,14 @@ static void CheckAllCaptionsFit(SettingsControls& state, UINT dpi, bool english)
         GetWindowTextW(state.guideKeys[i], guide, ARRAYSIZE(guide));
         Check(std::wcscmp(guide, shortcut.key) == 0, "every key matches F1");
         GetWindowTextW(state.guideDescriptions[i], guide, ARRAYSIZE(guide));
-        Check(std::wstring(guide)==std::wstring(english ? shortcut.english : shortcut.korean),
-              "every action matches F1 without repeated video-mode suffixes");
+        Check(std::wstring(guide)==std::wstring(english ? shortcut.english : shortcut.korean)+
+              (shortcut.videoOnly ? L" *" : L""),
+              "every action matches F1 with a compact video-only marker");
         const auto action = ClientRectOf(parent, state.guideDescriptions[i]);
         const auto key = ClientRectOf(parent, state.guideKeys[i]);
         Check(action.left == SettingsPixels(296, dpi) &&
-              action.top == SettingsPixels(165 + static_cast<int>(i) * 36, dpi),
+              action.top == SettingsPixels(165 + static_cast<int>(i) *
+                  (state.guideKeys.size()>10 ? 32 : state.guideKeys.size()>9 ? 35 : 36), dpi),
               "shortcut rows maintain aligned columns and generous rhythm");
         Check(key.top>=action.top && key.bottom<=action.bottom+1 && key.right<action.left,
               "editable key and wrapping action occupy separate aligned columns");
@@ -515,7 +529,33 @@ static void CheckAllCaptionsFit(SettingsControls& state, UINT dpi, bool english)
     SelectObject(dc, previous); ReleaseDC(state.tabControl, dc);
 }
 static void TestHelpText() {
+    using llcv::settings::PresentationMode;
+    const PresentationMode modes[] = {
+        PresentationMode::AllowTearing, PresentationMode::VSync,
+        PresentationMode::Compatibility, PresentationMode::ExclusiveFullscreen};
+    for (int i = 0; i < llcv::presentation_ui::ModeCount; ++i) {
+        Check(llcv::presentation_ui::ModeFromSelection(i) == modes[i] &&
+              llcv::presentation_ui::SelectionFromMode(modes[i]) == i,
+              "presentation selection conversion preserves existing order and exclusive option");
+    }
+    Check(llcv::presentation_ui::ModeFromSelection(-1) == PresentationMode::AllowTearing &&
+          llcv::presentation_ui::ModeFromSelection(4) == PresentationMode::AllowTearing &&
+          llcv::presentation_ui::SelectionFromMode(static_cast<PresentationMode>(99)) == 0,
+          "invalid or missing native selection retains immediate fallback");
     for (bool english : {false, true}) {
+        Check(std::wcsstr(llcv::presentation_ui::HelpText(english), L"Alt+Tab") &&
+              std::wcsstr(llcv::presentation_ui::HelpText(english),
+                  english ? L"fullscreen shortcut" : L"전체화면 단축키") &&
+              std::wcsstr(llcv::presentation_ui::ExclusiveFullscreenLabel(english),
+                  english ? L"exclusive fullscreen" : L"독점 전체화면"),
+              "exclusive output explains focus suspension and customizable fullscreen shortcut");
+        Check(std::wcsstr(llcv::presentation_ui::ImmediateLabel(english),
+                  english ? L"Low latency" : L"저지연") &&
+              std::wcsstr(llcv::presentation_ui::ExclusiveFullscreenLabel(english),
+                  english ? L"Low latency" : L"저지연") &&
+              !std::wcsstr(llcv::presentation_ui::HelpText(english),
+                  english ? L"minimum latency" : L"최소 지연"),
+              "both low-latency modes are named consistently without an absolute latency claim");
         const auto* ls = SettingsHelpText(SettingsHelpTopic::Capture40, english);
         const auto* caution = std::wcsstr(ls, english ? L"Keep in mind" : L"주의사항");
         const auto* example = std::wcsstr(ls, english ? L"Example: Lossless Scaling" : L"활용 예시: Lossless Scaling");
@@ -766,7 +806,7 @@ static void TestActualControlCreation() {
     {&SettingsControls::tabControl, 2037},
     {&SettingsControls::vsrCheck, 2049},
     {&SettingsControls::vsrGuideButton, 2050},
-    {&SettingsControls::vsrCaptureCombo, 2051},
+    {&SettingsControls::displayResolutionCombo, 2051},
     {&SettingsControls::audioCombo, 2001},
     {&SettingsControls::audioOutputCombo, 2016},
     {&SettingsControls::bufferCombo, 2006},
@@ -789,6 +829,7 @@ static void TestActualControlCreation() {
     {&SettingsControls::guideLogFolderButton, 2039},
     {&SettingsControls::screenshotClipboardCheck, 2047},
     {&SettingsControls::capture40Check, 2057},
+    {&SettingsControls::unlistedFpsCheck, 2078},
     {&SettingsControls::capture40Help, 2058},
     {&SettingsControls::guideLsButton, 2059},
     {&SettingsControls::screenshotFolderButton, 2048},
@@ -803,6 +844,7 @@ static void TestActualControlCreation() {
     {&SettingsControls::frameRateCombo, 2020},
     {&SettingsControls::scalingCombo, 2027},
     {&SettingsControls::fullscreenCursorCombo, 2040},
+    {&SettingsControls::fullscreenPositionCombo, 2061},
     {&SettingsControls::forceHdr10Check, 2033},
     {&SettingsControls::forceHdr10Help, 2034},
     {&SettingsControls::hdrChromaCombo, 2044},
@@ -834,10 +876,11 @@ static void TestActualControlCreation() {
         settings.audioMode = static_cast<AudioMode>(profile % 3);
         settings.driftCorrection = static_cast<DriftCorrectionMode>(profile % 3);
         settings.pcmQueueTargetMs = pcm[profile % 5];
-        settings.presentationMode = static_cast<PresentationMode>(profile % 3);
+        settings.presentationMode = llcv::presentation_ui::ModeFromSelection(profile % 4);
         settings.volumeHudPosition = static_cast<VolumeHudPosition>(profile % 4);
         settings.scalingMode = profile % 2 ? ScalingMode::Sharp : ScalingMode::Smooth;
         settings.fullscreenCursorMode = profile % 2 ? FullscreenCursorMode::AlwaysVisible : FullscreenCursorMode::AutoHide;
+        settings.fullscreenVideoPosition = FullscreenPositionFromIndex(profile % 9);
         settings.uiLanguage = static_cast<UiLanguage>(profile % 3);
         settings.settingsLightTheme = profile % 2 != 0;
         settings.mjpegColorOverride = static_cast<llcv::video_color::Override>(profile % 5);
@@ -856,7 +899,7 @@ static void TestActualControlCreation() {
         settings.screenshotClipboard = profile % 2 != 0;
         settings.capture40Fps = profile % 2 != 0;
         settings.vsrEnabled = profile % 2 != 0;
-        settings.vsrCapturePreset = presets[(profile + 1) % 4].preset;
+        settings.capturePreset = presets[(profile + 1) % 4].preset;
         settings.showDiagnosticConsole = !settings.windowSnap;
         settings.skipStartupSettings = settings.allowVolumeBoost;
         settings.checkForUpdates = settings.pixelPerfect;
@@ -896,13 +939,49 @@ static void TestActualControlCreation() {
         Check(selection(state.driftCombo) == drift, "initial clock correction");
         Check(selection(state.pcmQueueCombo) == profile % 5 &&
               SendMessageW(state.pcmQueueCombo, CB_GETITEMDATA, profile % 5, 0) == settings.pcmQueueTargetMs, "PCM values and selection");
-        Check(selection(state.presentationCombo) == profile % 3, "presentation mode mapping");
+        Check(SendMessageW(state.presentationCombo, CB_GETCOUNT, 0, 0) ==
+                  llcv::presentation_ui::ModeCount,
+              "all four presentation modes are available");
+        Check(selection(state.presentationCombo) == profile % 4, "presentation mode mapping");
+        wchar_t exclusiveLabel[128]{};
+        SendMessageW(state.presentationCombo, CB_GETLBTEXT, 3,
+                     reinterpret_cast<LPARAM>(exclusiveLabel));
+        Check(std::wcscmp(exclusiveLabel,
+                  llcv::presentation_ui::ExclusiveFullscreenLabel(english)) == 0,
+              "exclusive choice uses the active settings language");
         Check(selection(state.displayMonitorCombo) == (profile % 3 == 0 ? 0 : profile % 3 == 1 ? 2 : 3), "display selection / disconnected preference");
         Check(SendMessageW(state.videoCombo, CB_GETCOUNT, 0, 0) == 4,
               "720p plus three existing resolutions are listed");
-        Check(selection(state.videoCombo) == profile % 4, "initial video preset");
-        Check(selection(state.vsrCaptureCombo) == (profile + 1) % 4,
-              "VSR capture selection is independent from display");
+        const auto captureIndex = (profile + 1) % 4;
+        Check(selection(state.videoCombo) == captureIndex, "left field always restores capture resolution");
+        Check(selection(state.displayResolutionCombo) == profile % 4,
+              "right field restores display resolution");
+        for (bool enabled : {false, true, false, true}) {
+            SendMessageW(state.vsrCheck, BM_SETCHECK, enabled ? BST_CHECKED : BST_UNCHECKED, 0);
+            UpdateAdvancedControlVisibility(&state, false, VideoPixelFormat::Nv12);
+            wchar_t label[64]{};
+            GetWindowTextW(state.videoLabel, label, 64);
+            Check(std::wcscmp(label, english ? L"Capture resolution" : L"캡처 해상도") == 0,
+                  "VSR toggling never renames the capture field");
+            GetWindowTextW(state.displayResolutionLabel, label, 64);
+            Check(std::wcscmp(label, english ? L"Display resolution" : L"표시 해상도") == 0,
+                  "display label stays fixed");
+            Check(selection(state.videoCombo) == captureIndex &&
+                  selection(state.displayResolutionCombo) == profile % 4,
+                  "VSR toggling preserves both visible selections");
+            auto applied = settings;
+            ApplyResolutionSelections(state, presets, applied);
+            Check(applied.fullscreenVideoPosition == settings.fullscreenVideoPosition,
+                  "fullscreen position is saved with the resolution selections");
+            Check(applied.videoPreset == presets[profile % 4].preset,
+                  "display selection is saved independently of VSR");
+            Check(applied.capturePreset == presets[captureIndex].preset,
+                  "capture selection is saved independently of VSR");
+            Check((IsWindowEnabled(state.displayResolutionCombo) != FALSE) ==
+                      (state.activeTab == SettingsTab::VideoWindow),
+                  "display resolution remains editable with VSR off or on");
+        }
+        SendMessageW(state.vsrCheck, BM_SETCHECK, settings.vsrEnabled ? BST_CHECKED : BST_UNCHECKED, 0);
         Check((SendMessageW(state.vsrCheck, BM_GETCHECK, 0, 0) == BST_CHECKED) == settings.vsrEnabled,
               "VSR saved setting maps to checkbox");
         Check(selection(state.volumeHudCombo) == profile % 4, "volume HUD selection");
@@ -911,6 +990,7 @@ static void TestActualControlCreation() {
               "theme preference restored in the native picker");
         Check(selection(state.scalingCombo) == profile % 2, "scaling selection");
         Check(selection(state.fullscreenCursorCombo) == profile % 2, "cursor selection");
+        Check(selection(state.fullscreenPositionCombo) == profile % 9, "fullscreen position selection");
         Check(selection(state.mjpegColorCombo) == profile % 5, "MJPEG interpretation selection");
         Check(selection(state.hdrChromaCombo) == profile % 3 &&
               SendMessageW(state.hdrChromaCombo, CB_GETCOUNT, 0, 0) == 3 &&
@@ -932,6 +1012,7 @@ static void TestActualControlCreation() {
             {state.saveLogCheck, settings.saveLog},
             {state.screenshotClipboardCheck, settings.screenshotClipboard},
             {state.capture40Check, settings.capture40Fps},
+            {state.unlistedFpsCheck, settings.allowUnlistedFps},
             {state.showConsoleCheck, settings.showDiagnosticConsole},
             {state.skipStartupCheck, settings.skipStartupSettings},
             {state.checkForUpdatesCheck, settings.checkForUpdates},
@@ -948,17 +1029,19 @@ static void TestActualControlCreation() {
         GetWindowTextW(state.updateTitle, caption, 512);
         Check(std::wcsstr(caption, L"vTEST") != nullptr, "explicit version label");
         GetWindowTextW(state.fullscreenCursorHint, caption, 512);
-        Check(std::wcscmp(caption, english ? L"F11  Toggle borderless fullscreen" :
-                         L"F11  보더리스 전체화면 켜기/끄기") == 0, "F11 caption unchanged");
+        Check(std::wcscmp(caption, english ? L"F11  Toggle fullscreen" :
+                         L"F11  전체화면 켜기/끄기") == 0, "fullscreen caption covers borderless and exclusive");
         Check((GetWindowLongPtrW(state.fullscreenCursorHint, GWL_STYLE) & SS_TYPEMASK) == SS_RIGHT,
               "F11 right alignment unchanged");
-        Check(SendMessageW(state.tooltipWindow, TTM_GETTOOLCOUNT, 0, 0) == 10,
-              "seven help buttons plus monitor, audio mode and pixel-perfect tooltips registered");
+        Check(SendMessageW(state.tooltipWindow, TTM_GETTOOLCOUNT, 0, 0) == 11,
+              "seven help buttons plus monitor, audio mode, frame rate and pixel-perfect tooltips registered");
         // Model a full five-line device capability report, not just the short
         // loading placeholder. Long formats/FPS lists must remain visible.
         SetWindowTextW(state.videoCapabilityStatus, english
             ? L"Detected modes:\r\nNV12 240/144/120/100/90/60/50/30 fps\r\nYUY2 120/100/60/50/30 fps\r\nP010 60/50/30 fps\r\nMJPEG 240/144/120/100/90/60/50/30 fps"
             : L"자동 인식:\r\nNV12 240/144/120/100/90/60/50/30 fps\r\nYUY2 120/100/60/50/30 fps\r\nP010 60/50/30 fps\r\nMJPEG 240/144/120/100/90/60/50/30 fps");
+        SetWindowTextW(state.unlistedFpsStatus, english
+            ? L"Direct request: 30 fps" : L"직접 요청: 30 fps");
         SetWindowTextW(state.audioStatus, english
             ? L"Console 5.1: output period is negotiated on start; actual value in Tab diagnostics."
             : L"콘솔 5.1: 출력 주기는 시작 시 협상 · 실제 값은 Tab 진단에서 확인");
@@ -988,9 +1071,9 @@ static void TestActualControlCreation() {
                 SendMessageW(state.vsrCheck, BM_SETCHECK, BST_CHECKED, 0);
                 UpdateAdvancedControlVisibility(&state, false, VideoPixelFormat::Nv12);
                 Check(!IsWindowEnabled(state.vsrCheck) &&
-                    !IsWindowEnabled(state.vsrCaptureCombo) &&
+                    IsWindowEnabled(state.displayResolutionCombo) &&
                     SendMessageW(state.vsrCheck, BM_GETCHECK, 0, 0) == BST_UNCHECKED,
-                    "GPU gate clears stale ON and disables VSR controls");
+                    "GPU gate disables only VSR, not display resolution");
                 Check(IsWindowEnabled(state.vsrGuideButton), "VSR guidance remains accessible");
                 CheckCaptionFits(state.vsrStatus, "VSR GPU reason", textDpi, english, 0, false);
                 wchar_t reason[256]{};
@@ -1247,7 +1330,7 @@ static void TestCompactWorkAreas() {
         for(HWND required:{state.captureDeviceCombo,state.captureAudioDeviceCombo,state.videoCombo,state.frameRateCombo,
             state.pixelFormatCombo,state.forceHdr10Check,state.hdrChromaCombo,state.mjpegColorCombo,
             state.presentationCombo,state.displayMonitorCombo,state.scalingCombo,state.pixelCheck,
-            state.vsrCheck,state.vsrCaptureCombo,state.screenshotClipboardCheck,state.screenshotFolderButton,
+            state.vsrCheck,state.displayResolutionCombo,state.screenshotClipboardCheck,state.screenshotFolderButton,
             state.audioCombo,state.audioOutputCombo,state.bufferCombo,state.exclusiveTestButton,
             state.volumeHudCombo,state.volumeBoostCheck,state.muteBackgroundCheck,state.audioOnlyCheck,state.surround51Check,
             state.driftCombo,state.pcmQueueCombo,state.relativeSizeCheck,state.borderlessCheck,state.roundedCornersCheck,
@@ -1387,9 +1470,13 @@ int main(int argc, char** argv) {
             ExpectVisible(state.mjpegColorCombo, video && format == VideoPixelFormat::Mjpeg);
             Check(Visible(state.scalingCombo) == video, "scaling row never jumps when lock changes");
             Check((IsWindowEnabled(state.scalingCombo) != FALSE) == (video && (!pixel ||
-                SendMessageW(state.vsrCheck, BM_GETCHECK, 0, 0) == BST_CHECKED)), "scaling enable policy");
+                SendMessageW(state.videoCombo, CB_GETCURSEL, 0, 0) !=
+                SendMessageW(state.displayResolutionCombo, CB_GETCURSEL, 0, 0))), "scaling enable policy");
             ExpectVisible(state.relativeSizeWarning, tab == SettingsTab::Window && pixel && relative);
             ExpectVisible(state.fullscreenCursorHint, tab == SettingsTab::Window);
+            ExpectVisible(state.fullscreenPositionLabel, tab == SettingsTab::Window);
+            ExpectVisible(state.fullscreenPositionCombo, tab == SettingsTab::Window);
+            ExpectVisible(state.fullscreenPositionHint, tab == SettingsTab::Window);
             ExpectVisible(state.windowSnapCheck, tab == SettingsTab::Window);
             ExpectVisible(state.roundedCornersCheck, tab == SettingsTab::Window);
             ExpectVisible(state.guideLogFolderButton, tab == SettingsTab::GuideDiagnostics);
@@ -1397,6 +1484,7 @@ int main(int argc, char** argv) {
                   "exit remains editable on the guide page");
             ExpectVisible(state.screenshotTitle, tab == SettingsTab::VideoWindow);
             ExpectVisible(state.capture40Check, tab == SettingsTab::VideoWindow);
+            ExpectVisible(state.unlistedFpsCheck, tab == SettingsTab::VideoWindow);
             ExpectVisible(state.capture40Help, tab == SettingsTab::VideoWindow);
             ExpectVisible(state.guideLsButton, tab == SettingsTab::GuideDiagnostics);
             ExpectVisible(state.vsrCheck, video);

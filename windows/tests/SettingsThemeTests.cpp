@@ -3,6 +3,9 @@
 #include "ui/SettingsDialogControls.h"
 #include "ui/UiText.h"
 #include "capture/DirectShowDevices.h"
+#ifdef LLCV_RECORDING
+#include "recording/RecordingSettingsView.h"
+#endif
 #include <commctrl.h>
 #include <algorithm>
 #include <cstdio>
@@ -112,6 +115,11 @@ LRESULT CALLBACK Proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
             auto& c = state->controls;
             if (message == WM_COMMAND) {
                 const HWND control = reinterpret_cast<HWND>(lParam);
+#ifdef LLCV_RECORDING
+                if (RecordingSettingsCommand(&c, hwnd, LOWORD(wParam), HIWORD(wParam))) {
+                    RefreshPreview(*state); return 0;
+                }
+#endif
                 if (control == c.tabControl && HIWORD(wParam) == LBN_SELCHANGE) {
                     c.activeTab = SettingsTabFromNavigationIndex(static_cast<int>(SendMessageW(c.tabControl, LB_GETCURSEL, 0, 0)));
                     RefreshPreview(*state); return 0;
@@ -227,6 +235,17 @@ void CheckPaintContracts(TestWindow& state) {
         const COLORREF enabledText = GetTextColor(dc);
         backgroundFor(state.controls.pixelCheck);
         Check(GetTextColor(dc) != enabledText, "disabled text is visually distinct");
+        const bool detectedEnabled = IsWindowEnabled(state.controls.videoCapabilityStatus) != FALSE;
+        const bool requestEnabled = IsWindowEnabled(state.controls.unlistedFpsStatus) != FALSE;
+        EnableWindow(state.controls.videoCapabilityStatus, TRUE);
+        EnableWindow(state.controls.unlistedFpsStatus, TRUE);
+        backgroundFor(state.controls.videoCapabilityStatus);
+        const COLORREF detectedText = GetTextColor(dc);
+        backgroundFor(state.controls.unlistedFpsStatus);
+        Check(GetTextColor(dc) != detectedText,
+            "direct-request hint uses a distinct accent from detected capabilities");
+        EnableWindow(state.controls.videoCapabilityStatus, detectedEnabled);
+        EnableWindow(state.controls.unlistedFpsStatus, requestEnabled);
     }
     Check((SendMessageW(state.controls.vsrCheck, WM_GETDLGCODE, VK_SPACE, 0) & DLGC_BUTTON) != 0,
         "checkbox keeps native dialog keyboard semantics");
@@ -270,6 +289,10 @@ void OneCycle(const wchar_t* snapshot = nullptr) {
         184, 252, 400, 30, 17);
     c.vsrStatus = Child(hwnd, L"STATIC", L"Experimental. Actual NVIDIA enhancement cannot be verified here.", SS_LEFT,
         184, 310, 650, 28, 18);
+    c.videoCapabilityStatus = Child(hwnd, L"STATIC", L"Detected: 60 fps", SS_LEFT,
+        184, 350, 376, 20, 19);
+    c.unlistedFpsStatus = Child(hwnd, L"STATIC", L"Direct request: 30 fps", SS_LEFT,
+        184, 374, 376, 20, 20);
     c.startButton = Child(hwnd, L"BUTTON", L"Start", BS_DEFPUSHBUTTON | WS_TABSTOP, 698, 608, 110, 32, IDOK);
     c.cancelButton = Child(hwnd, L"BUTTON", L"Cancel", BS_PUSHBUTTON | WS_TABSTOP, 820, 608, 106, 32, IDCANCEL);
     c.themeCombo = Child(hwnd, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP,
@@ -360,7 +383,7 @@ void CreateActualContents(TestWindow& state, HWND hwnd, bool english, UINT dpi, 
         settings.allowVolumeBoost = true;
         settings.consoleSurround51 = true;
         settings.captureDeviceId = L"sample-capture";
-        const SettingsControlInitialValues initial{settings, english, asioAvailable, L"v2.0.4 · Preview",
+        const SettingsControlInitialValues initial{settings, english, asioAvailable, L"UI Preview",
             VideoPreset::R1920x1080, devices, devices, presets, pcm, monitors};
         SettingsControlPopulation population{
             &state.controls,
@@ -378,6 +401,15 @@ void CreateActualContents(TestWindow& state, HWND hwnd, bool english, UINT dpi, 
             }};
         CreateSettingsDialogControls(&state.controls, hwnd, GetModuleHandleW(nullptr), initial, population);
         auto& c = state.controls;
+#ifdef LLCV_RECORDING
+        // Synthetic capabilities only: visual QA must not probe capture/encode hardware.
+        c.recordingOptions.folder = L"C:\\Videos\\LLCV";
+        CreateRecordingSettings(&c, hwnd);
+        c.recordingProbePending = false;
+        c.recordingCapabilities[0] = {true,true,{{L"Hardware encoder (preview)",L"fixture"}},{true,true},{true,true}};
+        c.recordingCapabilities[1] = {true,false,{{L"HEVC encoder (preview)",L"fixture"}},{true,true},{}};
+        RefreshRecordingSettings(&c);
+#endif
         SetWindowTextW(c.videoCapabilityStatus, english ? L"Detected formats\nNV12  144 / 120 / 60 fps\nYUY2  60 fps\nP010  60 fps" :
             L"자동 인식\nNV12  144 / 120 / 60 fps\nYUY2  60 fps\nP010  60 fps");
         // VSR help is the production factory copy, not a fabricated successful
@@ -425,11 +457,11 @@ void CheckActualTabOrder() {
                         c.hdrChromaCombo, c.hdrChromaHelp});
                 if (format == VideoPixelFormat::Mjpeg)
                     expected.insert(expected.end(), {c.mjpegColorCombo, c.mjpegColorHelp});
-                expected.insert(expected.end(), {c.capture40Check, c.capture40Help});
+                expected.insert(expected.end(), {c.unlistedFpsCheck, c.capture40Check, c.capture40Help});
                 expected.insert(expected.end(), {c.presentationCombo, c.presentationHelp,
                     c.displayMonitorCombo, c.pixelCheck});
-                expected.push_back(c.scalingCombo); // fixture enables VSR; lock is display-size only
-                expected.insert(expected.end(), {c.vsrCheck, c.vsrGuideButton, c.vsrCaptureCombo,
+                if (!pixelPerfect) expected.push_back(c.scalingCombo); // fixture uses equal capture/display sizes
+                expected.insert(expected.end(), {c.displayResolutionCombo, c.vsrCheck, c.vsrGuideButton,
                     c.screenshotClipboardCheck, c.screenshotFolderButton});
                 break;
             case SettingsTab::Audio:
@@ -442,7 +474,7 @@ void CheckActualTabOrder() {
                 break;
             case SettingsTab::Window:
                 expected.insert(expected.end(), {c.relativeSizeCheck, c.borderlessCheck,
-                    c.roundedCornersCheck, c.windowSnapCheck, c.fullscreenCursorCombo});
+                    c.roundedCornersCheck, c.windowSnapCheck, c.fullscreenCursorCombo, c.fullscreenPositionCombo});
                 break;
             case SettingsTab::GuideDiagnostics:
                 expected.push_back(c.shortcutResetButton);
@@ -630,8 +662,8 @@ void CheckDisabledLabelPixels() {
         RefreshPreview(state);
         Check(!IsWindowEnabled(c.scalingLabel) && !IsWindowEnabled(c.scalingCombo),
             "pixel-perfect still disables scaling");
-        Check(!IsWindowEnabled(c.vsrCaptureLabel) && !IsWindowEnabled(c.vsrCaptureCombo),
-            "VSR off still disables capture override");
+        Check(IsWindowEnabled(c.displayResolutionLabel) && IsWindowEnabled(c.displayResolutionCombo),
+            "VSR off keeps display selection available");
         if (!state.theme.HighContrast()) CheckBrandPixels(c.brandLabel, dpi);
         // Audit every actual STATIC, not just currently visible disabled
         // labels. This catches missing text styles on other pages/modes.
@@ -749,7 +781,7 @@ void CheckDisabledLabelPixels() {
         SendMessageW(c.pixelCheck, BM_SETCHECK, BST_UNCHECKED, 0);
         SendMessageW(c.vsrCheck, BM_SETCHECK, BST_CHECKED, 0);
         RefreshPreview(state);
-        Check(IsWindowEnabled(c.scalingLabel) && IsWindowEnabled(c.vsrCaptureLabel),
+        Check(IsWindowEnabled(c.scalingLabel) && IsWindowEnabled(c.displayResolutionLabel),
             "labels restore native enabled state");
         DestroyWindow(hwnd);
         for (HFONT font : c.uiFonts) DeleteObject(font);
@@ -912,9 +944,10 @@ void CompactSnapshots(const wchar_t* directory, bool shortWorkArea = false) {
     }
 }
 
-void ActualSnapshots(const wchar_t* directory) {
+void ActualSnapshots(const wchar_t* directory, bool videoOnly = false, bool windowOnly = false) {
     using namespace llcv::settings;
     for (bool light : {false, true}) for (bool english : {false, true}) for (UINT dpi : {96u, 120u, 144u, 192u}) {
+        if ((videoOnly || windowOnly) && dpi != 144) continue;
         TestWindow state;
         HWND hwnd = CreateWindowW(L"LLCV.SettingsTheme.Tests", L"Offscreen actual settings",
             WS_POPUP | WS_CLIPCHILDREN, 0, 0, SettingsPixels(kSettingsClientWidthDip, dpi), SettingsPixels(650, dpi),
@@ -926,10 +959,20 @@ void ActualSnapshots(const wchar_t* directory) {
         SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(2053, CBN_SELCHANGE),
             reinterpret_cast<LPARAM>(c.themeCombo));
         for (int index = 0; index < kSettingsNavigationCount; ++index) {
-            if (dpi != 96 && index != 0 && index != 1 && index != 3) continue;
+            if (videoOnly && SettingsTabFromNavigationIndex(index) != SettingsTab::VideoWindow) continue;
+            if (windowOnly && SettingsTabFromNavigationIndex(index) != SettingsTab::Window) continue;
+            if (!windowOnly && dpi != 96 &&
+                SettingsTabFromNavigationIndex(index) == SettingsTab::Updates) continue;
             c.activeTab = SettingsTabFromNavigationIndex(index);
             SendMessageW(c.tabControl, LB_SETCURSEL, index, 0);
             UpdateAdvancedControlVisibility(&c, false, VideoPixelFormat::Nv12);
+#ifdef LLCV_RECORDING
+            // Page entry refreshes storage; replace machine-specific data only
+            // after that refresh when exporting documentation screenshots.
+            if(c.activeTab==SettingsTab::Recording)
+                SetWindowTextW(c.recSpace, english ? L"Free space is checked for the selected folder." :
+                    L"선택한 폴더의 남은 공간을 확인합니다.");
+#endif
             if (index == 0) {
                 SetSettingsControlVisible(c.captureAudioDeviceCombo, true);
                 SetSettingsControlVisible(c.captureAudioStatus, false);
@@ -938,7 +981,18 @@ void ActualSnapshots(const wchar_t* directory) {
             swprintf_s(name, L"settings-%s-%s-tab%d-%udpi.bmp", light ? L"light" : L"dark",
                 english ? L"en" : L"ko", index, dpi);
             SaveSnapshot(hwnd, (std::wstring(directory) + L"/" + name).c_str());
-            if (index==3) {
+            if (windowOnly) continue;
+            if (videoOnly) {
+                SendMessageW(c.vsrCheck, BM_SETCHECK, BST_UNCHECKED, 0);
+                SendMessageW(c.videoCombo, CB_SETCURSEL, 1, 0);
+                SendMessageW(c.displayResolutionCombo, CB_SETCURSEL, 2, 0);
+                UpdateAdvancedControlVisibility(&c, false, VideoPixelFormat::Nv12);
+                swprintf_s(name, L"settings-%s-%s-vsr-off-%udpi.bmp", light ? L"light" : L"dark",
+                    english ? L"en" : L"ko", dpi);
+                SaveSnapshot(hwnd, (std::wstring(directory) + L"/" + name).c_str());
+                continue;
+            }
+            if (c.activeTab==SettingsTab::GuideDiagnostics) {
                 c.shortcutBindings[0]=llcv::shortcuts::Ctrl|VK_F1;
                 c.shortcutBindings[static_cast<size_t>(llcv::shortcuts::Action::Exit)]=llcv::shortcuts::Ctrl|'Q';
                 for (bool longKey:{false,true}) {
@@ -984,7 +1038,7 @@ void ActualSnapshots(const wchar_t* directory) {
                 UpdateAdvancedControlVisibility(&c, false, VideoPixelFormat::Nv12);
             }
         }
-        if (dpi == 96) {
+        if (!videoOnly && !windowOnly && dpi == 96) {
             c.activeTab = SettingsTab::VideoWindow;
             SendMessageW(c.tabControl, LB_SETCURSEL, 0, 0);
             SendMessageW(c.pixelFormatCombo, CB_RESETCONTENT, 0, 0);
@@ -999,7 +1053,8 @@ void ActualSnapshots(const wchar_t* directory) {
             SendMessageW(c.captureDeviceCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
         wchar_t dropdownName[100]{};
         swprintf_s(dropdownName, L"dropdown-%s-%s-%udpi.bmp", light ? L"light" : L"dark", english ? L"en" : L"ko", dpi);
-        SaveSnapshot(hwnd, (std::wstring(directory) + L"/" + dropdownName).c_str(), c.captureDeviceCombo);
+        if (!videoOnly && !windowOnly)
+            SaveSnapshot(hwnd, (std::wstring(directory) + L"/" + dropdownName).c_str(), c.captureDeviceCombo);
         DestroyWindow(hwnd);
         for (HFONT font : c.uiFonts) DeleteObject(font);
     }
@@ -1024,12 +1079,17 @@ int wmain(int argc, wchar_t** argv) {
     RECT rect{0, 0, SettingsPixels(kSettingsClientWidthDip, dpi), SettingsPixels(650, dpi)};
     AdjustWindowRectExForDpi(&rect, style, FALSE, WS_EX_CONTROLPARENT, dpi);
     HWND hwnd = CreateWindowExW(WS_EX_CONTROLPARENT, wc.lpszClassName,
-        L"Low Latency Capture Viewer · Design preview (no hardware)", style, CW_USEDEFAULT, CW_USEDEFAULT,
+        L"LLCV · UI Preview (no hardware)", style, CW_USEDEFAULT, CW_USEDEFAULT,
         rect.right - rect.left, rect.bottom - rect.top, nullptr, nullptr, wc.hInstance, &state);
     Check(hwnd != nullptr, "create interactive design preview");
     CreateActualContents(state, hwnd, false, GetDpiForWindow(hwnd));
+#ifdef LLCV_RECORDING
+    state.controls.activeTab = SettingsTab::Recording;
+    state.controls.recordingLive=true;ShowRecordingSettings(&state.controls);
+#else
     state.controls.activeTab = SettingsTab::VideoWindow;
-    SendMessageW(state.controls.tabControl, LB_SETCURSEL, 0, 0);
+#endif
+    SendMessageW(state.controls.tabControl, LB_SETCURSEL, SettingsNavigationIndex(state.controls.activeTab), 0);
     RefreshPreview(state);
     ShowWindow(hwnd, SW_SHOW); UpdateWindow(hwnd); SetFocus(state.controls.tabControl);
     MSG message{};
@@ -1068,10 +1128,20 @@ int wmain(int argc, wchar_t** argv) {
         std::puts("Compact native offscreen snapshots saved.");
         return 0;
     }
+    if (argc == 3 && std::wcscmp(argv[1], L"--window-screenshots-only") == 0) {
+        ActualSnapshots(argv[2], false, true);
+        UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        return 0;
+    }
     if (argc == 3 && std::wcscmp(argv[1], L"--screenshots-only") == 0) {
         ActualSnapshots(argv[2]);
         UnregisterClassW(wc.lpszClassName, wc.hInstance);
         std::puts("Settings snapshots saved (visual QA only; lifecycle regression not run).");
+        return 0;
+    }
+    if (argc == 3 && std::wcscmp(argv[1], L"--video-screenshots-only") == 0) {
+        ActualSnapshots(argv[2], true);
+        UnregisterClassW(wc.lpszClassName, wc.hInstance);
         return 0;
     }
     CheckActualTabOrder();

@@ -7,7 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 struct VirtualMonitor { RECT rect; UINT dpi; };
-static VirtualMonitor monitors[2];
+static VirtualMonitor fixtureMonitors[2];
 static int connectedMonitors = 2;
 static bool reverseMonitorEnumeration = false;
 static LONG_PTR simulatedStyle = WS_POPUP;
@@ -41,13 +41,13 @@ static LRESULT FakeSendMessageW(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 static HMONITOR MonitorHandle(int i) { return reinterpret_cast<HMONITOR>(INT_PTR(i + 1)); }
 static int MonitorIndex(HMONITOR h) { return h == MonitorHandle(1) ? 1 : 0; }
 static HMONITOR FakeMonitorFromPoint(POINT p, DWORD) {
-    for (int i=0;i<2;++i) if (PtInRect(&monitors[i].rect,p)) return MonitorHandle(i);
+    for (int i=0;i<2;++i) if (PtInRect(&fixtureMonitors[i].rect,p)) return MonitorHandle(i);
     return MonitorHandle(0);
 }
 static HMONITOR FakeMonitorFromRect(LPCRECT r, DWORD) {
     LONG best=-1; int chosen=0;
     for(int i=0;i<2;++i) {
-        RECT overlap{}; IntersectRect(&overlap,r,&monitors[i].rect);
+        RECT overlap{}; IntersectRect(&overlap,r,&fixtureMonitors[i].rect);
         LONG area=(overlap.right-overlap.left)*(overlap.bottom-overlap.top);
         if(area>best) { best=area; chosen=i; }
     }
@@ -56,7 +56,7 @@ static HMONITOR FakeMonitorFromRect(LPCRECT r, DWORD) {
 static HMONITOR FakeMonitorFromWindow(HWND,DWORD f) {return FakeMonitorFromRect(&simulatedWindowRect,f);}
 static BOOL FakeGetMonitorInfoW(HMONITOR h,LPMONITORINFO info) {
     if ((h!=MonitorHandle(0) && h!=MonitorHandle(1)) || MonitorIndex(h)>=connectedMonitors) return FALSE;
-    info->rcMonitor=info->rcWork=monitors[MonitorIndex(h)].rect;
+    info->rcMonitor=info->rcWork=fixtureMonitors[MonitorIndex(h)].rect;
     info->dwFlags=h==MonitorHandle(0)?MONITORINFOF_PRIMARY:0;
     if (info->cbSize >= sizeof(MONITORINFOEXW))
         swprintf_s(reinterpret_cast<MONITORINFOEXW*>(info)->szDevice,L"DISPLAY%d",MonitorIndex(h));
@@ -70,14 +70,14 @@ static BOOL FakeEnumDisplayDevicesW(LPCWSTR name,DWORD,PDISPLAY_DEVICEW device,D
 static BOOL FakeEnumDisplayMonitors(HDC,LPCRECT,MONITORENUMPROC callback,LPARAM context) {
     for (int i=0;i<connectedMonitors;++i) {
         int index=reverseMonitorEnumeration && connectedMonitors==2 ? 1-i : i;
-        if(!callback(MonitorHandle(index),nullptr,&monitors[index].rect,context)) break;
+        if(!callback(MonitorHandle(index),nullptr,&fixtureMonitors[index].rect,context)) break;
     }
     return TRUE;
 }
 static HRESULT FakeGetDpiForMonitor(HMONITOR h,MONITOR_DPI_TYPE,UINT* x,UINT* y) {
-    *x=*y=monitors[MonitorIndex(h)].dpi; return S_OK;
+    *x=*y=fixtureMonitors[MonitorIndex(h)].dpi; return S_OK;
 }
-static UINT FakeGetDpiForWindow(HWND) {return monitors[MonitorIndex(FakeMonitorFromWindow(nullptr,0))].dpi;}
+static UINT FakeGetDpiForWindow(HWND) {return fixtureMonitors[MonitorIndex(FakeMonitorFromWindow(nullptr,0))].dpi;}
 static BOOL FakeGetCursorPos(LPPOINT p) {*p=cursorPoint;return TRUE;}
 static BOOL FakeScreenToClient(HWND, LPPOINT p) {
     p->x -= simulatedWindowRect.left; p->y -= simulatedWindowRect.top; return TRUE;
@@ -190,7 +190,7 @@ static uint64_t Generation() {return g_outputConfigurationGeneration.load();}
 static void Enter() {WndProc(testWindow,WM_ENTERSIZEMOVE,0,0);}
 static void Leave() {WndProc(testWindow,WM_EXITSIZEMOVE,0,0);}
 static void MoveTo(int monitor) {
-    const RECT r=monitors[monitor].rect;
+    const RECT r=fixtureMonitors[monitor].rect;
     cursorPoint={r.left+100,r.top+100};
     const LONG width=simulatedWindowRect.right-simulatedWindowRect.left;
     const LONG height=simulatedWindowRect.bottom-simulatedWindowRect.top;
@@ -203,19 +203,19 @@ static void DpiTo(UINT dpi,int target) {
     SIZE size{};
     Require(WndProc(testWindow,WM_GETDPISCALEDSIZE,dpi,reinterpret_cast<LPARAM>(&size))==TRUE,
             "DPI preflight handled");
-    const int x=monitors[target].rect.left+100,y=monitors[target].rect.top+100;
+    const int x=fixtureMonitors[target].rect.left+100,y=fixtureMonitors[target].rect.top+100;
     RECT r{x,y,x+size.cx,y+size.cy};
     WndProc(testWindow,WM_DPICHANGED,MAKELONG(dpi,dpi),reinterpret_cast<LPARAM>(&r));
 }
 static void TestSymmetricEdgeSnap() {
-    const VirtualMonitor savedMonitors[]{monitors[0], monitors[1]};
+    const VirtualMonitor savedMonitors[]{fixtureMonitors[0], fixtureMonitors[1]};
     unsigned cases = 0;
     for (const UINT dpi : {96u, 120u, 144u, 192u})
     for (const bool audioOnly : {false, true})
     for (const bool negativeOrigin : {false, true})
     for (int edge = 0; edge < 4; ++edge) {
-        monitors[0] = {negativeOrigin ? RECT{-1920,-1080,0,0} : RECT{0,0,1920,1080}, dpi};
-        const RECT work = monitors[0].rect;
+        fixtureMonitors[0] = {negativeOrigin ? RECT{-1920,-1080,0,0} : RECT{0,0,1920,1080}, dpi};
+        const RECT work = fixtureMonitors[0].rect;
         const int distance = MulDiv(kWindowSnapDistanceDip, dpi, 96);
         const auto rectAt = [&](int offset) {
             RECT r{work.left + 300, work.top + 300, work.left + 940, work.top + 660};
@@ -265,8 +265,8 @@ static void TestSymmetricEdgeSnap() {
             ++cases;
         }
     }
-    monitors[0] = {{0,0,1920,1080}, 96};
-    monitors[1] = {{1920,0,4480,1440}, 144};
+    fixtureMonitors[0] = {{0,0,1920,1080}, 96};
+    fixtureMonitors[1] = {{1920,0,4480,1440}, 144};
     Reset(false, false); ResetWindowSnapState(); g_settings.windowSnap = true;
     cursorPoint = {500,400}; RECT corner{10,10,650,370};
     ApplyWindowEdgeSnap(testWindow, corner);
@@ -282,7 +282,7 @@ static void TestSymmetricEdgeSnap() {
         Require(corner.left == 1930 && g_windowSnapState.horizontal == HorizontalSnapEdge::None,
             "disabled snap and fullscreen bypass magnetism");
     }
-    monitors[0] = savedMonitors[0]; monitors[1] = savedMonitors[1];
+    fixtureMonitors[0] = savedMonitors[0]; fixtureMonitors[1] = savedMonitors[1];
     Reset(false, false); ResetWindowSnapState();
     std::printf("Symmetric snap: %u edge/DPI/mode/origin/direction cases plus corner, bypass and monitor crossing passed.\n", cases);
 }
@@ -291,20 +291,21 @@ static void TestF5SplitResolutionBaseline() {
     const auto savedSettings = g_settings;
     const bool savedSuppress = g_suppressSettingsSave;
     const bool savedLatched = g_resolutionPlanLatched;
-    const bool savedVsrPlan = g_vsrResolutionPlan;
+    const bool savedVsrPlan = g_splitResolutionPlan;
     const auto savedCapture = g_capturePreset;
-    const VirtualMonitor savedMonitors[]{monitors[0], monitors[1]};
+    const VirtualMonitor savedMonitors[]{fixtureMonitors[0], fixtureMonitors[1]};
     g_suppressSettingsSave = true;
     unsigned cases = 0;
+    for (bool vsr : {false, true})
     for (const UINT dpi : {96u, 144u, 192u})
     for (const auto capture : {VideoPreset::R1280x720, VideoPreset::R1920x1080})
     for (const auto display : {VideoPreset::R1920x1080, VideoPreset::R2560x1440,
                                VideoPreset::R3840x2160}) {
-        monitors[0] = {{0, 0, 2560, 1440}, 96};
-        monitors[1] = {{2560, 0, 5120, 1440}, dpi};
+        fixtureMonitors[0] = {{0, 0, 2560, 1440}, 96};
+        fixtureMonitors[1] = {{2560, 0, 5120, 1440}, dpi};
         Reset(true, true);
-        g_settings.vsrEnabled = true;
-        g_settings.vsrCapturePreset = capture;
+        g_settings.vsrEnabled = vsr;
+        g_settings.capturePreset = capture;
         g_settings.videoPreset = display;
         LatchVideoResolutionPlan();
         const auto source = CurrentCapturePreset();
@@ -330,25 +331,40 @@ static void TestF5SplitResolutionBaseline() {
         ++cases;
     }
     // Matching-monitor fullscreen must also use capture's 100% baseline.
-    monitors[0] = {{0, 0, 1920, 1080}, 96};
-    g_settings.vsrCapturePreset = VideoPreset::R1920x1080;
+    fixtureMonitors[0] = {{0, 0, 1920, 1080}, 96};
+    g_settings.capturePreset = VideoPreset::R1920x1080;
     g_settings.videoPreset = VideoPreset::R1280x720;
     LatchVideoResolutionPlan();
     Require(RelativeScaleForMonitor(MonitorHandle(0), true) == kRelativeScaleUnit,
             "matching capture monitor has a full-size relative baseline");
-    monitors[0] = savedMonitors[0]; monitors[1] = savedMonitors[1];
+    const auto generation = g_outputConfigurationGeneration.load();
+    WndProc(testWindow, WM_RESTORE_ONE_TO_ONE, 0, 0);
+    Require(g_fullscreen && g_fullscreenSourceSize &&
+            g_outputConfigurationGeneration.load() > generation &&
+            g_settings.videoPreset == VideoPreset::R1280x720,
+            "F5 matching-monitor fullscreen restores source size without changing display preference");
+    const auto fullscreenGeneration = g_outputConfigurationGeneration.load();
+    WndProc(testWindow, WM_RESTORE_ONE_TO_ONE, 0, 0);
+    Require(g_fullscreenSourceSize && g_outputConfigurationGeneration.load() > fullscreenGeneration,
+            "F5 refreshes geometry even when the window is already fullscreen");
+    ToggleFullscreen(testWindow);
+    Require(!g_fullscreenSourceSize, "leaving fullscreen clears the temporary F5 override");
+    ToggleFullscreen(testWindow);
+    Require(!g_fullscreenSourceSize, "ordinary fullscreen returns to the selected display size");
+    ToggleFullscreen(testWindow);
+    fixtureMonitors[0] = savedMonitors[0]; fixtureMonitors[1] = savedMonitors[1];
     Reset();
     g_settings = savedSettings;
     g_resolutionPlanLatched = savedLatched;
-    g_vsrResolutionPlan = savedVsrPlan;
+    g_splitResolutionPlan = savedVsrPlan;
     g_capturePreset = savedCapture;
     g_suppressSettingsSave = savedSuppress;
     std::printf("PASS %u F5 capture/display/DPI cases with four monitor crossings each.\n", cases);
 }
 
 int main(int argc, char** argv) {
-    monitors[0]={{0,0,1920,1080},96};
-    monitors[1]={{1920,0,4480,1440},144};
+    fixtureMonitors[0]={{0,0,1920,1080},96};
+    fixtureMonitors[1]={{1920,0,4480,1440},144};
     TestSymmetricEdgeSnap();
     TestF5SplitResolutionBaseline();
     // Placement regressions run in the regular suite, not just review mode.
@@ -359,7 +375,7 @@ int main(int argc, char** argv) {
     for(auto preset : {VideoPreset::R1920x1080,VideoPreset::R2560x1440,VideoPreset::R3840x2160})
     for(bool decorated : {false,true})
     for(bool relative : {false,true}) {
-        monitors[1]={layout==0?RECT{1920,0,4480,1440}:
+        fixtureMonitors[1]={layout==0?RECT{1920,0,4480,1440}:
                      layout==1?RECT{-2560,0,0,1440}:
                      layout==2?RECT{0,-1440,2560,0}:RECT{0,1080,2560,2520},
                      mixedDpi?144u:96u};
@@ -370,7 +386,7 @@ int main(int argc, char** argv) {
         const auto chosen=SavedViewerMonitor();
         const auto client=InitialClientPixelsForMonitor(chosen);
         const auto outer=OuterSizeForClientPixels(client.cx,client.cy,
-            static_cast<DWORD>(simulatedStyle),0,monitors[target].dpi);
+            static_cast<DWORD>(simulatedStyle),0,fixtureMonitors[target].dpi);
         POINT origin{};
         Require(RestoredWindowOrigin(outer,origin),"explicit display restores origin");
         ApplyRect({origin.x,origin.y,origin.x+outer.cx,origin.y+outer.cy});
@@ -382,7 +398,7 @@ int main(int argc, char** argv) {
                 "startup selection preserves pixel-perfect or relative-size policy");
         ++placementCases;
     }
-    monitors[1]={{-2560,0,0,1440},144};
+    fixtureMonitors[1]={{-2560,0,0,1440},144};
     Reset();ApplyRect({-560,100,400,640});
     for(int i=0;i<20;++i) {Enter();Leave();Leave();}
     Require(simulatedWindowRect.left==-560 && simulatedWindowRect.right==400 &&
@@ -404,7 +420,7 @@ int main(int argc, char** argv) {
     Require(EqualRect(&beforeCancel,&simulatedWindowRect) && Generation()==1 &&
             g_outputTransition.Depth()==0,"cancel-restored geometry is not resized again at exit");
 
-    monitors[1]={{1920,0,4480,1440},144};
+    fixtureMonitors[1]={{1920,0,4480,1440},144};
     Reset(false,true);
     g_settings.preferredDisplayMonitor=L"interface:fake-0";
     ApplyRect({2100,100,3060,640});
@@ -439,7 +455,7 @@ int main(int argc, char** argv) {
                 "manual pending size is not overwritten by saved ratio");
         // Supply the OS-computed rectangle; the harness does not emulate its
         // linear scaling or non-client layout.
-        const LONG x=monitors[target].rect.left+100;
+        const LONG x=fixtureMonitors[target].rect.left+100;
         RECT suggested{x,100,x+width,100+width*9/16};
         WndProc(testWindow,WM_DPICHANGED,MAKELONG(dpi,dpi),reinterpret_cast<LPARAM>(&suggested));
         Require(simulatedWindowRect.right-simulatedWindowRect.left==width &&
@@ -450,7 +466,7 @@ int main(int argc, char** argv) {
         Require(simulatedWindowRect.right-simulatedWindowRect.left==width && Generation()==1 &&
                 g_outputTransition.Depth()==0 && !g_outputTransition.Pending(),
                 "manual exit retains size and flushes once");
-        const auto& monitor=monitors[target].rect;
+        const auto& monitor=fixtureMonitors[target].rect;
         Require(g_settings.relativeWindowScalePpm==
                     static_cast<int64_t>(width)*kRelativeScaleUnit/(monitor.right-monitor.left),
                 "manual exit saves new relative scale");
@@ -561,9 +577,11 @@ int main(int argc, char** argv) {
     g_leftVolumePercent = 100;
     g_rightVolumePercent = 100;
     for (const auto point : {POINT{20, 45}, POINT{20, 112}, POINT{202, 112}}) {
+        g_playbackMuted=true;
         const WPARAM wheelDown = MAKEWPARAM(0, static_cast<WORD>(-WHEEL_DELTA));
         WndProc(testWindow, WM_MOUSEWHEEL, wheelDown,
                 MAKELPARAM(point.x + 100, point.y + 100));
+        Require(!g_playbackMuted,"master/channel wheel adjustment clears manual mute");
     }
     Require(g_volumePercent == 95 && g_leftVolumePercent == 95 &&
                 g_rightVolumePercent == 95,
@@ -582,23 +600,37 @@ int main(int argc, char** argv) {
                 g_rightVolumePercent == 100,
             "double-click resets each modern audio control independently");
 
-    for (const auto point : {POINT{30, 65}, POINT{30, 130}, POINT{220, 130}, POINT{190, 150}}) {
+    g_playbackMuted=true;
+    const auto speaker=MAKELPARAM(140,170);
+    const auto halfDown=MAKEWPARAM(0,static_cast<WORD>(-WHEEL_DELTA/2));
+    WndProc(testWindow,WM_MOUSEWHEEL,halfDown,speaker);
+    Require(g_playbackMuted && g_volumePercent==100,"partial wheel motion does not unexpectedly unmute");
+    WndProc(testWindow,WM_MOUSEWHEEL,halfDown,speaker);
+    Require(!g_playbackMuted && g_volumePercent==95,"speaker wheel shares master adjustment and unmutes");
+    WndProc(testWindow,WM_MOUSEWHEEL,MAKEWPARAM(0,WHEEL_DELTA),speaker);
+    g_playbackMuted=true;
+    WndProc(testWindow,WM_MOUSEWHEEL,MAKEWPARAM(0,WHEEL_DELTA),MAKELPARAM(130,122));
+    Require(g_playbackMuted && g_volumePercent==100,"wheel over header does not change mute");
+    g_playbackMuted=false;
+    WndProc(testWindow,WM_MOUSEMOVE,0,MAKELPARAM(40,70));
+    Require(g_audioOsdHoverTarget==static_cast<int>(llcv::audio_osd::HitTarget::Mute),"speaker has independent hover state");
+    for (const auto point : {POINT{100, 65}, POINT{30, 130}, POINT{220, 130}, POINT{190, 150}}) {
         const int target = point.y == 65 ? 3 : point.x == 30 ? 1 : point.x == 220 ? 2 : 0;
         WndProc(testWindow, WM_MOUSEMOVE, 0, MAKELPARAM(point.x, point.y));
         Require(g_audioOsdHoverTarget == target && !g_audioOnlyDragPending,
                 "hover identifies controls without moving");
     }
-    WndProc(testWindow, WM_MOUSEMOVE, 0, MAKELPARAM(30, 65));
+    WndProc(testWindow, WM_MOUSEMOVE, 0, MAKELPARAM(100, 65));
     WndProc(testWindow, WM_MOUSELEAVE, 0, 0);
     Require(g_audioOsdHoverTarget == 0, "leaving client clears hover");
-    WndProc(testWindow, WM_MOUSEMOVE, 0, MAKELPARAM(30, 65));
+    WndProc(testWindow, WM_MOUSEMOVE, 0, MAKELPARAM(100, 65));
     WndProc(testWindow, WM_NCMOUSEMOVE, 0, 0);
     Require(g_audioOsdHoverTarget == 0, "resize edge clears hover");
 
     for (const bool borderless : {false, true}) {
         g_settings.borderlessWindow = borderless;
         simulatedStyle = ViewerWindowStyle(g_settings);
-        for (const auto point : {POINT{30, 22}, POINT{30, 65}, POINT{30, 130},
+        for (const auto point : {POINT{30, 22}, POINT{100, 65}, POINT{30, 130},
                                  POINT{220, 130}, POINT{190, 150}, POINT{30, 211}}) {
             const LPARAM at = MAKELPARAM(point.x, point.y);
             const LPARAM moved = MAKELPARAM(point.x + 40, point.y + 30);
@@ -637,7 +669,7 @@ int main(int argc, char** argv) {
     }
     Require(g_volumePercent == 100 && g_leftVolumePercent == 100 &&
             g_rightVolumePercent == 100, "window drag never changes volume");
-    for (const auto point : {POINT{30, 65}, POINT{30, 130}, POINT{220, 130}}) {
+    for (const auto point : {POINT{100, 65}, POINT{30, 130}, POINT{220, 130}}) {
         g_volumePercent = 150; g_leftVolumePercent = 85; g_rightVolumePercent = 75;
         const LPARAM at = MAKELPARAM(point.x, point.y);
         const int beforeMove = audioDragMoves;
@@ -657,9 +689,9 @@ int main(int argc, char** argv) {
     Require(!g_audioOnlyDragPending && !simulatedCapture, "video mode does not arm audio drag");
     g_settings.audioOnly = true;
 
-    const UINT originalDpi = monitors[0].dpi;
+    const UINT originalDpi = fixtureMonitors[0].dpi;
     for (const UINT dpi : {96u, 120u, 144u, 168u, 192u, 240u, 288u}) {
-        monitors[0].dpi = dpi;
+        fixtureMonitors[0].dpi = dpi;
         for (const bool borderless : {false, true}) {
             g_settings.borderlessWindow = borderless;
             simulatedStyle = ViewerWindowStyle(g_settings);
@@ -681,7 +713,7 @@ int main(int argc, char** argv) {
                     "resize cannot shrink audio controls below DPI minimum");
         }
     }
-    monitors[0].dpi = originalDpi;
+    fixtureMonitors[0].dpi = originalDpi;
 
     // Audio-only geometry must never borrow video sizing/fullscreen policies.
     for (bool relative : {false, true}) for (bool pixelPerfect : {false, true}) {
@@ -755,7 +787,7 @@ int main(int argc, char** argv) {
         Enter();
         Require(WndProc(testWindow, WM_MOVING, 0,
                         reinterpret_cast<LPARAM>(&moving)) == TRUE &&
-                    moving.left == monitors[0].rect.left &&
+                    moving.left == fixtureMonitors[0].rect.left &&
                     moving.right - moving.left == 640,
                 "audio-only retains window edge snap without video resizing");
         Leave();
@@ -820,13 +852,13 @@ int main(int argc, char** argv) {
     for(int relative=0;relative<2;++relative)
     for(int order=0;order<2;++order)
     for(int repeat=0;repeat<100;++repeat) {
-        monitors[1]={layout==0?RECT{1920,0,4480,1440}:
+        fixtureMonitors[1]={layout==0?RECT{1920,0,4480,1440}:
                      layout==1?RECT{-2560,0,0,1440}:RECT{0,-1440,2560,0},
                      mixedDpi?144u:96u};
         Reset(relative!=0,true);Enter();
-        cursorPoint={monitors[1].rect.left+100,monitors[1].rect.top+100};
-        if(order==0) {DpiTo(monitors[1].dpi,1);MoveTo(1);}
-        else {MoveTo(1);DpiTo(monitors[1].dpi,1);}
+        cursorPoint={fixtureMonitors[1].rect.left+100,fixtureMonitors[1].rect.top+100};
+        if(order==0) {DpiTo(fixtureMonitors[1].dpi,1);MoveTo(1);}
+        else {MoveTo(1);DpiTo(fixtureMonitors[1].dpi,1);}
         Leave();
         const auto stable=Generation();
         for(int idle=0;idle<20;++idle)
