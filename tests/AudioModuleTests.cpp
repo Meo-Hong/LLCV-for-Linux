@@ -90,11 +90,28 @@ int main() {
     ok &= Check(audio_osd::HitTest(1920, 1080, 1780, 120) ==
                     audio_osd::HitTarget::Right,
                 "right card must have a large hit region");
-    ok &= Check(audio_osd::HitTest(1920, 1080, 1600, 70) ==
+    ok &= Check(audio_osd::HitTest(1920, 1080, 1660, 70) ==
                     audio_osd::HitTarget::Master,
                 "master row must be independently selectable");
+    ok &= Check(audio_osd::HitTest(1920,1080,1600,70)==audio_osd::HitTarget::Mute,
+                "speaker button has its own hit target, not volume reset");
+    const auto muteButton=audio_osd::kMuteButton;
+    ok &= Check(muteButton.right-muteButton.left==muteButton.bottom-muteButton.top &&
+                audio_osd::HitTest(1920,1080,rect.left+muteButton.left-1,rect.top+48)==audio_osd::HitTarget::Master &&
+                audio_osd::HitTest(1920,1080,rect.left+muteButton.right,rect.top+48)==audio_osd::HitTarget::Master,
+                "OSD mute uses a square target and leaves adjacent padding to the master row");
 
     const auto defaultAudioOnly = audio_only_view::ContentRect(380, 230);
+    const auto indicator=audio_osd::MuteIndicatorRect(1920,1080);
+    ok &= Check(indicator.right==1904 && indicator.top==16 &&
+                indicator.right-indicator.left==36 && indicator.bottom-indicator.top==36,
+                "persistent mute indicator anchors to the top-right with a fixed margin");
+    for (const int width : {1,20,48,320,1920}) for (const int height : {1,24,48,180,1080}) {
+        const auto badge=audio_osd::MuteIndicatorRect(width,height);
+        ok &= Check(badge.left>=0 && badge.top>=0 && badge.right<=width && badge.bottom<=height &&
+                    badge.right-badge.left==badge.bottom-badge.top,
+                    "mute indicator remains square and inside small clients");
+    }
     ok &= Check(defaultAudioOnly.right - defaultAudioOnly.left == 380 &&
                     defaultAudioOnly.bottom - defaultAudioOnly.top == 230,
                 "default audio-only view fills the client area");
@@ -125,6 +142,8 @@ int main() {
             return audio_only_view::HitTest(380 * scale, 230 * scale,
                                              x * scale, y * scale);
         };
+        ok &= Check(hit(40,70)==audio_osd::HitTarget::Mute,
+                    "audio-only speaker button scales with painted bounds");
         ok &= Check(hit(13, 39) == audio_osd::HitTarget::Master &&
                         hit(366, 98) == audio_osd::HitTarget::Master &&
                         hit(13, 108) == audio_osd::HitTarget::Left &&

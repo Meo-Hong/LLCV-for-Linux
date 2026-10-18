@@ -10,7 +10,7 @@ enum class Action : size_t { Help, Settings, AudioOsd, PixelPerfect, Vsr, Fullsc
 #ifdef LLCV_RECORDING
     Recording,
 #endif
-    Count };
+    Mute, Count };
 inline constexpr size_t Count = static_cast<size_t>(Action::Count);
 inline constexpr unsigned Ctrl = 0x100, Alt = 0x200, Shift = 0x400;
 using Bindings = std::array<unsigned, Count>;
@@ -18,16 +18,19 @@ inline constexpr Bindings Defaults{VK_F1,VK_F2,VK_F3,VK_F5,VK_F6,VK_F11,VK_F12,V
 #ifdef LLCV_RECORDING
     ,VK_F9
 #endif
+    ,'M'
 };
 inline constexpr std::array<const wchar_t*, Count> Names{L"Help",L"Settings",L"AudioOsd",L"PixelPerfect",L"Vsr",L"Fullscreen",L"Screenshot",L"Diagnostics",L"Exit"
 #ifdef LLCV_RECORDING
     ,L"Recording"
 #endif
+    ,L"Mute"
 };
 inline constexpr std::array<const wchar_t*, Count> DefaultLabels{L"F1",L"F2",L"F3",L"F5",L"F6",L"F11",L"F12",L"Tab",L"Esc"
 #ifdef LLCV_RECORDING
     ,L"F9"
 #endif
+    ,L"M"
 };
 #ifdef LLCV_RECORDING
 // Preserve legacy custom bindings when the new action has no saved key yet.
@@ -35,11 +38,21 @@ inline void AddRecordingDefault(Bindings& bindings) {
     constexpr auto index=static_cast<size_t>(Action::Recording);
     for (unsigned key=VK_F9;key<=VK_F24;++key) {
         bool used=false;
-        for (size_t i=0;i<index;++i) if (bindings[i]==key) used=true;
+        for (size_t i=0;i<Count;++i) if (i!=index && bindings[i]==key) used=true;
         if (!used) { bindings[index]=key; return; }
     }
 }
 #endif
+inline void AddMuteDefault(Bindings& bindings) {
+    constexpr auto index=static_cast<size_t>(Action::Mute);
+    const auto available=[&](unsigned key) {
+        for (size_t i=0;i<Count;++i) if (i!=index && bindings[i]==key) return false;
+        return true;
+    };
+    if (available('M')) { bindings[index]='M'; return; }
+    for (unsigned key=VK_F1;key<=VK_F24;++key)
+        if (key!=VK_F4 && available(key)) { bindings[index]=key; return; }
+}
 inline bool Modifier(UINT key) {
     return key==VK_CONTROL || key==VK_LCONTROL || key==VK_RCONTROL || key==VK_MENU ||
         key==VK_LMENU || key==VK_RMENU || key==VK_SHIFT || key==VK_LSHIFT || key==VK_RSHIFT;

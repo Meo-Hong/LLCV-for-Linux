@@ -394,7 +394,8 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         state->guideKeys[i] = CreateWindowExW(0, L"BUTTON", shortcut.key,
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
             0, 0, 148, 29, hwnd, reinterpret_cast<HMENU>(IDC_SETTINGS_SHORTCUT_FIRST+i), instance, nullptr);
-        const std::wstring description=initial.english ? shortcut.english : shortcut.korean;
+        const std::wstring description=std::wstring(initial.english ? shortcut.english : shortcut.korean)+
+            (shortcut.videoOnly ? L" *" : L"");
         state->guideDescriptions[i] = CreateWindowExW(0, L"STATIC",
             description.c_str(),
             WS_CHILD | WS_VISIBLE | SS_LEFT,

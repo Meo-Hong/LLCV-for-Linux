@@ -5,7 +5,7 @@
 A low-latency Windows viewer for video and audio from HDMI capture devices.
 Use it to play console games without OBS, or listen in audio-only mode.
 
-**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.1.2.md) · [한국어](README.ko.md)
+**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.1.3.md) · [한국어](README.ko.md)
 
 <br>
 
@@ -13,15 +13,15 @@ Use it to play console games without OBS, or listen in audio-only mode.
 | --- | --- |
 | [![Video settings](docs/images/settings-video-en.png)](docs/images/settings-video-en.png) | [![Audio settings](docs/images/settings-audio-en.png)](docs/images/settings-audio-en.png) |
 
-<sub>Settings examples rendered from the 2.1.1 UI code. Click an image to view it at full resolution.</sub>
+<sub>Settings examples rendered from the 2.1.3 UI code. Click an image to view it at full resolution.</sub>
 
 <br>
 
-## What's new in 2.1.2
+## What's new in 2.1.3
 
-Fixed settings-close hangs during encoder checks and audio loss at the start of recordings.
-Also corrected MJPEG color metadata, free-space updates, shortcut conflicts in settings and window-position restoration after minimized exit.
-[Recording guide](docs/RECORDING.md) · [Full release notes](docs/release-notes-v2.1.2.md)
+Mute playback with the speaker button or **M**, without changing your volume levels or recorded audio.
+The shortcut is customizable under **Guide & logs**.
+[Audio guide](docs/AUDIO.md) · [Full release notes](docs/release-notes-v2.1.3.md)
 
 <br>
 
@@ -54,7 +54,7 @@ These are the default keys; change them under **Guide & logs**.
 - NV12/YUY2/MJPEG SDR/stereo MP4 recording — codec, quality, volume, pause and splitting
 - Source-resolution PNG screenshots with optional clipboard copy
 - Sleep prevention during playback, with display sleep allowed in audio-only mode
-- Dark/light themes, fullscreen, window size locking, volume controls, Korean/English UI
+- Dark/light themes, fullscreen, window size locking, volume controls/playback mute, Korean/English UI
 
 HDR10 needs compatible hardware and an HDR display; ASIO needs its driver.
 LPCM 5.1 requires multichannel capture and Shared output.

@@ -43,7 +43,9 @@ build\Release\LowLatencyCaptureViewer.exe
 The release configuration uses the static MSVC runtime, so the packaged
 executable does not require a separate Visual C++ Redistributable installation.
 
-The 2.1.2 suite adds isolated encoder-probe cancellation/failure checks, recording
+The 2.1.3 suite adds playback mute/recorded-audio isolation, shortcut migration/reset
+and Korean/English high-DPI UI regressions.
+Existing checks cover isolated encoder-probe cancellation/failure, recording
 free-space updates, connected MJPEG color metadata, initial audio-overlap trimming,
 settings shortcut routing and minimized-window placement regressions.
 The suite also covers MJPEG recording, recording volume, unlisted 30 fps requests,
@@ -62,13 +64,13 @@ report that as complete coverage. These programs are never included in packages.
 
 <br>
 
-A playback-only developer build can use `-DLLCV_RECORDING=OFF` without FFmpeg; it is not the 2.1.2 release package.
+A playback-only developer build can use `-DLLCV_RECORDING=OFF` without FFmpeg; it is not the 2.1.3 release package.
 The mux runtime and `ffmpeg-licenses` folder must remain beside the executable.
 
 ## Installer and portable ZIP
 
 After the Release build, run these commands from the repository root. These
-examples package v2.1.2 using the `build\Release` output above; the build-directory
+examples package v2.1.3 using the `build\Release` output above; the build-directory
 override is required because the release scripts normally use a versioned
 build directory.
 
@@ -77,11 +79,11 @@ chcp.com 65001 > $null
 & "C:\Program Files\Inno Setup 7\ISCC.exe" `
   "--define=BuildDir=..\build\Release" ".\installer\LowLatencyCaptureViewer.iss"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-v1.ps1 `
-  -Version 2.1.2 -BuildDir ..\build\Release -OutputDir outputs\v2.1.2
+  -Version 2.1.3 -BuildDir ..\build\Release -OutputDir outputs\v2.1.3
 ```
 
-The outputs are `outputs\v2.1.2\LowLatencyCaptureViewer_v2.1.2_Setup.exe`
-and `outputs\v2.1.2\LowLatencyCaptureViewer_v2.1.2_x64.zip`. When preparing
+The outputs are `outputs\v2.1.3\LowLatencyCaptureViewer_v2.1.3_Setup.exe`
+and `outputs\v2.1.3\LowLatencyCaptureViewer_v2.1.3_x64.zip`. When preparing
 another version, update the versioned release files first; changing a ZIP name
 does not update the executable. See the [release checklist](RELEASING.md).
 

@@ -5,7 +5,7 @@
 HDMI 캡처보드로 들어오는 영상과 소리를 재생하는 Windows용 저지연 뷰어입니다.
 OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리만 들을 수 있습니다.
 
-**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.1.2.md) · [English](README.md)
+**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.1.3.md) · [English](README.md)
 
 <br>
 
@@ -13,15 +13,15 @@ OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리�
 | --- | --- |
 | [![영상 설정](docs/images/settings-video.png)](docs/images/settings-video.png) | [![오디오 설정](docs/images/settings-audio.png)](docs/images/settings-audio.png) |
 
-<sub>2.1.1 UI 코드로 렌더링한 설정 예시입니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
+<sub>2.1.3 UI 코드로 렌더링한 설정 예시입니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
 
 <br>
 
-## 2.1.2 업데이트
+## 2.1.3 업데이트
 
-녹화 인코더 확인 중 설정 창을 닫을 때의 멈춤과 녹화 시작 부분의 오디오 누락을 수정했습니다.
-MJPEG 색 정보, 남은 저장 공간 표시, 설정 창의 단축키 충돌과 최소화 후 창 위치 복원도 보완했습니다.
-[녹화 사용 방법](docs/RECORDING.ko.md) · [전체 변경 내역](docs/release-notes-v2.1.2.md)
+스피커 버튼이나 **M** 키로 재생 소리만 끄고 켤 수 있습니다. 기존 음량과 녹화 소리는 유지됩니다.
+단축키는 **도움말·진단**에서 변경할 수 있습니다.
+[오디오 사용 방법](docs/AUDIO.ko.md) · [전체 변경 내역](docs/release-notes-v2.1.3.md)
 
 <br>
 
@@ -54,7 +54,7 @@ Windows 10/11 x64와 캡처보드 드라이버가 필요합니다.
 - NV12/YUY2/MJPEG SDR·스테레오 MP4 녹화 — 코덱·품질·음량, 일시정지, 자동 분할
 - 입력 해상도 PNG 스크린샷과 클립보드 복사
 - 재생 중 자동 절전 방지 — 오디오 전용 모드에서는 화면 꺼짐 허용
-- 다크·라이트 테마, 전체화면, 창 크기 고정, 음량 조절, 한국어·영어
+- 다크·라이트 테마, 전체화면, 창 크기 고정, 음량 조절·재생 음소거, 한국어·영어
 
 HDR10은 호환 장치와 HDR 디스플레이가, ASIO는 전용 드라이버가 필요합니다.
 LPCM 5.1은 다채널 캡처·Shared 출력 전용입니다.

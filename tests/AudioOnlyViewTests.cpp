@@ -46,6 +46,16 @@ int wmain(int argc, wchar_t** argv) {
         const auto content = ContentRect(minimum.width, minimum.height);
         const int height = content.bottom - content.top;
         const int width = content.right - content.left;
+        const RECT muteBounds{
+            MulDiv(kMute.left,width,kBaseClientWidth), MulDiv(kMute.top,height,kBaseClientHeight),
+            MulDiv(kMute.right,width,kBaseClientWidth), MulDiv(kMute.bottom,height,kBaseClientHeight)};
+        const int buttonCenterY=(muteBounds.top+muteBounds.bottom)/2;
+        Check(abs((muteBounds.right-muteBounds.left)-(muteBounds.bottom-muteBounds.top))<=1 &&
+              HitTest(width,height,muteBounds.left,buttonCenterY)==llcv::audio_osd::HitTarget::Mute &&
+              HitTest(width,height,muteBounds.right-1,buttonCenterY)==llcv::audio_osd::HitTarget::Mute &&
+              HitTest(width,height,muteBounds.left-1,buttonCenterY)==llcv::audio_osd::HitTarget::Master &&
+              HitTest(width,height,muteBounds.right,buttonCenterY)==llcv::audio_osd::HitTarget::Master,
+              "fractional-DPI mute geometry and input boundaries stay aligned");
         const auto sizes = TextSizesForContent(height);
         Check(sizes.body >= MulDiv(14, dpi, 96) - 1 &&
               sizes.secondary >= MulDiv(12, dpi, 96) - 1,
@@ -56,7 +66,8 @@ int wmain(int argc, wchar_t** argv) {
             desc.lfHeight = -fontHeight;
             desc.lfWeight = weight;
             desc.lfQuality = CLEARTYPE_QUALITY;
-            wcscpy_s(desc.lfFaceName, llcv::settings_ui::SettingsFontFamily(weight,false));
+            const bool english = text[0] < 128;
+            wcscpy_s(desc.lfFaceName, llcv::settings_ui::SettingsFontFamily(weight,english));
             HFONT font = CreateFontIndirectW(&desc);
             const auto previous = SelectObject(dc, font);
             SIZE extent{};
@@ -75,8 +86,10 @@ int wmain(int argc, wchar_t** argv) {
         };
         for (const auto text : {L"Audio", L"오디오"})
             fits(text, sizes.body, FW_MEDIUM, 136, 22);
-        for (const auto text : {L"Master volume", L"마스터 음량"})
-            fits(text, sizes.body, FW_MEDIUM, 190, 23);
+        for (const auto text : {L"Master volume", L"마스터 음량", L"Muted", L"음소거"})
+            fits(text, sizes.body, FW_MEDIUM, 144, 21);
+        for (const auto text : {L"Up to 100%", L"Up to 200%", L"최대 100%", L"최대 200%", L"Muted", L"음소거"})
+            fits(text, sizes.secondary, FW_NORMAL, 144, 19);
         for (const auto text : {L"Output level", L"출력 레벨"})
             fits(text, sizes.secondary, FW_NORMAL, 70, 18);
         fits(L"-96.0 dBFS", sizes.secondary, FW_NORMAL, 80, 18);
@@ -101,11 +114,11 @@ int wmain(int argc, wchar_t** argv) {
     Check(GetPixel(dc, 0, 115) == palette.kEdge &&
           GetPixel(dc, 379, 115) == palette.kEdge, "thin outer frame");
     Check(GetPixel(dc, 100, 38) == palette.kCardEdge &&
-          GetPixel(dc, 100, 107) == palette.kCardEdge, "subtle card outlines");
+          GetPixel(dc, 100, 108) == palette.kCardEdge, "subtle card outlines");
     Check(GetPixel(dc, 190, 94) == palette.kControl, "master tile");
     Check(GetPixel(dc, 30, 153) == palette.kCard, "channel tile");
-    Check(GetPixel(dc, 30, 184) == palette.kAccent, "real level fills meter");
-    Check(GetPixel(dc, 170, 184) == palette.kEdge, "meter unfilled remainder");
+    Check(GetPixel(dc, 30, 181) == palette.kAccent, "real level fills meter");
+    Check(GetPixel(dc, 170, 181) == palette.kEdge, "meter unfilled remainder");
     Check(GetCurrentObject(dc, OBJ_FONT) == originalFont &&
           GetCurrentObject(dc, OBJ_BRUSH) == originalBrush &&
           GetBkMode(dc) == originalBk, "paint restores caller GDI state");
@@ -116,16 +129,31 @@ int wmain(int argc, wchar_t** argv) {
                 if (GetPixel(dc, x, y) == color) return true;
         return false;
     };
-    // Below the centered master caption; its antialiased glyphs can contain
-    // the secondary gray even when the capacity hint is absent.
-    const RECT hintArea{26, 78, 216, 89};
+    const auto inkBottom = [&](RECT area, COLORREF background) {
+        int bottom = -1;
+        for (int py = area.top; py < area.bottom; ++py)
+            for (int px = area.left; px < area.right; ++px)
+                if (GetPixel(dc, px, py) != background) bottom = py;
+        return bottom;
+    };
+    const auto inkCenter = [&](RECT area, COLORREF background) {
+        int first=area.bottom, last=-1;
+        for (int py=area.top;py<area.bottom;++py)
+            for (int px=area.left;px<area.right;++px)
+                if (GetPixel(dc,px,py)!=background) {
+                    if (py<first) first=py;
+                    last=py;
+                }
+        return last<0 ? -1000.0 : (first+last)*0.5;
+    };
+    const RECT hintArea{72, 71, 216, 90};
     const RECT masterNumber{218, 48, 339, 90};
     for (const bool english : {false, true}) {
         state.english = english;
         state.allowBoost = false;
         state.masterPercent = 100;
         Paint(dc, {0, 0, 380, 230}, state);
-        Check(!hasColor(hintArea, palette.kSecondary), "boost-off hides capacity hint");
+        Check(inkBottom(hintArea, palette.kControl) >= 0, "boost-off shows 100 percent capacity");
         state.allowBoost = true;
         Paint(dc, {0, 0, 380, 230}, state);
         Check(hasColor(hintArea, palette.kSecondary), "boost-on shows localized capacity hint");
@@ -141,14 +169,71 @@ int wmain(int argc, wchar_t** argv) {
         Check(!hasColor(masterNumber, RGB(226, 176, 117)), "reset clears boost highlight");
         state.allowBoost = false;
         Paint(dc, {0, 0, 380, 230}, state);
-        Check(!hasColor(hintArea, palette.kSecondary), "disabling boost clears old hint");
+        Check(inkBottom(hintArea, palette.kControl) >= 0, "disabling boost retains the aligned subtitle row");
     }
 
+    Check(kMute.right-kMute.left == kMute.bottom-kMute.top &&
+          kMute.left-kMaster.left == kCardPadding &&
+          kMute.top+kMute.bottom == kMaster.top+kMaster.bottom,
+          "square speaker button is centered with the same card padding");
+    Check(kLeft.top-kMaster.bottom == kRight.left-kLeft.right &&
+          kLeft.top==kRight.top && kLeft.bottom==kRight.bottom &&
+          kLeft.right-kLeft.left==kRight.right-kRight.left,
+          "channel cards share dimensions and eight-unit gutters");
+    for (const int scale : {1,2}) for (const bool english : {false,true})
+        for (const bool light : {false,true}) {
+            state = State{};
+            state.english=english; state.lightTheme=light;
+            state.allowBoost=true; state.masterPercent=150;
+            const auto theme=llcv::ui::PaletteForTheme(light);
+            Paint(dc,{0,0,380*scale,230*scale},state);
+            const auto scaled = [&](int l,int t,int r,int b) {
+                return RECT{l*scale,t*scale,r*scale,b*scale};
+            };
+            const int numberBottom=inkBottom(scaled(270,48,340,90),theme.kControl);
+            const int unitBottom=inkBottom(scaled(344,48,356,90),theme.kControl);
+            Check(numberBottom>=0 && unitBottom>=0 && abs(numberBottom-unitBottom)<=scale,
+                  "master value and percent sign have the same rendered baseline");
+            const int channelBottom=inkBottom(scaled(90,118,158,150),theme.kCard);
+            const int channelUnitBottom=inkBottom(scaled(162,118,174,150),theme.kCard);
+            Check(channelBottom>=0 && channelUnitBottom>=0 &&
+                  abs(channelBottom-channelUnitBottom)<=scale,
+                  "channel values and percent signs share a rendered baseline");
+            const double numberCenter=inkCenter(scaled(90,118,158,150),theme.kCard);
+            const double leftCenter=inkCenter(scaled(24,118,52,150),theme.kCard);
+            const double rightCenter=inkCenter(scaled(206,118,234,150),theme.kCard);
+            Check(numberCenter>=0 && leftCenter>=0 && rightCenter>=0 &&
+                  abs(numberCenter-leftCenter)<=1.5*scale && abs(numberCenter-rightCenter)<=1.5*scale,
+                  "L/R labels align to the vertical center of the large channel numbers");
+            std::vector<COLORREF> titlePixels;
+            const RECT title=scaled(72,48,216,69);
+            for(int py=title.top;py<title.bottom;++py) for(int px=title.left;px<title.right;++px)
+                titlePixels.push_back(GetPixel(dc,px,py));
+            state.muted=true;
+            Paint(dc,{0,0,380*scale,230*scale},state);
+            size_t pixel=0;
+            bool stable=true;
+            for(int py=title.top;py<title.bottom;++py) for(int px=title.left;px<title.right;++px)
+                stable &= titlePixels[pixel++]==GetPixel(dc,px,py);
+            Check(stable,"mute changes the subtitle, not the master caption or its position");
+            const int cx=(kMute.left+kMute.right)*scale/2, cy=(kMute.top+kMute.bottom)*scale/2;
+            Check(HitTest(380*scale,230*scale,cx,cy)==llcv::audio_osd::HitTarget::Mute &&
+                  HitTest(380*scale,230*scale,(kMute.left-1)*scale,cy)==llcv::audio_osd::HitTarget::Master &&
+                  HitTest(380*scale,230*scale,kMute.right*scale,cy)==llcv::audio_osd::HitTarget::Master,
+                  "speaker hit target follows the painted button without taking its surrounding padding");
+        }
+    state=State{};
+    state.leftPeakDb=-9.4; state.rightPeakDb=-11.1;
+    state.hoveredTarget=static_cast<int>(llcv::audio_osd::HitTarget::Mute);
+    Paint(dc,{0,0,380,230},state);
+    Check(GetPixel(dc,42,51)==palette.kHoverEdge &&
+          GetPixel(dc,100,38)==palette.kCardEdge,
+          "speaker hover highlights the button without highlighting its parent card");
     for (int target : {1, 2, 3, 0}) {
         state.hoveredTarget = target;
         Paint(dc, {0, 0, 380, 230}, state);
-        Check(GetPixel(dc, 100, 107) == (target == 1 ? palette.kHoverEdge : palette.kCardEdge) &&
-              GetPixel(dc, 250, 107) == (target == 2 ? palette.kHoverEdge : palette.kCardEdge) &&
+        Check(GetPixel(dc, 100, 108) == (target == 1 ? palette.kHoverEdge : palette.kCardEdge) &&
+              GetPixel(dc, 250, 108) == (target == 2 ? palette.kHoverEdge : palette.kCardEdge) &&
               GetPixel(dc, 100, 38) == (target == 3 ? palette.kHoverEdge : palette.kCardEdge),
               "hover outlines follow only the active card");
         Check(GetPixel(dc, 30, 153) == (target == 1 ? palette.kHover : palette.kCard),
@@ -163,10 +248,10 @@ int wmain(int argc, wchar_t** argv) {
     state.rightPeakDb = -96;
     Paint(dc, {0, 0, 380, 230}, state);
     Check(GetPixel(dc, 30, 153) == palette.kCard, "unhovered channel");
-    Check(GetPixel(dc, 30, 184) == palette.kEdge, "invalid level paints silent track");
+    Check(GetPixel(dc, 30, 181) == palette.kEdge, "invalid level paints silent track");
     bool clipVisible = false;
-    for (int y = 209; y < 213; ++y)
-        for (int x = 14; x < 18; ++x)
+    for (int y = 210; y < 214; ++y)
+        for (int x = 12; x < 16; ++x)
             clipVisible |= GetPixel(dc, x, y) == RGB(237, 98, 84);
     Check(clipVisible, "clipping warning");
     for (bool light : {false,true}) for (bool highContrast : {false,true}) {
@@ -179,7 +264,7 @@ int wmain(int argc, wchar_t** argv) {
         Paint(dc, {0,0,380,230}, state);
         Check(GetPixel(dc,3,3) == theme.kBackground && GetPixel(dc,30,153) == theme.kCard,
               "dark/light/high-contrast surfaces share app palette");
-        Check(GetPixel(dc,30,184) == theme.kAccent && hasColor(masterNumber,theme.kWarning),
+        Check(GetPixel(dc,30,181) == theme.kAccent && hasColor(masterNumber,theme.kWarning),
               "themed meter and accessible boost indication");
     }
     // Warm caches before checking that fonts/brushes are released every frame.
@@ -206,10 +291,12 @@ int wmain(int argc, wchar_t** argv) {
         state.leftPeakDb = -9.4; state.rightPeakDb = -11.1;
         Paint(dc, {10, 10, 390, 240}, state);
         state.english = true;
+        state.muted = true;
         state.masterPercent = 200;
         state.outputLabel = L"WASAPI Exclusive";
         Paint(dc, {410, 10, 790, 240}, state);
         state.english = false;
+        state.muted = false;
         state.masterPercent = 150;
         state.outputLabel = L"WASAPI Shared";
         Paint(dc, {20, 270, 780, 730}, state);

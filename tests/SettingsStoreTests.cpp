@@ -593,6 +593,7 @@ int main(int argc, char** argv) {
         Check(settings.shortcuts==llcv::shortcuts::Defaults,"legacy profiles keep default shortcuts");
         settings.shortcuts[0]=llcv::shortcuts::Ctrl|'H';
         settings.shortcuts[4]=llcv::shortcuts::Alt|llcv::shortcuts::Shift|'V';
+        settings.shortcuts[static_cast<size_t>(llcv::shortcuts::Action::Mute)]=llcv::shortcuts::Ctrl|'M';
         settings.shortcuts[static_cast<size_t>(llcv::shortcuts::Action::Exit)]=llcv::shortcuts::Ctrl|'Q';
         const auto custom=settings.shortcuts;
         if (CheckSaved(path,settings,"custom shortcuts saved"))
@@ -605,6 +606,15 @@ int main(int argc, char** argv) {
         settings.shortcuts=llcv::shortcuts::Defaults;
         CheckSaved(path,settings,"restore default shortcuts");
         Check(llcv::settings::LoadFromIni(path).settings.shortcuts==llcv::shortcuts::Defaults,"default reset persists");
+        WritePrivateProfileStringW(L"Shortcuts",L"Mute",nullptr,path.c_str());
+        WritePrivateProfileStringW(L"Shortcuts",L"Help",L"77",path.c_str());
+        const auto migrated=llcv::settings::LoadFromIni(path).settings.shortcuts;
+        Check(migrated[0]=='M' && llcv::shortcuts::Valid(migrated) &&
+              migrated[static_cast<size_t>(llcv::shortcuts::Action::Mute)]!='M',
+              "adding mute preserves legacy M binding and chooses a free key");
+        for (size_t i=1;i<static_cast<size_t>(llcv::shortcuts::Action::Mute);++i)
+            Check(migrated[i]==llcv::shortcuts::Defaults[i],"mute migration preserves every other action");
+        CheckSaved(path,settings,"restore defaults after mute migration");
     }
     TestPresentationModes(path);
     {

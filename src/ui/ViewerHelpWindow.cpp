@@ -89,7 +89,8 @@ bool Window::CreateContent() {
     add(VideoOnlyHint(false),VideoOnlyHint(true),Small,Card,true);
     add(L"마우스 조작",L"Mouse controls",Strong,Card);
     add(L"휠",L"Scroll wheel",Strong,Card);
-    add(L"음량 5%씩 조절\nL/R 카드 위에서는 개별 조절",L"Adjust volume in 5% steps.\nOver L/R cards: adjust each channel.",Normal,Card,true);
+    add(L"음량 5%씩 조절\nL/R 카드 위에서는 개별 조절\n스피커 버튼: 재생만 음소거 (녹화 유지)",
+        L"Adjust volume in 5% steps.\nOver L/R cards: adjust each channel.\nSpeaker button: mute playback, not recording.",Normal,Card,true);
     add(L"Shift + 드래그",L"Shift + drag",Strong,Card);
     add(L"스냅 없이 창 이동",L"Move the window without snapping.",Normal,Card,true);
     add(L"스크린샷",L"Screenshots",Strong,Card);

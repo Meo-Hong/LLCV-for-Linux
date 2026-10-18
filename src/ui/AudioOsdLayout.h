@@ -13,9 +13,12 @@ struct Rect {
     int bottom = 0;
 };
 
-enum class HitTarget { Outside, Left, Right, Master, Panel };
+enum class HitTarget { Outside, Left, Right, Master, Panel, Mute };
+inline constexpr Rect kMuteButton{24, 34, 52, 62};
+inline constexpr int kMuteIndicatorSize = 36;
 
 Rect RectForClient(int clientWidth) noexcept;
+Rect MuteIndicatorRect(int clientWidth, int clientHeight) noexcept;
 HitTarget HitTest(int clientWidth, int clientHeight, int clientX,
                   int clientY) noexcept;
 
