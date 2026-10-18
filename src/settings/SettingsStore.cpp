@@ -153,6 +153,8 @@ LoadResult LoadFromIni(const std::wstring& path) {
     if (ReadString(path,L"Shortcuts",L"Recording",L"missing")==L"missing")
         shortcuts::AddRecordingDefault(settings.shortcuts);
 #endif
+    if (ReadString(path,L"Shortcuts",L"Mute",L"missing")==L"missing")
+        shortcuts::AddMuteDefault(settings.shortcuts);
     if (!shortcuts::Valid(settings.shortcuts)) settings.shortcuts=shortcuts::Defaults;
     settings.settingsLightTheme = _wcsicmp(
         ReadString(path, L"General", L"SettingsTheme", L"Dark").c_str(), L"Light") == 0;

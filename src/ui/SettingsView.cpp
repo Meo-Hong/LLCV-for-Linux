@@ -23,9 +23,9 @@ void SetSettingsText(HWND control, const wchar_t* text) {
 void RefreshShortcutCaptions(SettingsControls* state) {
     for (size_t i=0;i<state->guideKeys.size();++i)
         SetSettingsText(state->guideKeys[i],viewer_help::KeyLabel(i,state->shortcutBindings).c_str());
-    const auto hint=shortcuts::Expand(viewer_help::VideoOnlyHint(state->english),state->shortcutBindings)+
-        (state->english ? L"\nClick a key to change" : L"\n키 버튼을 눌러 변경");
-    SetSettingsText(state->guideVideoHint,hint.c_str());
+    SetSettingsText(state->guideVideoHint,state->english
+        ? L"Click a key to change\n* Video mode only"
+        : L"키 버튼을 눌러 변경\n* 영상 모드 전용");
     for (const auto& [control,source]:state->shortcutCaptionTemplates)
         SetSettingsText(control,shortcuts::Expand(source.c_str(),state->shortcutBindings).c_str());
     if (!state->vsrGpuUnavailable)
@@ -33,7 +33,7 @@ void RefreshShortcutCaptions(SettingsControls* state) {
             ? L"SDR / HDR10 · Toggle with F6" : L"SDR / HDR10 · F6으로 전환",state->shortcutBindings).c_str());
     if (!state->uiFonts.empty()) LayoutSettingsControls(state,state->layoutDpi);
 }
-ShortcutLayout MeasureShortcutLayout(const SettingsControls* state,UINT dpi) {
+ShortcutLayout MeasureShortcutLayout(const SettingsControls* state,UINT dpi,int rowWidth) {
     ShortcutLayout result;
     dpi=dpi ? dpi : USER_DEFAULT_SCREEN_DPI;
     HDC dc=GetDC(nullptr);
@@ -50,6 +50,18 @@ ShortcutLayout MeasureShortcutLayout(const SettingsControls* state,UINT dpi) {
     RECT measured{0,0,SettingsPixels(336,dpi),0};
     DrawTextW(dc,hint,-1,&measured,DT_CALCRECT|DT_WORDBREAK|DT_NOPREFIX);
     result.hintHeight=std::max(36,static_cast<int>((measured.bottom*96+dpi-1)/dpi));
+    // Measure the actual description font after the key column has grown.
+    // Round up at fractional DPI; a fixed row height can clip the second line.
+    const int descriptionWidth=SettingsPixels(std::max(1,rowWidth-result.keyWidth-12),dpi);
+    for(size_t i=0;i<state->guideDescriptions.size();++i) {
+        const HWND control=state->guideDescriptions[i];
+        if(!control)continue;
+        SelectObject(dc,reinterpret_cast<HFONT>(SendMessageW(control,WM_GETFONT,0,0)));
+        wchar_t caption[1024]{};GetWindowTextW(control,caption,ARRAYSIZE(caption));
+        RECT bounds{0,0,descriptionWidth,0};
+        DrawTextW(dc,caption,-1,&bounds,DT_CALCRECT|DT_WORDBREAK|DT_NOPREFIX);
+        result.descriptionHeights[i]=static_cast<int>((bounds.bottom*96+dpi-1)/dpi);
+    }
     SelectObject(dc,old); ReleaseDC(nullptr,dc);
     return result;
 }
@@ -493,13 +505,19 @@ void LayoutSettingsControls(SettingsControls* state, UINT dpi) {
     place(state->guideShortcutsTitle, 204, 132, 206, 20);
     place(state->shortcutResetButton, 432, 128, 108, 28);
     const auto shortcutLayout=MeasureShortcutLayout(state,dpi);
-    const int shortcutStep=state->guideKeys.size()>9 ? 35 : 36;
+    const int shortcutStep=state->guideKeys.size()>10 ? 32 : state->guideKeys.size()>9 ? 35 : 36;
+    constexpr int shortcutKeyHeight=29;
+    int shortcutY=168;
     for (size_t i = 0; i < state->guideKeys.size(); ++i) {
-        const int y = 168 + static_cast<int>(i) * shortcutStep;
-        place(state->guideKeys[i], 204, y, shortcutLayout.keyWidth, 29);
-        place(state->guideDescriptions[i], 216+shortcutLayout.keyWidth, y-3, 324-shortcutLayout.keyWidth, shortcutStep-1);
+        const int height=std::max(shortcutStep-1,shortcutLayout.descriptionHeights[i]);
+        place(state->guideKeys[i], 204, shortcutY, shortcutLayout.keyWidth, shortcutKeyHeight);
+        place(state->guideDescriptions[i], 216+shortcutLayout.keyWidth, shortcutY-3, 324-shortcutLayout.keyWidth, height);
+        shortcutY+=std::max(shortcutStep,height+1);
     }
-    const int hintY=168+static_cast<int>(state->guideKeys.size()-1)*shortcutStep+45;
+    // Use the existing gap before the hint for small wrapped-row growth,
+    // keeping the card's bottom padding clear of the fixed dialog footer.
+    const int normalHintY=168+static_cast<int>(state->guideKeys.size()-1)*shortcutStep+shortcutKeyHeight+16;
+    const int hintY=std::max(normalHintY,shortcutY-shortcutStep+shortcutKeyHeight+8);
     place(state->guideVideoHint, 204, hintY, 336, shortcutLayout.hintHeight);
     place(state->guideDiagnosticsTitle, 600, 132, 376, 20);
     place(state->guideDiagnosticsText, 600, 160, 376, 32);

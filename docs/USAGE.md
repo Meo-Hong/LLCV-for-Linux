@@ -16,10 +16,10 @@ Get one of the files from the [latest release](https://github.com/seria-aa/LowLa
   shortcut is created automatically; the desktop shortcut is optional.
 - **x64.zip — portable:** extract it, then run `LowLatencyCaptureViewer.exe`.
 
-**Updating to 2.1.2:** existing installation paths and settings are retained.
-Improves encoder checks, recording-start audio and live free-space updates, and fixes
-MJPEG color metadata handling, settings shortcut conflicts and position saving when minimized.
-[Recording guide](RECORDING.md) · [2.1.2 release notes](release-notes-v2.1.2.md)
+**Updating to 2.1.3:** existing installation paths and settings are retained.
+Mute playback with the speaker button or customizable **M** shortcut without changing
+your volume levels or recorded audio.
+[Audio guide](AUDIO.md) · [2.1.3 release notes](release-notes-v2.1.3.md)
 **40 fps capture**, added in [2.0.4](release-notes-v2.0.4.md),
 remains off by default; enable it under **Video** only when needed.
 Sleep prevention and earlier settings improvements are covered in the
@@ -52,7 +52,7 @@ automatically,” no separate selection is needed.
 
 ## Finding your settings
 
-*The following settings examples are rendered directly from the 2.1.1 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
+*The following settings examples are rendered directly from the 2.1.3 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
 
 | <a id="video-settings"></a>Video settings | <a id="audio-settings"></a>Audio settings |
 | --- | --- |
@@ -209,15 +209,17 @@ If you change one, use your assigned key instead.
 
 ### Changing shortcuts
 
+Playback mute was added in 2.1.3. If an existing profile already assigns M to another action, mute receives an unused function key.
+
 1. Open **Settings → Guide & logs**, then click the key button beside an action.
 2. Press a key, optionally with **Ctrl**, **Alt**, or **Shift**. Click the same
    button again to cancel key entry.
 3. Choose **Start** to apply the changes. **Cancel** discards unapplied changes.
 
-All ten shortcuts can be changed, including **Leave fullscreen / Exit** (Esc).
+All eleven shortcuts can be changed, including **Leave fullscreen / Exit** (Esc).
 None can be left empty. Duplicate bindings, modifier-only keys, Windows-key
 combinations, and some reserved combinations such as Alt+F4 cannot be assigned.
-**Reset defaults** restores all ten; choose **Start** to apply the reset.
+**Reset defaults** restores all eleven; choose **Start** to apply the reset.
 
 Help, settings, and OSD labels show the assigned keys, and longer combinations
 expand the key column. Shortcuts act within LLCV, not globally in other apps.
@@ -244,6 +246,7 @@ with or without Ctrl/Alt/Shift. All valid assigned keys continue to work in the 
 | `F1` | App information and shortcuts (Help/Exit keys close only the help window while it is active) |
 | `F12` | Save a source-resolution screenshot (video mode) |
 | `F9` | Start / stop SDR/stereo recording during video playback |
+| `M` | Toggle playback mute; recording volume is unaffected |
 | `F11` | Toggle fullscreen (using the selected presentation mode) |
 | `Esc` | Leave shortcut-enabled fullscreen; close the app in windowed or automatic-fullscreen mode |
 | Mouse wheel over viewer | Change app volume in 5% steps |
@@ -275,6 +278,11 @@ Turn it off to retain every corner pixel. It does not rescale video or add an
 app-side mask/render pass; unsupported systems keep their existing appearance.
 Windows may suppress rounding in snapped/remote environments; see
 [Microsoft's rounding policy](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-rounded-corners).
+
+Use the **speaker button** in the audio OSD (`F3`) or audio-only view to mute playback.
+Unmuting restores the previous volume; adjusting volume with the wheel or resetting a volume also unmutes.
+Recording volume is unaffected. Mute state resets when the app exits.
+A translucent icon remains at the top-right of the video when muted with the audio OSD hidden; it is not recorded.
 
 Enable **Allow volume boost above 100%** in audio settings to raise master volume
 up to 200%. Individual L/R volume is capped at 100%; boosting loud input can
@@ -384,7 +392,7 @@ dismiss it. The Exit key here closes only the help window, not the viewer.
 | No video | Close OBS/vendor tools, check the capture device and supported resolution, then choose Auto pixel format |
 | 40 fps capture will not start | Disable the option and retry the normal rate. Support depends on the device, resolution, and format; see [40 fps troubleshooting](TROUBLESHOOTING.md#40-fps-capture-will-not-start) |
 | Monitor briefly loses signal in Low latency mode | The graphics driver may be incompatible with the tearing presentation path. Change Presentation to **VSync**; borderless mode can remain enabled |
-| No audio | Select the audio input that belongs to the chosen video device |
+| No audio | Check playback mute/volume, then select the audio input that belongs to the video device |
 | Occasional audio breakup | Check for buffer shortage in Tab diagnostics, then raise the PCM target in 5 ms steps and test again |
 | Exclusive shows retry required | Check the device connection and whether another app is using it, then select **Recheck all devices**. Use WASAPI Shared to resume playback without an Exclusive check |
 | Playback stops with a device-error message | Check connections and other capture apps, then confirm the device in settings and start again. Devices are not repeatedly reconnected automatically |

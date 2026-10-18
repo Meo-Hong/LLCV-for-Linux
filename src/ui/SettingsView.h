@@ -247,8 +247,13 @@ void ApplySettingsFont(SettingsControls* state, HWND hwnd, UINT dpi);
 void LayoutSettingsControls(SettingsControls* state, UINT dpi);
 void RefreshSettingsPageHeader(SettingsControls* state);
 void RefreshShortcutCaptions(SettingsControls* state);
-struct ShortcutLayout { int keyWidth = 80; int hintHeight = 36; };
-ShortcutLayout MeasureShortcutLayout(const SettingsControls* state, UINT dpi);
+struct ShortcutLayout {
+    int keyWidth = 80;
+    int hintHeight = 36;
+    std::array<int, shortcuts::Count> descriptionHeights{};
+};
+ShortcutLayout MeasureShortcutLayout(const SettingsControls* state, UINT dpi,
+                                     int rowWidth = 336);
 void BeginShortcutEdit(SettingsControls* state, size_t index);
 void CancelShortcutEdit(SettingsControls* state);
 bool ProcessShortcutEdit(SettingsControls* state, const MSG& message,

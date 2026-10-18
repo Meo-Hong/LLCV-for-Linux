@@ -233,10 +233,12 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
         pages.Group(text(L"키보드 단축키",L"Keyboard shortcuts"));
         pages.Button(s->shortcutResetButton);
         {
-        const auto metrics=MeasureShortcutLayout(s,dpi);
-        for (size_t i=0;i<s->guideKeys.size();++i)
-            pages.Block(36,{{s->guideKeys[i],0,0,metrics.keyWidth,29},
-                {s->guideDescriptions[i],metrics.keyWidth+12,0,width-metrics.keyWidth-12,29}});
+        const auto metrics=MeasureShortcutLayout(s,dpi,width);
+        for (size_t i=0;i<s->guideKeys.size();++i) {
+            const int height=std::max(29,metrics.descriptionHeights[i]);
+            pages.Block(std::max(36,height+7),{{s->guideKeys[i],0,0,metrics.keyWidth,29},
+                {s->guideDescriptions[i],metrics.keyWidth+12,0,width-metrics.keyWidth-12,height}});
+        }
         pages.Text(s->guideVideoHint,metrics.hintHeight);
         }
         pages.Group(text(L"진단",L"Diagnostics"));

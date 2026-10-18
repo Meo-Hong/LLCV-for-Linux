@@ -32,6 +32,7 @@ inline constexpr std::array<Shortcut,shortcuts::Count> kShortcuts{{
 #ifdef LLCV_RECORDING
     ,{L"F9",L"녹화 시작 / 종료",L"Start / stop recording",true}
 #endif
+    ,{L"M",L"재생 음소거 켜기/끄기",L"Toggle playback mute",false}
 }};
 inline const wchar_t* VideoOnlyHint(bool english) {
 #ifdef LLCV_RECORDING

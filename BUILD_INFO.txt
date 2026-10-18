@@ -1,4 +1,16 @@
-LLCV v2.1.2 x64 (continued from the v0.14.2 rework)
+LLCV v2.1.3 x64 (continued from the v0.14.2 rework)
+
+v2.1.3 Playback mute
+-------------------
+- Adds speaker buttons to the audio OSD and audio-only view, plus a customizable M shortcut.
+- Shows a cached translucent top-right indicator while muted with the audio OSD hidden; display only, not recorded.
+- Aligns audio card spacing, percentage baselines and vertically centered L/R labels.
+- Preserves master/channel volume and recorded audio while muting playback.
+- Keeps manual mute independent of background auto-mute and resets it on process exit.
+- Retains existing custom M bindings by choosing an unused function key for mute.
+- Covers PCM gain ramps, recording isolation, shortcut routing and bilingual high-DPI layout.
+- Retains existing settings, installation paths and 1080p/60fps recording defaults.
+- Automated checks do not establish physical HDMI latency or universal device compatibility.
 
 v2.1.2 Settings and recording reliability
 ----------------------------------------

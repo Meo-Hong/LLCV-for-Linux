@@ -921,6 +921,8 @@ int TestPresentationDebug() {
 }
 
 #include "VideoTransitionStress.inl"
+#include "PlaybackMuteTests.inl"
+#include "PlaybackMuteRecordingTests.inl"
 
 static void TestSurroundWasapiFill() {
     const auto settings = g_settings;
@@ -931,6 +933,7 @@ static void TestSurroundWasapiFill() {
     g_backgroundAudioMuted.store(false);
     g_audioTrackingStartMs.store(UINT64_MAX);
     g_ring.ConfigureChannels(6);
+    for (bool manual : {false,true})
     for (auto correction : {DriftCorrectionMode::Off, DriftCorrectionMode::Resample}) {
         g_settings.driftCorrection = correction;
         g_ring.Clear();
@@ -950,12 +953,14 @@ static void TestSurroundWasapiFill() {
             Require(output[1 + f * 6 + c] == (c + 1) * 1000,
                 "production callback preserves all channels with drift off/on");
         Require(output.front() == 111 && output.back() == 222, "5.1 fill bounds");
-        g_backgroundAudioMuted.store(true);
+        g_playbackMuted.store(manual);
+        g_backgroundAudioMuted.store(!manual);
         FillWasapiPcm(&state, output.data() + 1, 480); // click-free ramp
         result = FillWasapiPcm(&state, output.data() + 1, 480);
         Require(result.writtenFrames == 480, "5.1 mute does not stop consuming capture");
         for (size_t i = 1; i <= 480 * 6; ++i)
-            Require(output[i] == 0, "background mute includes center and LFE");
+            Require(output[i] == 0, "manual and background mute include center and LFE");
+        g_playbackMuted.store(false);
         g_backgroundAudioMuted.store(false);
     }
     g_ring.ConfigureChannels(2);
@@ -964,6 +969,9 @@ static void TestSurroundWasapiFill() {
 }
 
 int main(int argc, char** argv) {
+#ifdef LLCV_RECORDING
+    if(argc==2 && std::string(argv[1])=="--mute-recording") return TestPlaybackMuteRecording();
+#endif
     TestInvalidHdrOutputStartup();
     if (argc == 2 && std::string(argv[1]) == "--transition-stress") return RunTransitionStress(false);
     if (argc == 2 && std::string(argv[1]) == "--transition-faults") return RunTransitionStress(true);
@@ -988,6 +996,7 @@ int main(int argc, char** argv) {
     TestExclusiveScanResultLifetime();
     TestOutputTransitions();
     TestShortcutRouting();
+    TestPlaybackMute();
     TestSurroundWasapiFill();
     g_settings.driftCorrection = DriftCorrectionMode::Off;
     g_audioQueueTargetFrames.store(960);

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(LowLatencyCaptureViewer VERSION 2.1.2 LANGUAGES CXX)
+project(LowLatencyCaptureViewer VERSION 2.1.3 LANGUAGES CXX)
 
 include(cmake/MsvcDependencies.cmake)
 
@@ -261,6 +261,7 @@ if(BUILD_TESTING)
     set_tests_properties(RecordingSettingsTests PROPERTIES TIMEOUT 45)
     add_executable(RecordingShortcutTests tests/RecordingShortcutTests.cpp
         src/settings/SettingsStore.cpp src/ui/SettingsView.cpp src/ui/PresentationModeUi.cpp
+        src/ui/SettingsDialogControls.cpp src/ui/UiText.cpp
         src/recording/RecordingSettingsView.cpp src/recording/RecordingOptions.cpp)
     target_include_directories(RecordingShortcutTests PRIVATE src)
     target_compile_definitions(RecordingShortcutTests PRIVATE LLCV_RECORDING UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
@@ -643,6 +644,8 @@ if (BUILD_TESTING)
         add_test(NAME MjpegRecordingPlaybackTests COMMAND MjpegRecordingPlaybackTests)
         set_tests_properties(MjpegRecordingPlaybackTests PROPERTIES
             TIMEOUT 45 RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS GPU)
+        add_test(NAME PlaybackMuteRecordingTests COMMAND AudioCallbackTests --mute-recording)
+        set_tests_properties(PlaybackMuteRecordingTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
     endif()
 
     add_executable(HdrPipelineTests tests/HdrPipelineTests.cpp ${audio_callback_sources})

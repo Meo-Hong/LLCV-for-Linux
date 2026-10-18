@@ -11,6 +11,13 @@ inline constexpr int kBaseClientHeight = 230;
 
 using Rect = audio_osd::Rect;
 
+// Logical geometry shared by painting, hit testing and layout regression tests.
+inline constexpr int kCardPadding = 12;
+inline constexpr Rect kMaster{12, 38, 368, 100};
+inline constexpr Rect kMute{24, 51, 60, 87};
+inline constexpr Rect kLeft{12, 108, 186, 196};
+inline constexpr Rect kRight{194, 108, 368, 196};
+
 struct Size {
     int width = 0;
     int height = 0;
@@ -31,6 +38,7 @@ struct State {
     bool lightTheme = false;
     bool highContrast = false;
     bool allowBoost = false;
+    bool muted = false;
     const wchar_t* outputLabel = L"WASAPI Shared";
     bool clipping = false;
     int masterPercent = 100;

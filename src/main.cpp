@@ -69,6 +69,7 @@
 #include "ui/AudioOsdLayout.h"
 #include "ui/OverlayStyle.h"
 #include "ui/AudioOnlyView.h"
+#include "ui/SpeakerIcon.h"
 #include "ui/PresentationModeUi.h"
 #include "video/VideoClearPolicy.h"
 #include "video/VideoPlacement.h"
@@ -148,9 +149,9 @@ constexpr int kSampleRate = 48000;
 constexpr int kChannels = 2;
 constexpr int kBitsPerSample = 16;
 #ifdef LLCV_VSR_EXPERIMENT
-constexpr wchar_t kAppVersionLabel[] = L"v2.1.2-vsr-test";
+constexpr wchar_t kAppVersionLabel[] = L"v2.1.3-vsr-test";
 #else
-constexpr wchar_t kAppVersionLabel[] = L"v2.1.2";
+constexpr wchar_t kAppVersionLabel[] = L"v2.1.3";
 #endif
 
 constexpr int kRecommendedCaptureBufferMs = 20;
@@ -391,6 +392,8 @@ static std::atomic<int> g_volumePercent{100};
 static std::atomic<int> g_leftVolumePercent{100};
 static std::atomic<int> g_rightVolumePercent{100};
 static std::atomic<bool> g_backgroundAudioMuted{false};
+// Session-only playback control. Capture samples and recording gain never use it.
+static std::atomic<bool> g_playbackMuted{false};
 static std::atomic<uint64_t> g_volumeHudUntilMs{0};
 enum class TransientHudContent { Volume, OneToOne, OneToOneUnavailable,
     ScreenshotPending, ScreenshotBusy, ScreenshotSaved, ScreenshotCopied,
@@ -1143,7 +1146,8 @@ static void ReportConnectedAudioAllocator(IPin* inputPin, WORD blockAlign) {
 // -----------------------------------------------------------------------------
 
 static double TargetAudioVolumeGain() {
-    if (g_backgroundAudioMuted.load(std::memory_order_acquire)) return 0.0;
+    if (g_playbackMuted.load(std::memory_order_relaxed) ||
+        g_backgroundAudioMuted.load(std::memory_order_acquire)) return 0.0;
     return g_volumePercent.load(std::memory_order_acquire) / 100.0;
 }
 
@@ -2111,6 +2115,9 @@ struct DirectD3D11Renderer {
     ID3D11ShaderResourceView* osdOverlayShaderView = nullptr;
     ID3D11ShaderResourceView* volumeOverlayShaderView = nullptr;
     ID3D11ShaderResourceView* audioOverlayShaderView = nullptr;
+    ID3D11Texture2D* muteIndicatorTexture = nullptr;
+    ID3D11ShaderResourceView* muteIndicatorShaderView = nullptr;
+    bool muteIndicatorUnavailable = false;
     ID3D11VertexShader* overlayVertexShader = nullptr;
     ID3D11PixelShader* overlayPixelShader = nullptr;
     ID3D11Buffer* overlayRectBuffer = nullptr;
@@ -2339,6 +2346,8 @@ struct DirectD3D11Renderer {
         SafeRelease(overlayPixelShader);
         SafeRelease(overlayVertexShader);
         SafeRelease(audioOverlayShaderView);
+        SafeRelease(muteIndicatorShaderView);
+        SafeRelease(muteIndicatorTexture);
         SafeRelease(volumeOverlayShaderView);
         SafeRelease(osdOverlayShaderView);
         SafeRelease(audioOverlayTexture);
@@ -2403,6 +2412,7 @@ struct DirectD3D11Renderer {
         outputConfigurationGeneration = 0;
         cachedOverlayGeneration = 0;
         cachedOverlayMask = 0;
+        muteIndicatorUnavailable = false;
         nextUploadSurface = 0;
         activeUploadSurface = 0;
         allowTearing = false;
@@ -3200,6 +3210,7 @@ struct DirectD3D11Renderer {
         if (!refreshMask) return S_OK;
         HRESULT hr = S_OK;
         const int overlayMaster = g_volumePercent.load(std::memory_order_acquire);
+        const bool playbackMuted = g_playbackMuted.load(std::memory_order_relaxed);
         const bool masterBoosted = g_settings.allowVolumeBoost && overlayMaster > 100;
 
         if (refreshMask & 1u) {
@@ -3295,7 +3306,8 @@ struct DirectD3D11Renderer {
                          IsEnglishUi() ? L"1:1 unavailable\nLarger than this display"
                                        : L"1:1 표시 불가\n현재 모니터보다 큼");
             } else {
-                swprintf_s(volumeText, UI_TEXT(L"음량  %d%%"),
+                swprintf_s(volumeText, playbackMuted
+                    ? (IsEnglishUi() ? L"Muted  %d%%" : L"음소거  %d%%") : UI_TEXT(L"음량  %d%%"),
                            overlayMaster);
             }
             hr = dwriteFactory->CreateTextLayout(
@@ -3349,7 +3361,7 @@ struct DirectD3D11Renderer {
                     ? kMaximumVolumePercent : 100;
                 volumeBar.right = volumeBar.left +
                     (volumeBarBackground.right - volumeBarBackground.left) *
-                        overlayMaster /
+                        (playbackMuted ? 0 : overlayMaster) /
                         static_cast<float>(volumeBarMaximum);
                 if (volumeBar.right > volumeBar.left) {
                     volumeCacheTarget->FillRoundedRectangle(D2D1::RoundedRect(volumeBar, 4, 4),
@@ -3406,14 +3418,33 @@ struct DirectD3D11Renderer {
             const auto masterCard = D2D1::RoundedRect(D2D1::RectF(16, 32, 320, 72), 8, 8);
             audioCacheTarget->FillRoundedRectangle(masterCard,
                 hovered == 3 ? audioCacheHighlightBrush : audioCacheCardBrush);
-            text(IsEnglishUi() ? L"Master" : L"마스터 음량", audioTextFormat,
-                D2D1::RectF(28, 33, 200, 62), audioCacheTextBrush);
+            const auto muteBounds = llcv::audio_osd::kMuteButton;
+            audioCacheTarget->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(
+                static_cast<float>(muteBounds.left), static_cast<float>(muteBounds.top),
+                static_cast<float>(muteBounds.right), static_cast<float>(muteBounds.bottom)), 5, 5),
+                hovered == static_cast<int>(llcv::audio_osd::HitTarget::Mute)
+                    ? audioCacheHighlightBrush : audioCacheCardBrush);
+            audioCacheTarget->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(
+                static_cast<float>(muteBounds.left), static_cast<float>(muteBounds.top),
+                static_cast<float>(muteBounds.right), static_cast<float>(muteBounds.bottom)), 5, 5),
+                audioCacheEdgeBrush, 1);
+            constexpr float speakerSize = 20.0f;
+            constexpr float speakerScale = speakerSize / llcv::ui::kSpeakerIconSize;
+            const float speakerLeft = (muteBounds.left + muteBounds.right - speakerSize) * 0.5f;
+            const float speakerTop = (muteBounds.top + muteBounds.bottom - speakerSize) * 0.5f;
+            llcv::ui::DrawSpeakerIcon(playbackMuted, [&](int x1,int y1,int x2,int y2) {
+                audioCacheTarget->DrawLine(D2D1::Point2F(speakerLeft+x1*speakerScale,speakerTop+y1*speakerScale),
+                    D2D1::Point2F(speakerLeft+x2*speakerScale,speakerTop+y2*speakerScale),audioCacheTextBrush,1.5f);
+            });
+            text(playbackMuted ? (IsEnglishUi() ? L"Muted" : L"음소거")
+                               : (IsEnglishUi() ? L"Master" : L"마스터 음량"), audioTextFormat,
+                D2D1::RectF(64, 33, 214, 62), audioCacheTextBrush);
             wchar_t masterText[32]{};
             swprintf_s(masterText, L"%d%%", master);
             audioValueFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
             text(masterText, audioValueFormat, D2D1::RectF(220, 33, 308, 62),
                 masterBoosted ? audioCacheBoostBrush : audioCacheTextBrush);
-            bar(D2D1::RectF(28, 64, 308, 68), master, maximum);
+            bar(D2D1::RectF(28, 64, 308, 68), playbackMuted ? 0 : master, maximum);
 
             const auto drawChannel = [&](int channel, const wchar_t* label,
                                          int percent, double peakDb, float x0, float x1) {
@@ -3497,6 +3528,54 @@ struct DirectD3D11Renderer {
         return S_OK;
     }
 
+    HRESULT ensureMuteIndicator() {
+        if (muteIndicatorShaderView) return S_OK;
+        // Immutable, tiny display-only texture. Allocate once on first use,
+        // not on normal playback or every audio-meter/overlay generation.
+        constexpr UINT size = llcv::audio_osd::kMuteIndicatorSize;
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width = desc.Height = size;
+        desc.MipLevels = desc.ArraySize = desc.SampleDesc.Count = 1;
+        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        ID3D11Texture2D* texture = nullptr;
+        ID3D11ShaderResourceView* view = nullptr;
+        IDXGISurface* surface = nullptr;
+        ID2D1RenderTarget* target = nullptr;
+        ID2D1SolidColorBrush* background = nullptr;
+        ID2D1SolidColorBrush* foreground = nullptr;
+        HRESULT hr = device->CreateTexture2D(&desc, nullptr, &texture);
+        if (SUCCEEDED(hr)) hr = texture->QueryInterface(IID_PPV_ARGS(&surface));
+        if (SUCCEEDED(hr)) hr = d2dFactory->CreateDxgiSurfaceRenderTarget(surface,
+            D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_HARDWARE,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)), &target);
+        if (SUCCEEDED(hr)) hr = target->CreateSolidColorBrush(D2D1::ColorF(0, 0.38f), &background);
+        if (SUCCEEDED(hr)) hr = target->CreateSolidColorBrush(D2D1::ColorF(0xffffff, 0.82f), &foreground);
+        if (SUCCEEDED(hr)) {
+            target->BeginDraw();
+            target->Clear(D2D1::ColorF(0, 0.0f));
+            target->FillRoundedRectangle(D2D1::RoundedRect(
+                D2D1::RectF(0, 0, size, size), 9, 9), background);
+            constexpr float inset = (size - llcv::ui::kSpeakerIconSize) * 0.5f;
+            llcv::ui::DrawSpeakerIcon(true, [&](int x1, int y1, int x2, int y2) {
+                target->DrawLine(D2D1::Point2F(inset+x1, inset+y1),
+                    D2D1::Point2F(inset+x2, inset+y2), foreground, 1.8f);
+            });
+            hr = target->EndDraw();
+        }
+        if (SUCCEEDED(hr)) hr = device->CreateShaderResourceView(texture, nullptr, &view);
+        SafeRelease(foreground); SafeRelease(background);
+        SafeRelease(target); SafeRelease(surface);
+        if (SUCCEEDED(hr)) {
+            muteIndicatorTexture = texture;
+            muteIndicatorShaderView = view;
+        } else {
+            SafeRelease(view); SafeRelease(texture);
+        }
+        return hr;
+    }
+
     HRESULT drawOverlayQuads() {
         HRESULT hr = S_OK;
         bool recordingVisible = false;
@@ -3513,7 +3592,22 @@ struct DirectD3D11Renderer {
             g_volumeHudUntilMs.load(std::memory_order_acquire);
         const bool audioVisible =
             g_audioOsdVisible.load(std::memory_order_acquire);
-        if (!osdVisible && !volumeVisible && !audioVisible && !recordingVisible) return S_OK;
+        bool muteVisible = !audioVisible && !muteIndicatorUnavailable &&
+            g_playbackMuted.load(std::memory_order_relaxed);
+        const auto muteRect = llcv::audio_osd::MuteIndicatorRect(
+            static_cast<int>(outputWidth), static_cast<int>(outputHeight));
+        if (muteVisible) {
+            hr = ensureMuteIndicator();
+            if (FAILED(hr)) {
+                // A cosmetic indicator must not interrupt playback or retry
+                // allocating resources on every frame after device failure.
+                fwprintf(stderr, L"[audio] mute indicator unavailable: 0x%08X\n", static_cast<unsigned>(hr));
+                muteIndicatorUnavailable = true;
+                muteVisible = false;
+                hr = S_OK;
+            }
+        }
+        if (!osdVisible && !volumeVisible && !audioVisible && !recordingVisible && !muteVisible) return S_OK;
         hr = refreshOverlayLayouts(osdVisible, volumeVisible, audioVisible);
         if (FAILED(hr)) return hr;
 
@@ -3589,6 +3683,11 @@ struct DirectD3D11Renderer {
             } else if (!right && osdVisible) {
                 y = margin + osdHeight + 12;
             }
+            if (muteVisible && right && !bottom) {
+                const LONG reserved = muteRect.right - muteRect.left + 8;
+                if (x >= hudMargin + reserved) x -= reserved;
+                else y = muteRect.bottom + 8;
+            }
             draw(volumeOverlayShaderView, x, y, x + hudWidth,
                  y + hudHeight);
         }
@@ -3597,6 +3696,10 @@ struct DirectD3D11Renderer {
                 llcv::audio_osd::RectForClient(static_cast<int>(outputWidth));
             draw(audioOverlayShaderView, rect.left, rect.top,
                  rect.right, rect.bottom);
+        }
+        if (muteVisible) {
+            draw(muteIndicatorShaderView, muteRect.left, muteRect.top,
+                 muteRect.right, muteRect.bottom);
         }
 #ifdef LLCV_RECORDING
         if (recordingVisible) {
@@ -7172,6 +7275,8 @@ static HMONITOR g_relativeMoveMonitor = nullptr;
 static bool g_interactiveWindowMove = false;
 static bool g_audioOnlyResizePending = false;
 static bool g_audioOnlyDragPending = false;
+static bool g_muteButtonPressed = false;
+static int AudioOsdHitTarget(HWND root, POINT screenPoint);
 static POINT g_audioOnlyDragStart{};
 static llcv::video::OutputTransitionState g_outputTransition;
 
@@ -7664,6 +7769,8 @@ static LRESULT CALLBACK VideoHostSubclassProc(
     }
     if (msg == WM_NCHITTEST) {
         const HWND parent = GetParent(hwnd);
+        if (parent && AudioOsdHitTarget(parent, POINT{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}) ==
+                static_cast<int>(llcv::audio_osd::HitTarget::Mute)) return HTTRANSPARENT;
         if (parent && g_settings.borderlessWindow && !g_fullscreen) {
             // Let the same-thread parent perform the hit test. Returning an
             // edge code from the child would try to resize the child instead.
@@ -8076,7 +8183,8 @@ static std::wstring BuildRuntimeOsdText(int outputWidth, int outputHeight) {
         g_volumePercent.load(std::memory_order_acquire);
     const bool backgroundMuted =
         g_backgroundAudioMuted.load(std::memory_order_acquire);
-    const wchar_t* volumeProcessing = backgroundMuted
+    const wchar_t* volumeProcessing = g_playbackMuted.load(std::memory_order_relaxed)
+        ? UI_TEXT(L"음소거") : backgroundMuted
         ? UI_TEXT(L"백그라운드 음소거 중")
         : logicalVolume == 100
               ? UI_TEXT(L"PCM 연산 우회")
@@ -8268,13 +8376,34 @@ static int AudioOsdHitTarget(HWND root, POINT screenPoint) {
               bounds.right, bounds.bottom, client.x, client.y));
 }
 
+static void SetPlaybackMuted(HWND hwnd, bool muted, bool showHud = true) {
+    if (g_playbackMuted.exchange(muted, std::memory_order_relaxed) == muted) return;
+    if (showHud && !g_settings.audioOnly && !g_audioOsdVisible.load(std::memory_order_acquire)) {
+        g_transientHudContent.store(TransientHudContent::Volume, std::memory_order_release);
+        g_volumeHudUntilMs.store(GetTickCount64()+1200, std::memory_order_release);
+    }
+    g_overlayGeneration.fetch_add(1, std::memory_order_relaxed);
+    if (hwnd && g_settings.audioOnly) InvalidateRect(hwnd, nullptr, FALSE);
+}
+
+static bool BeginMuteButtonPress(HWND hwnd, LPARAM position) {
+    POINT point{GET_X_LPARAM(position),GET_Y_LPARAM(position)};
+    if (!ClientToScreen(hwnd,&point) || AudioOsdHitTarget(hwnd,point) !=
+            static_cast<int>(llcv::audio_osd::HitTarget::Mute)) return false;
+    NoteFullscreenCursorActivity();
+    SetCapture(hwnd);
+    g_muteButtonPressed = GetCapture()==hwnd;
+    return true;
+}
+
 static bool AdjustVolumeFromWheel(HWND root, WPARAM wParam, LPARAM lParam) {
     const POINT screenPoint{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
     HWND hovered = WindowFromPoint(screenPoint);
     if (!hovered || GetAncestor(hovered, GA_ROOT) != root) return false;
 
     static int wheelRemainder = 0;
-    const int target = AudioOsdHitTarget(root, screenPoint);
+    const int hit = AudioOsdHitTarget(root, screenPoint);
+    const int target = hit == static_cast<int>(llcv::audio_osd::HitTarget::Mute) ? 3 : hit;
     if (g_settings.audioOnly && target != 1 && target != 2 && target != 3) {
         // Header, footer and gutters are window-drag areas, not volume controls.
         wheelRemainder = 0;
@@ -8311,6 +8440,7 @@ static bool AdjustVolumeFromWheel(HWND root, WPARAM wParam, LPARAM lParam) {
     } else {
         return true;
     }
+    SetPlaybackMuted(root, false, false);
     g_overlayGeneration.fetch_add(1, std::memory_order_relaxed);
     return true;
 }
@@ -8345,6 +8475,7 @@ static void PaintAudioOnlyView(HDC dc,
     state.lightTheme = g_settings.settingsLightTheme;
     state.highContrast = g_audioOnlyHighContrast;
     state.allowBoost = g_settings.allowVolumeBoost;
+    state.muted = g_playbackMuted.load(std::memory_order_relaxed);
     state.hoveredTarget = g_audioOsdHoverTarget.load(std::memory_order_acquire);
     state.outputLabel = ActiveAudioMode() == AudioMode::WasapiExclusive
         ? L"WASAPI Exclusive"
@@ -8507,6 +8638,7 @@ static bool HandleViewerShortcut(HWND hwnd, WPARAM key, LPARAM flags, unsigned m
     switch (action) {
     case keys::Action::Settings: SendMessageW(hwnd,WM_OPEN_SETTINGS,0,0); break;
     case keys::Action::AudioOsd: ToggleAudioOsd(); break;
+    case keys::Action::Mute: SetPlaybackMuted(hwnd,!g_playbackMuted.load(std::memory_order_relaxed)); break;
     case keys::Action::PixelPerfect: SendMessageW(hwnd,WM_RESTORE_ONE_TO_ONE,0,0); break;
 #ifdef LLCV_VSR_FEATURE
     case keys::Action::Vsr: return HandleVsrTestKey(key,flags,modifiers);
@@ -8756,6 +8888,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
     case WM_MOUSEMOVE:
         NoteFullscreenCursorActivity();
+        if (!g_settings.audioOnly && g_audioOsdVisible.load(std::memory_order_acquire)) {
+            POINT point{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)};
+            ClientToScreen(hwnd,&point);
+            const int hovered=AudioOsdHitTarget(hwnd,point);
+            if (g_audioOsdHoverTarget.exchange(hovered,std::memory_order_relaxed)!=hovered)
+                g_overlayGeneration.fetch_add(1,std::memory_order_relaxed);
+            TRACKMOUSEEVENT tracking{sizeof(tracking),TME_LEAVE,hwnd,0};
+            TrackMouseEvent(&tracking);
+        }
         if (g_settings.audioOnly) {
             RECT client{};
             int hovered = 0;
@@ -8764,6 +8905,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     client.right, client.bottom,
                     GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
                 if (target == llcv::audio_osd::HitTarget::Master ||
+                    target == llcv::audio_osd::HitTarget::Mute ||
                     target == llcv::audio_osd::HitTarget::Left ||
                     target == llcv::audio_osd::HitTarget::Right)
                     hovered = static_cast<int>(target);
@@ -8800,12 +8942,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
     case WM_MOUSELEAVE:
     case WM_NCMOUSEMOVE:
+        if (!g_settings.audioOnly && g_audioOsdHoverTarget.exchange(0,std::memory_order_relaxed)!=0)
+            g_overlayGeneration.fetch_add(1,std::memory_order_relaxed);
         if (g_settings.audioOnly &&
             g_audioOsdHoverTarget.exchange(0, std::memory_order_acq_rel) != 0)
             InvalidateRect(hwnd, nullptr, FALSE);
         break;
 
     case WM_LBUTTONDOWN:
+        if (BeginMuteButtonPress(hwnd,lParam)) return 0;
         if (g_settings.audioOnly) {
             POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             if (ClientToScreen(hwnd, &point)) {
@@ -8818,11 +8963,23 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         break;
 
     case WM_LBUTTONUP:
+        if (g_muteButtonPressed) {
+            g_muteButtonPressed=false;
+            const bool captured=GetCapture()==hwnd;
+            if (captured) ReleaseCapture();
+            POINT point{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)};
+            if (captured && ClientToScreen(hwnd,&point) && AudioOsdHitTarget(hwnd,point)==
+                    static_cast<int>(llcv::audio_osd::HitTarget::Mute))
+                SetPlaybackMuted(hwnd,!g_playbackMuted.load(std::memory_order_relaxed));
+            return 0;
+        }
 #ifdef LLCV_RECORDING
         if (HandleGpuRecordingMouse(hwnd, msg, lParam)) return 0;
 #endif
         [[fallthrough]];
     case WM_CANCELMODE:
+        if (g_muteButtonPressed && GetCapture()==hwnd) ReleaseCapture();
+        g_muteButtonPressed=false;
         if (g_settings.audioOnly) {
             g_audioOnlyDragPending = false;
             if (GetCapture() == hwnd) ReleaseCapture();
@@ -8830,6 +8987,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         break;
 
     case WM_CAPTURECHANGED:
+        g_muteButtonPressed=false;
         g_audioOnlyDragPending = false;
         break;
 
@@ -8837,6 +8995,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (FullscreenCursorAutoHideActive() && g_fullscreenCursorHidden) {
             SetCursor(nullptr);
             return TRUE;
+        }
+        if (LOWORD(lParam)==HTCLIENT) {
+            POINT point{};
+            if (GetCursorPos(&point) && AudioOsdHitTarget(hwnd,point)==
+                    static_cast<int>(llcv::audio_osd::HitTarget::Mute)) {
+                SetCursor(LoadCursorW(nullptr,IDC_HAND));
+                return TRUE;
+            }
         }
 #ifdef LLCV_RECORDING
         if (HandleGpuRecordingMouse(hwnd, msg, lParam)) return TRUE;
@@ -9008,6 +9174,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     case WM_NCHITTEST:
         if (g_settings.borderlessWindow && !g_fullscreen) {
             const LRESULT hit = BorderlessHitTest(hwnd, lParam);
+            if (hit==HTCAPTION && AudioOsdHitTarget(hwnd,POINT{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)})==
+                    static_cast<int>(llcv::audio_osd::HitTarget::Mute)) return HTCLIENT;
             if (!g_settings.audioOnly || hit != HTCAPTION) return hit;
 
             // Every interior region supports drag-to-move and double-click.
@@ -9027,10 +9195,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         break;
 
     case WM_LBUTTONDBLCLK: {
+        if (BeginMuteButtonPress(hwnd,lParam)) return 0;
         POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         ClientToScreen(hwnd, &point);
         const int target = AudioOsdHitTarget(hwnd, point);
         if (target == 1 || target == 2 || target == 3) {
+            SetPlaybackMuted(hwnd,false,false);
             if (target == 1) {
                 g_leftVolumePercent.store(100, std::memory_order_release);
                 g_settings.leftVolumePercent = 100;

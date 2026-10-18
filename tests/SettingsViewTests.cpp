@@ -199,7 +199,7 @@ static constexpr Geometry kGeometry[] = {
     {&SettingsControls::fullscreenCursorCombo, "fullscreenCursorCombo", 184, 340, 340, 376, 30},
     {&SettingsControls::fullscreenPositionLabel, "fullscreenPositionLabel", 600, 316, 316, 376, 20},
     {&SettingsControls::fullscreenPositionCombo, "fullscreenPositionCombo", 600, 340, 340, 376, 30},
-    {&SettingsControls::guideVideoHint, "guideVideoHint", 204, 501, 501, 336, 36},
+    {&SettingsControls::guideVideoHint, "guideVideoHint", 204, 528, 528, 336, 36},
     {&SettingsControls::guideDiagnosticsText, "guideDiagnosticsText", 600, 160, 160, 376, 32},
     {&SettingsControls::saveLogCheck, "saveLogCheck", 600, 208, 208, 376, 32},
     {&SettingsControls::showConsoleCheck, "showConsoleCheck", 600, 248, 248, 376, 32},
@@ -481,7 +481,8 @@ static void CheckAllCaptionsFit(SettingsControls& state, UINT dpi, bool english)
         // ellipsis intentionally; expanded device lists retain wider fields.
     }
     wchar_t guide[2048]{}; GetWindowTextW(state.guideVideoHint, guide, ARRAYSIZE(guide));
-    Check(std::wcsstr(guide,english ? L"Click" : L"키 버튼") && std::wcsstr(guide,L"F3"),
+    Check(std::wcsstr(guide,english ? L"Click" : L"키 버튼") &&
+          std::wcsstr(guide,english ? L"* Video mode only" : L"* 영상 모드 전용"),
           "shortcut editor explains editing and video-only keys");
     const HWND parent = GetParent(state.guideVideoHint);
     for (size_t i = 0; i < llcv::viewer_help::kShortcuts.size(); ++i) {
@@ -497,12 +498,14 @@ static void CheckAllCaptionsFit(SettingsControls& state, UINT dpi, bool english)
         GetWindowTextW(state.guideKeys[i], guide, ARRAYSIZE(guide));
         Check(std::wcscmp(guide, shortcut.key) == 0, "every key matches F1");
         GetWindowTextW(state.guideDescriptions[i], guide, ARRAYSIZE(guide));
-        Check(std::wstring(guide)==std::wstring(english ? shortcut.english : shortcut.korean),
-              "every action matches F1 without repeated video-mode suffixes");
+        Check(std::wstring(guide)==std::wstring(english ? shortcut.english : shortcut.korean)+
+              (shortcut.videoOnly ? L" *" : L""),
+              "every action matches F1 with a compact video-only marker");
         const auto action = ClientRectOf(parent, state.guideDescriptions[i]);
         const auto key = ClientRectOf(parent, state.guideKeys[i]);
         Check(action.left == SettingsPixels(296, dpi) &&
-              action.top == SettingsPixels(165 + static_cast<int>(i) * 36, dpi),
+              action.top == SettingsPixels(165 + static_cast<int>(i) *
+                  (state.guideKeys.size()>10 ? 32 : state.guideKeys.size()>9 ? 35 : 36), dpi),
               "shortcut rows maintain aligned columns and generous rhythm");
         Check(key.top>=action.top && key.bottom<=action.bottom+1 && key.right<action.left,
               "editable key and wrapping action occupy separate aligned columns");

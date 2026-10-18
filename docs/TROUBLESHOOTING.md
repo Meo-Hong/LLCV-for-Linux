@@ -107,6 +107,9 @@ Exclusive endpoint tests.
 
 ## Video works but audio does not
 
+First check the speaker button's mute state and master/L/R volume. Press **M**
+(default) to unmute. If background auto-mute is enabled, activate the LLCV window.
+
 Some USB devices expose video and audio as separate DirectShow filters. Choose
 the matching USB audio input manually under **Capture audio device**. The audio
 input must provide 48 kHz mono/stereo uncompressed PCM or 32-bit float. 16-bit

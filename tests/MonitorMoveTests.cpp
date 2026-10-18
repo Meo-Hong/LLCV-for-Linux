@@ -577,9 +577,11 @@ int main(int argc, char** argv) {
     g_leftVolumePercent = 100;
     g_rightVolumePercent = 100;
     for (const auto point : {POINT{20, 45}, POINT{20, 112}, POINT{202, 112}}) {
+        g_playbackMuted=true;
         const WPARAM wheelDown = MAKEWPARAM(0, static_cast<WORD>(-WHEEL_DELTA));
         WndProc(testWindow, WM_MOUSEWHEEL, wheelDown,
                 MAKELPARAM(point.x + 100, point.y + 100));
+        Require(!g_playbackMuted,"master/channel wheel adjustment clears manual mute");
     }
     Require(g_volumePercent == 95 && g_leftVolumePercent == 95 &&
                 g_rightVolumePercent == 95,
@@ -598,23 +600,37 @@ int main(int argc, char** argv) {
                 g_rightVolumePercent == 100,
             "double-click resets each modern audio control independently");
 
-    for (const auto point : {POINT{30, 65}, POINT{30, 130}, POINT{220, 130}, POINT{190, 150}}) {
+    g_playbackMuted=true;
+    const auto speaker=MAKELPARAM(140,170);
+    const auto halfDown=MAKEWPARAM(0,static_cast<WORD>(-WHEEL_DELTA/2));
+    WndProc(testWindow,WM_MOUSEWHEEL,halfDown,speaker);
+    Require(g_playbackMuted && g_volumePercent==100,"partial wheel motion does not unexpectedly unmute");
+    WndProc(testWindow,WM_MOUSEWHEEL,halfDown,speaker);
+    Require(!g_playbackMuted && g_volumePercent==95,"speaker wheel shares master adjustment and unmutes");
+    WndProc(testWindow,WM_MOUSEWHEEL,MAKEWPARAM(0,WHEEL_DELTA),speaker);
+    g_playbackMuted=true;
+    WndProc(testWindow,WM_MOUSEWHEEL,MAKEWPARAM(0,WHEEL_DELTA),MAKELPARAM(130,122));
+    Require(g_playbackMuted && g_volumePercent==100,"wheel over header does not change mute");
+    g_playbackMuted=false;
+    WndProc(testWindow,WM_MOUSEMOVE,0,MAKELPARAM(40,70));
+    Require(g_audioOsdHoverTarget==static_cast<int>(llcv::audio_osd::HitTarget::Mute),"speaker has independent hover state");
+    for (const auto point : {POINT{100, 65}, POINT{30, 130}, POINT{220, 130}, POINT{190, 150}}) {
         const int target = point.y == 65 ? 3 : point.x == 30 ? 1 : point.x == 220 ? 2 : 0;
         WndProc(testWindow, WM_MOUSEMOVE, 0, MAKELPARAM(point.x, point.y));
         Require(g_audioOsdHoverTarget == target && !g_audioOnlyDragPending,
                 "hover identifies controls without moving");
     }
-    WndProc(testWindow, WM_MOUSEMOVE, 0, MAKELPARAM(30, 65));
+    WndProc(testWindow, WM_MOUSEMOVE, 0, MAKELPARAM(100, 65));
     WndProc(testWindow, WM_MOUSELEAVE, 0, 0);
     Require(g_audioOsdHoverTarget == 0, "leaving client clears hover");
-    WndProc(testWindow, WM_MOUSEMOVE, 0, MAKELPARAM(30, 65));
+    WndProc(testWindow, WM_MOUSEMOVE, 0, MAKELPARAM(100, 65));
     WndProc(testWindow, WM_NCMOUSEMOVE, 0, 0);
     Require(g_audioOsdHoverTarget == 0, "resize edge clears hover");
 
     for (const bool borderless : {false, true}) {
         g_settings.borderlessWindow = borderless;
         simulatedStyle = ViewerWindowStyle(g_settings);
-        for (const auto point : {POINT{30, 22}, POINT{30, 65}, POINT{30, 130},
+        for (const auto point : {POINT{30, 22}, POINT{100, 65}, POINT{30, 130},
                                  POINT{220, 130}, POINT{190, 150}, POINT{30, 211}}) {
             const LPARAM at = MAKELPARAM(point.x, point.y);
             const LPARAM moved = MAKELPARAM(point.x + 40, point.y + 30);
@@ -653,7 +669,7 @@ int main(int argc, char** argv) {
     }
     Require(g_volumePercent == 100 && g_leftVolumePercent == 100 &&
             g_rightVolumePercent == 100, "window drag never changes volume");
-    for (const auto point : {POINT{30, 65}, POINT{30, 130}, POINT{220, 130}}) {
+    for (const auto point : {POINT{100, 65}, POINT{30, 130}, POINT{220, 130}}) {
         g_volumePercent = 150; g_leftVolumePercent = 85; g_rightVolumePercent = 75;
         const LPARAM at = MAKELPARAM(point.x, point.y);
         const int beforeMove = audioDragMoves;
