@@ -19,17 +19,17 @@ frames are dropped in favor of the newest one.
 
 ## Linux
 
-Current release: **2.1.3** ([Releases](https://github.com/Meo-Hong/LLCV-for-Linux/releases/latest)) ·
+Current release: **2.1.3.1** ([Releases](https://github.com/Meo-Hong/LLCV-for-Linux/releases/latest)) ·
 new: recording (F9), playback mute (M), unlisted 30 fps and more
-([release notes](linux/release-notes/v2.1.3.md))
+([release notes](linux/release-notes/v2.1.3.1.md))
 
 | File | Install on |
 | --- | --- |
-| `llcv_2.1.3_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, and their derivatives |
-| `llcv_2.1.3_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) |
-| `llcv_2.1.3_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) |
-| `llcv-2.1.3-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 |
-| `llcv-2.1.3-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS |
+| `llcv_2.1.3.1_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, and their derivatives |
+| `llcv_2.1.3.1_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) |
+| `llcv_2.1.3.1_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) |
+| `llcv-2.1.3.1-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 |
+| `llcv-2.1.3.1-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS |
 
 - The `.deb` packages update themselves through the APT repository
   `https://meo-hong.github.io/LLCV-for-Linux/`.

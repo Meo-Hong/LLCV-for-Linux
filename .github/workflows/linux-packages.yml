@@ -33,6 +33,36 @@ jobs:
           path: linux/dist
           if-no-files-found: error
 
+  deb-install:
+    name: install check (${{ matrix.image }} ${{ matrix.arch }})
+    needs: deb
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: "ubuntu:22.04", arch: "amd64" }
+          - { image: "ubuntu:24.04", arch: "amd64" }
+          - { image: "ubuntu:26.04", arch: "amd64" }
+          - { image: "debian:12", arch: "amd64" }
+          - { image: "debian:13", arch: "amd64" }
+          - { image: "debian:12", arch: "arm64" }
+          - { image: "debian:13", arch: "arm64" }
+          - { image: "debian:13", arch: "armhf" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        if: matrix.arch != 'amd64'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: deb-*
+          path: linux/dist
+          merge-multiple: true
+      - name: Install and run in ${{ matrix.image }}
+        run: |
+          deb="$(ls linux/dist/*/llcv_*_${{ matrix.arch }}.deb | head -n 1)"
+          linux/tools/test-deb-install.sh "${{ matrix.image }}" "${{ matrix.arch }}" "$deb"
+
   rpm:
     name: rpm (${{ matrix.image }})
     runs-on: ubuntu-latest
@@ -75,7 +105,7 @@ jobs:
 
   apt-repository:
     name: APT repository
-    needs: deb
+    needs: [deb, deb-install]
     if: startsWith(github.ref, 'refs/tags/linux-v')
     runs-on: ubuntu-latest
     permissions:
@@ -120,7 +150,7 @@ jobs:
 
   release:
     name: GitHub release
-    needs: [deb, rpm, arch]
+    needs: [deb, deb-install, rpm, arch]
     if: startsWith(github.ref, 'refs/tags/linux-v')
     runs-on: ubuntu-latest
     permissions:

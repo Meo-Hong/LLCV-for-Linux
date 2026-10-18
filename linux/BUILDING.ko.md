@@ -93,8 +93,8 @@ cd LLCV-for-Linux/linux
 마지막에 만들어진 파일과 설치 명령이 표시됩니다. 예시:
 
 ```text
-Package: /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3_amd64.deb
-Install: sudo apt install /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3_amd64.deb
+Package: /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3.1_amd64.deb
+Install: sudo apt install /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3.1_amd64.deb
 ```
 
 **⑤ 설치**
@@ -152,10 +152,14 @@ sudo apt build-dep -P pkg.llcv.bundled-sdl3 ./
 ```
 
 SDL3가 없으면 스크립트가 알아서 SDL3 소스를 받고(`tools/fetch-sdl3.sh`) 앱에
-넣어 빌드합니다.
+넣어 빌드합니다. 녹화를 위해 스크립트는 항상 FFmpeg 7.1.1과 nv-codec-headers 소스를
+받고(`tools/fetch-ffmpeg.sh`, SHA256 고정), 패키지 빌드 중에 최소 구성 FFmpeg를
+컴파일해(`tools/build-ffmpeg-static.sh`: AAC, x264, NVENC, VA-API, MP4) 배포판의 정적
+`libx264`와 함께 앱에 정적으로 넣습니다. 그래서 기종마다 `.deb` 하나로 모든
+배포판에 설치되며, 빌드 시간이 몇 분 늘어납니다.
 
 **결과물**: `dist/<배포판>-<버전>/llcv_<버전>~<배포판><버전>_<아키텍처>.deb`
-(예: `dist/debian-13/llcv_2.1.3_arm64.deb`)
+(예: `dist/debian-13/llcv_2.1.3.1_arm64.deb`)
 
 **설치** — 폴더 이름은 내 배포판(`ID`-`VERSION_ID`)입니다.
 
@@ -220,7 +224,7 @@ Fedora 빌드는 시스템 FFmpeg(`ffmpeg-free`나 RPM Fusion의 `ffmpeg`)로 �
 ./tools/build-rpm.sh
 ```
 
-**결과물**: `dist/<배포판>-<버전>/llcv-2.1.3-1.x86_64.rpm`
+**결과물**: `dist/<배포판>-<버전>/llcv-2.1.3.1-1.x86_64.rpm`
 (디버그 정보 `llcv-debuginfo`, `llcv-debugsource`와 소스 RPM도 함께 생깁니다.)
 
 **설치** — 폴더 이름은 내 배포판(`ID`-`VERSION_ID`)입니다.
@@ -246,13 +250,13 @@ cd packaging/arch
 makepkg -f
 ```
 
-**결과물**: `packaging/arch/llcv-2.1.3-1-x86_64.pkg.tar.zst`
+**결과물**: `packaging/arch/llcv-2.1.3.1-1-x86_64.pkg.tar.zst`
 (`./tools/build-package.sh`를 쓰면 `dist/arch/`로 복사됩니다.)
 
 **설치**
 
 ```sh
-sudo pacman -U llcv-2.1.3-1-*.pkg.tar.zst
+sudo pacman -U llcv-2.1.3.1-1-*.pkg.tar.zst
 ```
 
 `makepkg -si`를 쓰면 의존성 설치, 빌드, 설치를 한 번에 합니다.
@@ -392,6 +396,7 @@ ALSA, D-Bus 개발 패키지가 필요합니다.
 | `LLCV_WAYLAND_COLOR_MANAGEMENT` | `AUTO` | Wayland HDR 출력 포함 여부. `ON`이면 필요한 패키지가 없을 때 오류 |
 | `LLCV_SLEEP_INHIBIT` | `AUTO` | 재생 중 데스크톱 포털로 시스템 자동 절전 방지 (`dbus-1` 필요). `ON`이면 `dbus-1`이 없을 때 오류 |
 | `LLCV_RECORDING` | `AUTO` | FFmpeg로 MP4 녹화 기능 포함 (`libavcodec`, `libavformat`, `libavutil`, `libswscale` 필요). `ON`이면 FFmpeg가 없을 때 오류, `OFF`면 녹화 제외 |
+| `LLCV_FFMPEG_STATIC` | `OFF` | `PKG_CONFIG_PATH`로 찾은 `.pc` 파일을 써서 FFmpeg를 정적으로 링크 (`.deb` 빌드는 `tools/build-ffmpeg-static.sh` 결과를 가리킴) |
 | `LLCV_USE_SYSTEM_IMGUI` | `OFF` | 함께 들어 있는 Dear ImGui 대신 시스템 Dear ImGui 1.92 이상 사용 |
 | `LLCV_SOURCE_TREE_DATA` | `ON` | 설치 없이 실행할 때 소스 폴더에서 글꼴·아이콘 찾기 (패키지 빌드에서는 끔) |
 

@@ -1,3 +1,20 @@
+llcv (2.1.3.1) resolute; urgency=medium
+
+  * Fix the .deb packages of 2.1.3, which could not be installed on Ubuntu
+    24.04 and 26.04, Debian 12 and 13 or Raspberry Pi OS 64-bit (trixie):
+    they depended on the FFmpeg libraries of the release they were built
+    on. The packages now contain a minimal FFmpeg 7.1.1 (AAC, x264, NVENC,
+    VA-API and the MP4 muxer) linked statically, so one package per
+    architecture works on every supported release again. Only libva is
+    used from the system.
+  * In the .deb packages, CPU recording is H.264 (x264); HEVC and AV1 need
+    NVENC or VA-API. The armhf package is built without x264, because the
+    distribution's static x264 cannot be linked into a position-independent
+    executable there, and without NVENC, which FFmpeg does not offer on
+    32-bit ARM. Fedora and Arch keep using the system FFmpeg.
+
+ -- Meohong <busimh001@gmail.com>  Mon, 19 Oct 2026 23:00:00 +0900
+
 llcv (2.1.3) resolute; urgency=medium
 
   * Follow the Windows LLCV 2.1.0, 2.1.1, 2.1.2 and 2.1.3 updates.

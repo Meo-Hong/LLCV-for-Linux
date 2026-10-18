@@ -10,10 +10,10 @@ Build-Depends:
  libturbojpeg0-dev,
  libpng-dev,
  libdbus-1-dev,
- libavcodec-dev,
- libavformat-dev,
- libavutil-dev,
- libswscale-dev,
+ libva-dev,
+ libx264-dev,
+ nasm [amd64 i386],
+ xz-utils,
  libwayland-dev,
  libwayland-bin,
  wayland-protocols,
@@ -63,8 +63,8 @@ Description: low-latency viewer for USB HDMI capture devices
  HDR10 passthrough on Wayland compositors with color management, HDR to SDR
  tone mapping everywhere else, immediate or VSync presentation, an
  audio-only mode, PNG screenshots at the capture resolution, MP4 recording
- of SDR video with H.264, HEVC or AV1 through FFmpeg (NVENC, VA-API or CPU
- encoders) and a live diagnostics overlay. It runs on Wayland by default and can also use X11
+ of SDR video with H.264, HEVC or AV1 (NVENC or VA-API; H.264 also on the
+ CPU through x264, using a built-in FFmpeg) and a live diagnostics overlay. It runs on Wayland by default and can also use X11
  (XWayland), with Mesa (AMD, Intel) and NVIDIA OpenGL drivers.
  .
  P010 capture needs Linux 7.1 or newer, or a uvcvideo module with P010

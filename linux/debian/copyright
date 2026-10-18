@@ -27,6 +27,23 @@ Comment: SDL3 3.4.18, downloaded by tools/fetch-sdl3.sh (SHA256 pinned) and
  linked statically only with the pkg.llcv.bundled-sdl3 build profile, for
  releases without SDL3 such as Ubuntu 24.04.
 
+Files: third_party/ffmpeg/ffmpeg-*/*
+Copyright: 2000-2025 the FFmpeg developers
+License: GPL-2+
+Comment: FFmpeg 7.1.1 (https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz),
+ downloaded by tools/fetch-ffmpeg.sh (SHA256 pinned) and built by
+ tools/build-ffmpeg-static.sh with --enable-gpl. Only the AAC, x264, NVENC
+ and VA-API encoders, the MP4 muxer and libswscale are built, and they are
+ linked statically into the .deb packages for MP4 recording. The .deb also
+ links libx264 (GPL-2+) statically from the distribution's libx264-dev; its
+ source is in the distribution archive.
+
+Files: third_party/ffmpeg/nv-codec-headers-*/*
+Copyright: 2010-2024 NVIDIA Corporation
+License: MIT
+Comment: nv-codec-headers 12.0.16.1, header-only NVENC interface used to build
+ FFmpeg; the NVIDIA driver library is loaded at run time.
+
 Files: third_party/wayland-protocols/*
 Copyright: 2019 Sebastian Wick
            2019 Erwin Burema
@@ -64,6 +81,15 @@ License: GPL-3+
  .
  On Debian systems, the complete text of the GNU General Public License
  version 3 can be found in "/usr/share/common-licenses/GPL-3".
+
+License: GPL-2+
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ .
+ On Debian systems, the complete text of the GNU General Public License
+ version 2 can be found in "/usr/share/common-licenses/GPL-2".
 
 License: MIT
  Permission is hereby granted, free of charge, to any person obtaining a copy

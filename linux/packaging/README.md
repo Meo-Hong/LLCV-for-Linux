@@ -3,7 +3,7 @@
 > [한국어](README.ko.md)
 
 The Linux build is released by Meo-hong, separately from the original LLCV
-project. Version 2.1.3 is published on the
+project. Version 2.1.3.1 is published on the
 [Releases](https://github.com/Meo-Hong/LLCV-for-Linux/releases) page, and the
 `.deb` packages update through the APT repository at
 `https://meo-hong.github.io/LLCV-for-Linux/` (GitHub Pages, suite `stable`),
@@ -52,10 +52,13 @@ Packages register the repository because the public key
    - Settings → Pages → Source: GitHub Actions
    - Settings → Environments → `github-pages` → add a deployment tag rule for `linux-v*`
 4. **Release**
-   Push a tag that starts with `linux-v`, such as `linux-v2.1.3`. The
-   workflow builds the packages, signs and deploys the APT repository to
-   Pages, and creates a GitHub release with the five packages and
-   `SHA256SUMS`.
+   Push a tag that starts with `linux-v`, such as `linux-v2.1.3.1`. The
+   workflow builds the packages, installs each `.deb` in clean containers
+   (Ubuntu 22.04, 24.04 and 26.04 and Debian 12 and 13 for amd64, Debian 12
+   and 13 for arm64, Debian 13 for armhf) and runs it, then signs and deploys
+   the APT repository to Pages and creates a GitHub release with the five
+   packages and `SHA256SUMS`. A failed install check stops both. Locally,
+   `tools/test-deb-install.sh <image> <arch> <file.deb>` runs the same check.
 5. **Arch (optional)**
    For the AUR, change the build path in `arch/PKGBUILD` to download the
    release tarball.
@@ -70,15 +73,15 @@ Packages register the repository because the public key
    text, followed by the download table. Without the file, the release shows
    only the table.
 3. Commit and push `main`.
-4. Push a tag such as `linux-v2.1.3` on that commit. GitHub Actions builds the
+4. Push a tag such as `linux-v2.1.3.1` on that commit. GitHub Actions builds the
    five packages, updates the APT repository and creates the release. The
    package version comes from `debian/changelog` and the spec, not from the
    tag name, so keep them the same. Re-running the job for an existing release
    replaces its files and its text.
 
 ```sh
-git tag linux-v2.1.3
-git push origin linux-v2.1.3
+git tag linux-v2.1.3.1
+git push origin linux-v2.1.3.1
 ```
 
 ## On user machines

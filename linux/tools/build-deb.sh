@@ -21,6 +21,7 @@ fi
 case "$profiles" in
     *pkg.llcv.bundled-sdl3*) "$root/tools/fetch-sdl3.sh" >/dev/null ;;
 esac
+"$root/tools/fetch-ffmpeg.sh" >/dev/null
 
 cross=""
 if [ "$host_arch" != "$build_arch" ]; then

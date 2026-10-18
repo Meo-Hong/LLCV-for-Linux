@@ -26,7 +26,9 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 - HDR 크로마 위치, 지원하는 AVerMedia·Elgato 장치의 톤매핑 요청, 옮길 수 있는
   오디오 전용 화면, 설정 화면의 취소 버튼.
 
-전체 목록: [릴리스 노트](release-notes/v2.1.3.md).
+전체 목록: [릴리스 노트](release-notes/v2.1.3.md). **2.1.3.1**은 Ubuntu 24.04·26.04,
+Debian 12·13, Raspberry Pi OS 64비트에 설치되지 않던 2.1.3 `.deb` 패키지를
+고쳤습니다. [2.1.3.1 릴리스 노트](release-notes/v2.1.3.1.md)를 보세요.
 
 | 항목 | Windows판 | 리눅스판 |
 | --- | --- | --- |
@@ -56,11 +58,11 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 
 | 파일 | 설치할 OS | 명령 |
 | --- | --- | --- |
-| `llcv_2.1.3_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.3_amd64.deb` |
-| `llcv_2.1.3_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.1.3_arm64.deb` |
-| `llcv_2.1.3_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.1.3_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.1.3-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.1.3-1.x86_64.rpm` |
-| `llcv-2.1.3-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.3-1-x86_64.pkg.tar.zst` |
+| `llcv_2.1.3.1_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.3.1_amd64.deb` |
+| `llcv_2.1.3.1_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.1.3.1_arm64.deb` |
+| `llcv_2.1.3.1_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.1.3.1_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.1.3.1-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.1.3.1-1.x86_64.rpm` |
+| `llcv-2.1.3.1-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.3.1-1-x86_64.pkg.tar.zst` |
 
 - `.deb`를 설치하면 LLCV APT 저장소도 함께 등록되어, 다음 버전부터는
   `apt upgrade`나 소프트웨어 업데이트로 받습니다. `.rpm`과 Arch는 Releases에서
@@ -189,13 +191,16 @@ HDR을 쓸 수 없는 환경이면 앱이 그 사실과 이유를 직접 알려�
   저장 공간 부족, 쓰기 오류, 인코딩 처리 지연이 생기면 안내와 함께 녹화를
   중단하며, 재생은 계속됩니다.
 
-녹화 기능은 빌드할 때 FFmpeg 4.4 이상이 필요합니다. `.deb`, Fedora `.rpm`, Arch
-패키지에는 들어 있습니다. RHEL, Rocky Linux, AlmaLinux용 `.rpm`은 FFmpeg 없이
-빌드하므로 녹화를 쓸 수 없다고 표시합니다.
+`.deb` 패키지에는 최소 구성의 FFmpeg 7.1.1이 들어 있어서 지원하는 모든 배포판에서
+동작합니다. CPU로는 H.264(x264)를 녹화할 수 있고, HEVC와 AV1은 NVENC나 VA-API가
+필요합니다. Raspberry Pi OS 32비트 패키지에는 x264가 없어서(배포판의 정적 x264를
+링크할 수 없음) 녹화를 쓸 수 없습니다. Fedora `.rpm`과 Arch 패키지는 시스템 FFmpeg를 씁니다(빌드할 때 4.4 이상).
+RHEL, Rocky Linux, AlmaLinux용 `.rpm`은 FFmpeg 없이 빌드하므로 녹화를 쓸 수 없다고
+표시합니다.
 
 ### 녹화 테스트 결과 (2.1.3)
 
-2.1.3 배포 전에, 앱과 같은 녹화·캡처·설정 코드를 그대로 링크한 테스트 프로그램으로
+2.1.3 배포 전과 2.1.3.1에서 다시, 앱과 같은 녹화·캡처·설정 코드를 그대로 링크한 테스트 프로그램으로
 녹화를 확인했습니다. 컨테이너에는 GPU가 없어서 CPU 인코더로 확인했습니다.
 
 | 환경 | 확인한 내용 | 결과 |
@@ -208,6 +213,9 @@ HDR을 쓸 수 없는 환경이면 앱이 그 사실과 이유를 직접 알려�
 | Fedora 44 컨테이너, `ffmpeg-free` 8.1 | `.rpm` 빌드·설치·실행, SVT-AV1 녹화 | 통과. `ffmpeg-free`에는 x264, x265 없음 |
 | Fedora 44 컨테이너 + RPM Fusion FFmpeg (Nobara 구성) | 같은 `.rpm`, x264·x265·SVT-AV1 두 모드 | 통과 |
 | FFmpeg 없는 빌드 (RHEL 계열) | 컴파일 | 통과 |
+| 2.1.3.1: Ubuntu 22.04·24.04·26.04, Debian 12·13 컨테이너 | 22.04에서 빌드한 amd64 `.deb` 하나를 각각 설치·실행 | 통과. FFmpeg와 x264는 정적으로 들어 있고 시스템에서는 libva만 씀 |
+| 2.1.3.1: Ubuntu 26.04, GeForce RTX 2070, `.deb`에 넣은 FFmpeg 7.1.1 | NVENC H.264·HEVC, x264 녹화 | 통과, 누락 프레임 없음 |
+| 2.1.3.1: arm64·armhf `.deb` | 크로스 빌드 | FFmpeg 의존성 없이 통과(armhf는 x264·NVENC 없이 VA-API만). 설치 확인은 CI에서 QEMU로 실행 |
 
 아직 확인하지 못한 것: AMD·Intel의 VA-API 인코딩, 다른 배포판의 NVENC, 실제 HDMI
 소스의 소리 레벨과 A/V 싱크, 녹화 UI(녹화 탭, 녹화 표시, 확인 창). 녹화 UI는 빌드만
@@ -404,7 +412,8 @@ Alt(메뉴 막대)와 Alt+Enter(전체화면)는 고정입니다.
   `40 fps request` 줄을 확인하고, 다른 해상도나 형식을 고르거나 **40fps 캡처**를
   해제하세요.
 - **녹화를 쓸 수 없거나 선택지가 흐리게 보임.** FFmpeg 없이 빌드한 패키지(RHEL
-  계열)이거나, 고른 코덱에 쓸 수 있는 인코더가 없는 경우입니다. 하드웨어 인코딩은
+  계열)이거나, 고른 코덱에 쓸 수 있는 인코더가 없는 경우입니다. `.deb` 패키지에서
+  CPU 녹화는 H.264만 됩니다. 하드웨어 인코딩은
   VA-API 드라이버(Intel은 `intel-media-va-driver`, AMD는 `mesa-va-drivers`)나
   NVIDIA 드라이버를 설치하세요. 아니면 **CPU**를 고르세요. 인코더 확인 결과는
   진단 로그에 남습니다. Fedora 기본 `ffmpeg-free`에는 x264와 x265가 없어서 CPU로

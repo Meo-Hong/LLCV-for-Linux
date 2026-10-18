@@ -29,7 +29,10 @@ desktop is Ubuntu 26.04 (GNOME, Wayland).
 - HDR chroma placement, hardware tone-mapping requests for supported AVerMedia
   and Elgato devices, a movable audio-only view, and Cancel in settings.
 
-Full list: [release notes](release-notes/v2.1.3.md).
+Full list: [release notes](release-notes/v2.1.3.md). **2.1.3.1** fixes the
+2.1.3 `.deb` packages, which could not be installed on Ubuntu 24.04 and 26.04,
+Debian 12 and 13 or Raspberry Pi OS 64-bit; see the
+[2.1.3.1 notes](release-notes/v2.1.3.1.md).
 
 | Area | Windows build | Linux build |
 | --- | --- | --- |
@@ -60,11 +63,11 @@ Download the file for your system from
 
 | File | Install on | Command |
 | --- | --- | --- |
-| `llcv_2.1.3_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.3_amd64.deb` |
-| `llcv_2.1.3_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.1.3_arm64.deb` |
-| `llcv_2.1.3_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.1.3_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.1.3-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.1.3-1.x86_64.rpm` |
-| `llcv-2.1.3-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.3-1-x86_64.pkg.tar.zst` |
+| `llcv_2.1.3.1_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.3.1_amd64.deb` |
+| `llcv_2.1.3.1_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.1.3.1_arm64.deb` |
+| `llcv_2.1.3.1_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.1.3.1_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.1.3.1-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.1.3.1-1.x86_64.rpm` |
+| `llcv-2.1.3.1-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.3.1-1-x86_64.pkg.tar.zst` |
 
 - Installing a `.deb` also registers the LLCV APT repository, so later
   versions arrive through `apt upgrade` or Software Updater. For `.rpm` and
@@ -202,13 +205,17 @@ stop and finish the file. The options are under **Settings → Recording**.
   recording and saves it. Low disk space, write errors and an encoder that
   cannot keep up stop the recording with a notice; playback continues.
 
-Recording needs FFmpeg 4.4 or newer at build time. The `.deb`, Fedora `.rpm`
-and Arch packages include it. The RHEL, Rocky Linux and AlmaLinux `.rpm` is
-built without FFmpeg and shows recording as unavailable.
+The `.deb` packages contain their own minimal FFmpeg 7.1.1, so they work on
+every supported release: H.264 can be recorded on the CPU (x264), while HEVC
+and AV1 need NVENC or VA-API. The Raspberry Pi OS 32-bit package has no x264
+(the distribution's static x264 cannot be linked there), so recording is not
+available on it. The Fedora `.rpm` and the Arch package use the
+system FFmpeg (4.4 or newer when building). The RHEL, Rocky Linux and
+AlmaLinux `.rpm` is built without FFmpeg and shows recording as unavailable.
 
 ### Recording tests (2.1.3)
 
-Before the 2.1.3 release, recording was checked with test programs that link
+Before the 2.1.3 release, and again for 2.1.3.1, recording was checked with test programs that link
 the same recording, capture and settings code as the app. Containers have no
 GPU, so they used the CPU encoders.
 
@@ -222,6 +229,9 @@ GPU, so they used the CPU encoders.
 | Fedora 44 container, `ffmpeg-free` 8.1 | `.rpm` build, install, run; SVT-AV1 recording | Passed. x264 and x265 are not in `ffmpeg-free` |
 | Fedora 44 container with RPM Fusion FFmpeg (Nobara setup) | Same `.rpm`; x264, x265 and SVT-AV1 in both modes | Passed |
 | Build without FFmpeg (RHEL family) | Compile | Passed |
+| 2.1.3.1: Ubuntu 22.04, 24.04 and 26.04, Debian 12 and 13 containers | One amd64 `.deb` (built on 22.04) installed and run on each | Passed. FFmpeg and x264 are linked statically; only libva comes from the system |
+| 2.1.3.1: Ubuntu 26.04, GeForce RTX 2070, FFmpeg 7.1.1 built into the `.deb` | NVENC H.264 and HEVC, x264 recording | Passed, no dropped frames |
+| 2.1.3.1: arm64 and armhf `.deb` | Cross build | Passed with no FFmpeg dependency (armhf has VA-API only, without x264 and NVENC); install checks run in CI under QEMU |
 
 Not checked yet: VA-API encoding on AMD and Intel, NVENC on other
 distributions, sound level and A/V sync with a live HDMI source, and the
@@ -432,7 +442,8 @@ and settings show the assigned keys.
   `40 fps request` line in the diagnostic log, then choose another resolution
   or format, or uncheck **40 fps capture**.
 - **Recording is unavailable or greyed out.** The package was built without
-  FFmpeg (RHEL family), or no encoder works for the chosen codec. For hardware
+  FFmpeg (RHEL family), or no encoder works for the chosen codec. With the
+  `.deb` packages, CPU recording is H.264 only. For hardware
   encoding install the VA-API driver (`intel-media-va-driver` for Intel,
   `mesa-va-drivers` for AMD) or the NVIDIA driver, or choose **CPU**. The
   diagnostic log lists the result of each encoder check. Fedora's default

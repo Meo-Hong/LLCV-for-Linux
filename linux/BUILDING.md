@@ -94,8 +94,8 @@ for your password.
 At the end, it prints the package and the install command, for example:
 
 ```text
-Package: /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3_amd64.deb
-Install: sudo apt install /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3_amd64.deb
+Package: /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3.1_amd64.deb
+Install: sudo apt install /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3.1_amd64.deb
 ```
 
 **5. Install**
@@ -155,10 +155,15 @@ development packages that are needed to build SDL3 into the program.
 ```
 
 Without SDL3, the script downloads the SDL3 source (`tools/fetch-sdl3.sh`)
-and builds it in.
+and builds it in. For recording, the script always downloads the FFmpeg 7.1.1
+and nv-codec-headers sources (`tools/fetch-ffmpeg.sh`, SHA256 pinned), and the
+package build compiles a minimal FFmpeg (`tools/build-ffmpeg-static.sh`: AAC,
+x264, NVENC, VA-API, MP4) and links it statically together with the
+distribution's static `libx264`. This keeps one `.deb` per architecture
+installable on every release; it adds a few minutes to the build.
 
 **Result**: `dist/<distro>-<version>/llcv_<version>~<distro><version>_<arch>.deb`
-(for example `dist/debian-13/llcv_2.1.3_arm64.deb`)
+(for example `dist/debian-13/llcv_2.1.3.1_arm64.deb`)
 
 **Install.** The folder name is your `ID`-`VERSION_ID`:
 
@@ -226,7 +231,7 @@ no FFmpeg, so that build has no recording.
 ./tools/build-rpm.sh
 ```
 
-**Result**: `dist/<distro>-<version>/llcv-2.1.3-1.x86_64.rpm`
+**Result**: `dist/<distro>-<version>/llcv-2.1.3.1-1.x86_64.rpm`
 (debug packages `llcv-debuginfo` and `llcv-debugsource`, and a source RPM, are
 created too)
 
@@ -253,13 +258,13 @@ cd packaging/arch
 makepkg -f
 ```
 
-**Result**: `packaging/arch/llcv-2.1.3-1-x86_64.pkg.tar.zst`
+**Result**: `packaging/arch/llcv-2.1.3.1-1-x86_64.pkg.tar.zst`
 (`./tools/build-package.sh` also copies it to `dist/arch/`)
 
 **Install**
 
 ```sh
-sudo pacman -U llcv-2.1.3-1-*.pkg.tar.zst
+sudo pacman -U llcv-2.1.3.1-1-*.pkg.tar.zst
 ```
 
 `makepkg -si` installs the dependencies, builds and installs in one step.
@@ -400,6 +405,7 @@ ALSA and D-Bus development packages.
 | `LLCV_WAYLAND_COLOR_MANAGEMENT` | `AUTO` | Build HDR output for Wayland; `ON` makes missing dependencies an error |
 | `LLCV_SLEEP_INHIBIT` | `AUTO` | Block automatic suspend during playback through the desktop portal (needs `dbus-1`); `ON` makes a missing `dbus-1` an error |
 | `LLCV_RECORDING` | `AUTO` | Build MP4 recording through FFmpeg (needs `libavcodec`, `libavformat`, `libavutil`, `libswscale`); `ON` makes missing FFmpeg an error, `OFF` leaves recording out |
+| `LLCV_FFMPEG_STATIC` | `OFF` | Link FFmpeg statically, using the `.pc` files found through `PKG_CONFIG_PATH` (the `.deb` build points it at `tools/build-ffmpeg-static.sh` output) |
 | `LLCV_USE_SYSTEM_IMGUI` | `OFF` | Use a system Dear ImGui 1.92 or newer instead of the bundled copy |
 | `LLCV_SOURCE_TREE_DATA` | `ON` | Find fonts and icons in the source tree when not installed (off for packages) |
 

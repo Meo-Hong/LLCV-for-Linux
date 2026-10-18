@@ -6,6 +6,7 @@ cross_arch="${2:-}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 
 "$root/tools/fetch-sdl3.sh" >/dev/null
+"$root/tools/fetch-ffmpeg.sh" >/dev/null
 mkdir -p "$root/dist"
 
 docker="docker"

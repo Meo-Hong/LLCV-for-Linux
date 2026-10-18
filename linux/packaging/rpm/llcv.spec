@@ -11,7 +11,7 @@
 %endif
 
 Name:           llcv
-Version:        2.1.3
+Version:        2.1.3.1
 Release:        1
 Summary:        Low-latency viewer for USB HDMI capture devices
 
@@ -121,6 +121,10 @@ cp -p third_party/noto-sans-jp/LICENSE.txt NotoSansJP-LICENSE.txt
 %{_prefix}/lib/udev/rules.d/70-llcv-elgato-hid.rules
 
 %changelog
+* Mon Oct 19 2026 Meohong <busimh001@gmail.com> - 2.1.3.1-1
+- Version kept in step with the .deb fix release (the .deb packages now
+  contain a static FFmpeg). No change to the RPM build.
+
 * Mon Oct 19 2026 Meohong <busimh001@gmail.com> - 2.1.3-1
 - Follow the Windows LLCV 2.1.0 to 2.1.3 updates.
 - MP4 recording (F9) of NV12, YUY2, MJPEG and BGR24 SDR video with stereo
