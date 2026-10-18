@@ -16,10 +16,10 @@ Get one of the files from the [latest release](https://github.com/seria-aa/LowLa
   shortcut is created automatically; the desktop shortcut is optional.
 - **x64.zip — portable:** extract it, then run `LowLatencyCaptureViewer.exe`.
 
-**Updating to 2.1.1:** existing installation paths and settings are retained.
-Adds MJPEG input recording, separate recording volume and unlisted 30 fps requests,
-with recording layout and reliability improvements.
-[Recording guide](RECORDING.md) · [2.1.1 release notes](release-notes-v2.1.1.md)
+**Updating to 2.1.2:** existing installation paths and settings are retained.
+Improves encoder checks, recording-start audio and live free-space updates, and fixes
+MJPEG color metadata handling, settings shortcut conflicts and position saving when minimized.
+[Recording guide](RECORDING.md) · [2.1.2 release notes](release-notes-v2.1.2.md)
 **40 fps capture**, added in [2.0.4](release-notes-v2.0.4.md),
 remains off by default; enable it under **Video** only when needed.
 Sleep prevention and earlier settings improvements are covered in the
@@ -222,6 +222,8 @@ combinations, and some reserved combinations such as Alt+F4 cannot be assigned.
 Help, settings, and OSD labels show the assigned keys, and longer combinations
 expand the key column. Shortcuts act within LLCV, not globally in other apps.
 Settings controls retain their normal navigation and editing keys.
+While settings are open, Help and Recording shortcuts use only **F1–F24 except F4**,
+with or without Ctrl/Alt/Shift. All valid assigned keys continue to work in the viewer.
 
 <details>
 <summary>View shortcut settings</summary>
@@ -260,7 +262,8 @@ fullscreen. **Keep relative window size when moving monitors** maintains similar
 screen coverage across monitors. It is independent of Pixel-perfect, so press
 `F5` if you need exact 1:1 sizing after a move. F5 also resets the relative-size
 baseline to the restored capture-sized window, including when VSR's display size
-differs. The window position is saved. Edge snap can be enabled or disabled and
+differs. The window position is saved; closing while minimized retains the position
+the window would restore to. Edge snap can be enabled or disabled and
 uses the same edge-distance threshold for snapping and releasing; hold Shift to bypass it.
 
 **Since 2.0.1:** **Window → Rounded corners (Windows 11)** uses the same standard

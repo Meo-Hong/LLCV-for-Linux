@@ -5,7 +5,7 @@
 A low-latency Windows viewer for video and audio from HDMI capture devices.
 Use it to play console games without OBS, or listen in audio-only mode.
 
-**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.1.1.md) · [한국어](README.ko.md)
+**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.1.2.md) · [한국어](README.ko.md)
 
 <br>
 
@@ -17,12 +17,11 @@ Use it to play console games without OBS, or listen in audio-only mode.
 
 <br>
 
-## What's new in 2.1.1
+## What's new in 2.1.2
 
-Added **MJPEG input recording** and **recording volume** independent of playback volume.
-**Allow unlisted FPS** lets you request 30 fps even when the driver does not list it.
-Also refined recording settings, start/stop reliability and recorded color metadata.
-[Recording guide](docs/RECORDING.md) · [Full release notes](docs/release-notes-v2.1.1.md)
+Fixed settings-close hangs during encoder checks and audio loss at the start of recordings.
+Also corrected MJPEG color metadata, free-space updates, shortcut conflicts in settings and window-position restoration after minimized exit.
+[Recording guide](docs/RECORDING.md) · [Full release notes](docs/release-notes-v2.1.2.md)
 
 <br>
 

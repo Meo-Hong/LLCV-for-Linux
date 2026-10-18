@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(LowLatencyCaptureViewer VERSION 2.1.1 LANGUAGES CXX)
+project(LowLatencyCaptureViewer VERSION 2.1.2 LANGUAGES CXX)
 
 include(cmake/MsvcDependencies.cmake)
 
@@ -168,6 +168,13 @@ if(BUILD_TESTING)
     set_target_properties(RecordingEncoderProbeTests PROPERTIES WIN32_EXECUTABLE FALSE)
     add_test(NAME RecordingEncoderProbeTests COMMAND RecordingEncoderProbeTests)
     set_tests_properties(RecordingEncoderProbeTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    add_executable(EncoderProbeProcessTests tests/EncoderProbeProcessTests.cpp)
+    target_include_directories(EncoderProbeProcessTests PRIVATE src)
+    target_compile_definitions(EncoderProbeProcessTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(EncoderProbeProcessTests PRIVATE /W4 /EHsc /utf-8)
+    set_target_properties(EncoderProbeProcessTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME EncoderProbeProcessTests COMMAND EncoderProbeProcessTests)
+    set_tests_properties(EncoderProbeProcessTests PROPERTIES TIMEOUT 15)
     add_executable(RecordingTests tests/RecordingTests.cpp src/recording/Recorder.cpp
         src/recording/RecordingOptions.cpp src/recording/EncoderSupport.cpp)
     target_include_directories(RecordingTests PRIVATE src)

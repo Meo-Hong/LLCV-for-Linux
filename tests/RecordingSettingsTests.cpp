@@ -11,6 +11,9 @@ static std::wstring Text(HWND control){wchar_t text[512]{};GetWindowTextW(contro
 static LRESULT CALLBACK Changes(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR data){
     if(m==WM_ENABLE)++*reinterpret_cast<int*>(data);return DefSubclassProc(h,m,w,l);
 }
+static LRESULT CALLBACK TextChanges(HWND h,UINT m,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR data){
+    if(m==WM_SETTEXT)++*reinterpret_cast<int*>(data);return DefSubclassProc(h,m,w,l);
+}
 int main(){
     setvbuf(stdout,nullptr,_IONBF,0);
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -63,6 +66,56 @@ int main(){
         s.activeTab=SettingsTab::VideoWindow;ShowRecordingSettings(&s);
         s.activeTab=SettingsTab::Recording;ShowRecordingSettings(&s);
         Check(Text(s.recSpace)!=L"Storage query sentinel","returning to recording refreshes storage information");
+        const auto originalFolder=s.recordingOptions.folder;
+        s.recordingSnapshot.busy=true;
+        s.recordingSnapshot.path=s.recordingStoragePath+L"\\session.mp4";
+        s.recordingSnapshot.freeBytesKnown=true;s.recordingSnapshot.freeBytes=123000000000ull;
+        ShowRecordingSettings(&s);
+        Check(Text(s.recSpace).find(L"123.0 GB")!=std::wstring::npos,"busy storage uses recording worker measurement");
+        s.recordingSnapshot.freeBytes=122000000000ull;ShowRecordingSettings(&s);
+        Check(Text(s.recSpace).find(L"122.0 GB")!=std::wstring::npos,"storage reflects changed worker measurement without reopening tab");
+        s.activeTab=SettingsTab::VideoWindow;ShowRecordingSettings(&s);
+        s.activeTab=SettingsTab::Recording;ShowRecordingSettings(&s);
+        Check(Text(s.recSpace).find(L"122.0 GB")!=std::wstring::npos,"busy tab reopen keeps using worker measurement");
+        int storageTextChanges=0;
+        SetWindowSubclass(s.recSpace,TextChanges,2,reinterpret_cast<DWORD_PTR>(&storageTextChanges));
+        SetWindowSubclass(s.recFolder,TextChanges,2,reinterpret_cast<DWORD_PTR>(&storageTextChanges));
+        for(int i=0;i<50;++i)ShowRecordingSettings(&s);
+        Check(storageTextChanges==0,"unchanged storage polling does not reset label text");
+        s.recordingSnapshot.freeBytesKnown=false;ShowRecordingSettings(&s);
+        const auto unavailable=Text(s.recSpace);
+        Check(unavailable.find(english?L"unavailable":L"확인할 수 없습니다")!=std::wstring::npos,
+            "unknown worker measurement replaces stale known space");
+        Check(unavailable.find(L"GB")==std::wstring::npos,"unknown space is not shown as zero");
+        storageTextChanges=0;
+        for(int i=0;i<50;++i)ShowRecordingSettings(&s);
+        Check(storageTextChanges==0,"unchanged unknown storage does not reset label text");
+        s.recordingSnapshot.freeBytesKnown=true;s.recordingSnapshot.freeBytes=0;ShowRecordingSettings(&s);
+        Check(Text(s.recSpace).find(L"0.0 GB")!=std::wstring::npos,"measured zero space remains distinct from unavailable");
+        s.recordingSnapshot.freeBytes=121000000000ull;
+        s.recordingOptions.folder=L"C:\\LLCV-Recording-Storage-Regression-Missing";ShowRecordingSettings(&s);
+        Check(Text(s.recSpace)==unavailable,"another recording folder cannot reuse worker space");
+        Check(Text(s.recFolder)==s.recordingOptions.folder,"folder caption follows selected folder");
+        s.recordingSnapshot.path=L"c:/LLCV-Recording-Storage-Regression-Missing/segment-002.mp4";
+        s.recordingOptions.folder+=L"\\";ShowRecordingSettings(&s);
+        Check(Text(s.recSpace).find(L"121.0 GB")!=std::wstring::npos,
+            "same folder accepts split file, slash, case and trailing separator differences");
+        s.recordingSnapshot.path.clear();ShowRecordingSettings(&s);
+        Check(Text(s.recSpace)==unavailable,"new session without path cannot show previous storage");
+        s.recordingOptions.folder=originalFolder;
+        s.recordingSnapshot.path=s.recordingStoragePath+L"\\old-session.mp4";
+        s.recordingSnapshot.freeBytes=987654000000000ull;
+        s.recordingSnapshot.busy=false;ShowRecordingSettings(&s);
+        Check(Text(s.recSpace).find(L"987654.0 GB")==std::wstring::npos,
+            "recording completion refreshes selected folder instead of stale session storage");
+        SetWindowTextW(s.recSpace,L"Idle storage sentinel");
+        ShowRecordingSettings(&s);
+        Check(Text(s.recSpace)==L"Idle storage sentinel","idle polling preserves cached storage");
+        s.activeTab=SettingsTab::VideoWindow;ShowRecordingSettings(&s);
+        s.activeTab=SettingsTab::Recording;ShowRecordingSettings(&s);
+        Check(Text(s.recSpace)!=L"Idle storage sentinel","idle tab reopen refreshes storage after recording");
+        RemoveWindowSubclass(s.recSpace,TextChanges,2);RemoveWindowSubclass(s.recFolder,TextChanges,2);
+        s.recordingSnapshot={};
         const auto recordingNote=Text(s.recNote);
         Check(recordingNote.find(L"CQP")!=std::wstring::npos&&recordingNote.find(L"MP4")!=std::wstring::npos,"essential recording guidance retained");
         Check(recordingNote.find(L"NV12")!=std::wstring::npos && recordingNote.find(L"YUY2")!=std::wstring::npos &&
@@ -70,7 +123,19 @@ int main(){
             recordingNote.find(L"PCM")!=std::wstring::npos,"supported recording input formats are explicit");
         Check(!IsWindowEnabled(s.recordingCodecs[0]),"pending probe disables codecs");
         s.recordingProbePending=false;
+        s.recordingProbeFailed=true;RefreshRecordingSettings(&s);
+        const auto failedProbeText=Text(s.recStatus);
+        Check(failedProbeText==(english?L"Encoder check could not finish.\nReopen settings to retry.":
+            L"인코더 확인을 완료하지 못했습니다.\n설정을 다시 열어 재시도하세요."),"failed probe explains retry instead of unsupported hardware");
+        for(auto codec:s.recordingCodecs)Check(!IsWindowEnabled(codec),"failed probe keeps unavailable codecs disabled");
+        ShowRecordingSettings(&s);RefreshRecordingSettings(&s);
+        Check(Text(s.recStatus)==failedProbeText,"view refresh preserves probe failure guidance");
         s.recordingCapabilities[0]={true,true,{{L"Test hardware",L"test"}},{true,true},{true,true}};
+        RefreshRecordingSettings(&s);
+        Check(!IsWindowEnabled(s.recordingCodecs[0])&&!IsWindowEnabled(s.recEncoder),"failed probe does not reuse stale capabilities");
+        s.recordingLive=true;
+        Check(!CanToggleRecordingSettings(&s),"failed probe cannot start an unverified encoder");
+        s.recordingLive=false;s.recordingProbeFailed=false;
         s.recordingCapabilities[1]={true,false,{{L"Test HEVC",L"test"}},{true,true},{}};
         // An installed encoder without MP4 mux support must stay disabled.
         s.recordingCapabilities[2]={false,true,{}};RefreshRecordingSettings(&s);

@@ -218,6 +218,58 @@ static void TestRecordingViewerLifecycle(const wchar_t* windowClass,HINSTANCE in
 }
 #endif
 
+static void TestMinimizedWindowPlacement() {
+    const bool savedFullscreen=g_fullscreen, savedHaveWindowed=g_haveLastWindowedRect;
+    const RECT savedWindowed=g_lastWindowedRect;
+    g_fullscreen=false;
+    // Synthetic monitor origins cover left/top taskbars and negative desktop
+    // coordinates without changing the user's monitor or taskbar settings.
+    for(POINT origin:{POINT{0,0},POINT{-1920,-1080},POINT{1920,0}})
+    for(POINT inset:{POINT{0,0},POINT{48,0},POINT{0,40},POINT{48,40}}) {
+        MONITORINFO monitor{sizeof(monitor)};
+        monitor.rcMonitor={origin.x,origin.y,origin.x+1920,origin.y+1080};
+        monitor.rcWork={origin.x+inset.x,origin.y+inset.y,origin.x+1920,origin.y+1040};
+        const RECT normal{origin.x+100,origin.y+120,origin.x+500,origin.y+360};
+        const RECT screen=NormalPlacementScreenRect(normal,0,monitor);
+        Require(screen.left==normal.left+inset.x && screen.top==normal.top+inset.y &&
+            screen.right-screen.left==400 && screen.bottom-screen.top==240,
+            "ordinary placement converts workspace origin once while preserving extent");
+        const RECT tool=NormalPlacementScreenRect(normal,WS_EX_TOOLWINDOW,monitor);
+        Require(EqualRect(&normal,&tool),"tool-window placement is already in screen coordinates");
+    }
+    std::vector<HMONITOR> monitors;
+    EnumDisplayMonitors(nullptr,nullptr,[](HMONITOR monitor,HDC,LPRECT,LPARAM data)->BOOL {
+        reinterpret_cast<std::vector<HMONITOR>*>(data)->push_back(monitor);return TRUE;
+    },reinterpret_cast<LPARAM>(&monitors));
+    Require(!monitors.empty(),"placement fixture enumerates display work areas");
+    for(HMONITOR monitor:monitors) for(DWORD exStyle:{DWORD{0},DWORD{WS_EX_TOOLWINDOW}}) {
+        MONITORINFOEXW info{};info.cbSize=sizeof(info);
+        Require(GetMonitorInfoW(monitor,&info)!=FALSE,"placement fixture monitor information");
+        HWND hwnd=CreateWindowExW(exStyle|WS_EX_NOACTIVATE,L"STATIC",L"Hidden placement regression",
+            WS_POPUP|WS_MINIMIZEBOX,info.rcWork.left+60,info.rcWork.top+80,400,240,
+            nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+        Require(hwnd!=nullptr,"placement fixture window");
+        RECT expected{};Require(GetWindowRect(hwnd,&expected)!=FALSE,"normal fixture rectangle");
+        ShowWindow(hwnd,SW_SHOWMINNOACTIVE);ShowWindow(hwnd,SW_HIDE);
+        Require(IsIconic(hwnd)!=FALSE,"fixture remains iconic while hidden");
+        PersistWindowPosition(hwnd);
+        auto loaded=llcv::settings::LoadFromIni(SettingsPath()).settings;
+        Require(loaded.hasWindowPosition && loaded.windowX==expected.left && loaded.windowY==expected.top &&
+            loaded.monitorDevice==info.szDevice,
+            "minimized close persists the normal rectangle and its original monitor, never -32000");
+        g_fullscreen=true;g_haveLastWindowedRect=true;
+        g_lastWindowedRect=expected;OffsetRect(&g_lastWindowedRect,10,15);
+        PersistWindowPosition(hwnd);
+        loaded=llcv::settings::LoadFromIni(SettingsPath()).settings;
+        Require(loaded.windowX==expected.left+10 && loaded.windowY==expected.top+15,
+            "fullscreen retains the saved windowed rectangle even when minimized");
+        g_fullscreen=false;DestroyWindow(hwnd);
+    }
+    g_fullscreen=savedFullscreen;g_haveLastWindowedRect=savedHaveWindowed;
+    g_lastWindowedRect=savedWindowed;
+    std::puts("Window placement: workspace/tool-window conversion and minimized/fullscreen persistence passed.");
+}
+
 static void TestViewerLifecycle() {
     const auto savedSettings = g_settings;
     const bool savedSuppress = g_suppressSettingsSave;
@@ -237,6 +289,7 @@ static void TestViewerLifecycle() {
     wc.lpfnWndProc = ViewerLifecycleTestProc;
     wc.lpszClassName = L"LLCV_VIEWER_LIFECYCLE_TEST";
     Require(RegisterClassW(&wc) != 0, "register lifecycle fixture");
+    TestMinimizedWindowPlacement();
 
     enum class Stop { BeforeLoop, DuringMessage, NormalClose, SettingsAction, ExitShortcut, Quit, MissingClose };
     for (bool audioOnly : {false, true}) {

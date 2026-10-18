@@ -242,7 +242,103 @@ static void TestExclusiveScanLifecycle() {
     std::puts("Exclusive lifecycle: buffer preservation, partial save, close and duplicates passed.");
 }
 
+static void TestConnectedMjpegColor() {
+    using namespace llcv::video;
+    using namespace llcv::video_color;
+    VIDEOINFOHEADER2 info{};
+    info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth=640;info.bmiHeader.biHeight=480;
+    info.bmiHeader.biCompression=MAKEFOURCC('M','J','P','G');
+    info.bmiHeader.biSizeImage=640*480*3;info.AvgTimePerFrame=166667;
+    AM_MEDIA_TYPE type{};
+    type.majortype=MEDIATYPE_Video;type.subtype=MEDIASUBTYPE_MJPG;
+    type.formattype=FORMAT_VideoInfo2;type.cbFormat=sizeof(info);
+    type.pbFormat=reinterpret_cast<BYTE*>(&info);
+    for(unsigned scenario=0;scenario<4;++scenario) {
+        DirectShowColorMetadata effective{};
+        if(scenario!=0) {
+            effective.present=true;effective.transferMatrix=2;effective.nominalRange=1;
+        }
+        // Connection-only full declaration, override a selected hint, partial
+        // declaration, or no declaration (preserve selected/capability hints).
+        info.dwControlFlags=scenario==3 ? 0 : 0x81u | (2u<<12) | (scenario==2?0u:1u<<15);
+        VideoSampleFormat format{};
+        Require(ReadConnectedVideoSampleFormat(&type,60,effective,format),
+            "production final connected format accepts MJPEG metadata");
+        const unsigned matrix=scenario<2?1u:2u, range=scenario==3?1u:2u;
+        Require(effective.present && effective.transferMatrix==matrix && effective.nominalRange==range &&
+            format.color.transferMatrix==matrix && format.color.nominalRange==range,
+            "playback and recording signature retain identical final metadata");
+        Require(MatchesVideoSampleFormat(&type,format),
+            "identical connected MJPEG announcement is not rejected as a color change");
+        auto changed=info;changed.dwControlFlags=0x81u|((range==1?2u:1u)<<12)|(matrix<<15);
+        auto changedType=type;changedType.pbFormat=reinterpret_cast<BYTE*>(&changed);
+        Require(!MatchesVideoSampleFormat(&changedType,format),
+            "real MJPEG range change is still rejected by the dynamic-type guard");
+        for(auto overrideMode:{Override::Auto,Override::Bt709Full,Override::Bt601Limited}) {
+            MjpegDecoder playback, recording;
+            Check(playback.initialize(640,480,60,&type,&effective,overrideMode,nullptr),
+                "playback MJPEG decoder uses effective connected color");
+            Check(recording.initialize(640,480,60,&type,&format.color,overrideMode,nullptr),
+                "recording MJPEG decoder uses the same connected color");
+            Require(playback.colorConfiguration()==recording.colorConfiguration(),
+                "automatic and manually overridden MJPEG playback/recording colors agree");
+        }
+    }
+    std::puts("MJPEG connected color: connection-only/override/partial/omitted hints and decoder parity passed.");
+}
+
+#ifdef LLCV_RECORDING
+static LRESULT CALLBACK RecordingShortcutFixtureProc(HWND hwnd,UINT message,WPARAM w,LPARAM l) {
+    if(message==WM_COMMAND && LOWORD(w)==llcv::settings_ui::kRecordingToggleCommand) {
+        ++*reinterpret_cast<unsigned*>(GetWindowLongPtrW(hwnd,GWLP_USERDATA));return 0;
+    }
+    return DefWindowProcW(hwnd,message,w,l);
+}
+static void TestRecordingSettingsShortcuts() {
+    const auto saved=g_settings.shortcuts;
+    WNDCLASSW wc{};wc.hInstance=GetModuleHandleW(nullptr);
+    wc.lpfnWndProc=RecordingShortcutFixtureProc;wc.lpszClassName=L"LLCV_RECORDING_SHORTCUT_TEST";
+    Require(RegisterClassW(&wc)!=0,"recording shortcut fixture class");
+    HWND dialog=CreateWindowW(wc.lpszClassName,L"",WS_POPUP,-32000,-32000,100,100,
+        nullptr,nullptr,wc.hInstance,nullptr);
+    HWND child=CreateWindowW(L"EDIT",L"",WS_CHILD,0,0,50,20,dialog,nullptr,wc.hInstance,nullptr);
+    Require(dialog&&child,"recording shortcut fixture windows");
+    unsigned toggles=0;SetWindowLongPtrW(dialog,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(&toggles));
+    for(unsigned binding:{unsigned(VK_SPACE),unsigned(VK_RETURN),unsigned(VK_TAB),unsigned(VK_ESCAPE),
+        unsigned(VK_LEFT),unsigned(VK_RIGHT),unsigned(VK_UP),unsigned(VK_DOWN),unsigned(VK_HOME),
+        unsigned(VK_END),unsigned(VK_PRIOR),unsigned(VK_NEXT),unsigned(VK_BACK),unsigned(VK_DELETE),
+        unsigned(VK_F4),unsigned('A'),keys::Ctrl|'A',keys::Ctrl|'V',keys::Alt|'A',unsigned(VK_NUMPAD2)}) {
+        g_settings.shortcuts[static_cast<size_t>(keys::Action::Recording)]=binding;
+        MSG key{};key.hwnd=child;key.message=WM_KEYDOWN;key.wParam=binding&0xff;
+        Require(!ProcessSettingsRecordingShortcut(dialog,key,binding&0x700) && toggles==0,
+            "navigation/editing/native F4 cannot start or stop recording from settings");
+    }
+    for(unsigned binding:{unsigned(VK_F9),keys::Ctrl|VK_F10}) {
+        g_settings.shortcuts[static_cast<size_t>(keys::Action::Recording)]=binding;
+        MSG key{};key.hwnd=child;key.message=WM_KEYDOWN;key.wParam=binding&0xff;
+        const unsigned before=toggles;
+        Require(ProcessSettingsRecordingShortcut(dialog,key,binding&0x700) && toggles==before+1,
+            "default/custom function recording key dispatches exactly once from settings child");
+        key.lParam=LPARAM{1}<<30;
+        Require(ProcessSettingsRecordingShortcut(dialog,key,binding&0x700) && toggles==before+1,
+            "recording key repeat is consumed without a second toggle");
+        key.message=WM_KEYUP;
+        Require(!ProcessSettingsRecordingShortcut(dialog,key,binding&0x700),"key release never toggles recording");
+        key.message=WM_KEYDOWN;key.hwnd=nullptr;
+        Require(!ProcessSettingsRecordingShortcut(dialog,key,binding&0x700),"other windows are not settings shortcuts");
+    }
+    DestroyWindow(dialog);UnregisterClassW(wc.lpszClassName,wc.hInstance);
+    g_settings.shortcuts=saved;
+    std::puts("Recording settings shortcuts: native navigation/editing, F4, F9/custom function key and repeats passed.");
+}
+#endif
+
 static void TestSettingsController() {
+    TestConnectedMjpegColor();
+#ifdef LLCV_RECORDING
+    TestRecordingSettingsShortcuts();
+#endif
     Require(!SuppressSettingsWritesForRun(nullptr) &&
             !SuppressSettingsWritesForRun(L"") &&
             !SuppressSettingsWritesForRun(L"--settings-tab 2"),
@@ -318,13 +414,13 @@ static void TestSettingsController() {
             -32000,-32000,100,100,nullptr,nullptr,wc.hInstance,&state);
         Require(hwnd!=nullptr,"encoder probe close fixture");
         std::atomic<bool> started{false},cancelled{false};
-        state.recordingProbe=std::make_unique<llcv::settings_ui::SettingsModeCache<llcv::recording::Capabilities>>(
+        state.recordingProbe=std::make_unique<llcv::settings_ui::SettingsModeCache<llcv::recording::EncoderProbeResult>>(
             [&](const auto&){
                 started=true;
                 const auto deadline=GetTickCount64()+2000;
                 while(!state.recordingProbeStop && GetTickCount64()<deadline)Sleep(1);
                 cancelled=state.recordingProbeStop.load();
-                return llcv::recording::Capabilities{};
+                return llcv::recording::EncoderProbeResult{};
             },[]{});
         state.recordingProbe->Request({});
         const auto deadline=GetTickCount64()+2000;
@@ -1217,6 +1313,7 @@ int main(int argc, char** argv) {
     }
     if (argc > 1 && std::string(argv[1]) == "--viewer-lifecycle") {
         Check(CoInitializeEx(nullptr, COINIT_MULTITHREADED), "lifecycle COM");
+        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         INITCOMMONCONTROLSEX controls{sizeof(controls), ICC_WIN95_CLASSES};
         Require(InitCommonControlsEx(&controls) != FALSE, "lifecycle common controls");
         TestViewerLifecycle();

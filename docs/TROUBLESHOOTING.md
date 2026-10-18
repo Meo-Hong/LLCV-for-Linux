@@ -134,7 +134,8 @@ source as 4K does not create additional detail.
 
 Some MJPEG devices omit Full/Limited range or BT.601/709 information. The
 viewer resolves it from the Media Foundation decoder, DirectShow metadata, and
-finally the MJPEG fallback. Check **Video quality** in the Tab overlay and the
+finally the MJPEG fallback. Color metadata from the final connected capture format
+is also used for playback and recording. Check **Video quality** in the Tab overlay and the
 `[video] MJPEG color` log line for the applied result. If another application
 still differs, explicitly select MJPEG and use the **MJPEG color
 interpretation** control that appears. Compare BT.709 Full/Limited first, then
@@ -174,6 +175,8 @@ Click the viewer to focus LLCV, then check your bindings under **Guide & logs**.
 Choose **Start** after editing them; **Cancel** discards unapplied changes.
 Settings controls keep their normal input/navigation keys, and video-only
 actions remain unavailable in audio-only mode.
+In settings, Help and Recording shortcuts work only when assigned to **F1–F24 except F4**,
+with or without Ctrl/Alt/Shift. For a different assigned key, focus the viewer to use it.
 
 If you forget the Settings shortcut, hold **Shift** while launching. Use
 **Reset defaults → Start** to restore the standard bindings.
@@ -224,6 +227,8 @@ application had been running.
 ## Recording fails to start or stops
 
 Check for SDR/stereo input and select a supported codec, encoder and rate-control mode.
+If **Encoder check could not finish** appears, close and reopen settings to retry.
+This differs from an unsupported codec; you do not need to wait for the check to finish before closing settings.
 Check free space and folder write permissions. For overload, lower recording resolution/rate limits.
 Read the failure notice for save status. Keep files after an unexpected exit and check them in a compatible player.
 See [recording support and file protection](RECORDING.md).

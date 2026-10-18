@@ -75,6 +75,8 @@ frame queue, but the device encoder and decoder path can still add more latency
 and load than NV12 or YUY2.
 Decode buffers are reused to reduce repeated allocation. This does not change
 the latest-frame policy or guarantee lower end-to-end latency on every device.
+Playback and recording use color metadata from the final connection, retaining
+earlier hints when later types omit them.
 The viewer prefers the decoder-reported color range and BT.601/709 matrix, then
 DirectShow metadata, and falls back to JPEG full range when neither is present.
 The Tab overlay and diagnostic log report the applied result and its source.

@@ -22,10 +22,13 @@ HDR, multichannel and audio-only recording are not supported; playback supports 
 2. Start SDR/stereo playback, then press **F9** to record. Press it again to finalize.
 3. Use **Open folder** to check the result. Wait until **Finalizing** completes before opening the file.
 
-Opening the Recording tab for the first time checks encoder support. Supported codecs and rate-control modes become selectable when the check completes.
+Opening the Recording tab for the first time checks encoder support. Supported codecs and rate-control modes become selectable when the check completes; you can close settings before it finishes.
+**Encoder check could not finish** means the check failed, not that the codecs are unsupported. Close and reopen settings to retry.
 
 F9 is the default and can be changed under **Guide & logs**. If an existing binding already uses F9, an unused function key is assigned; check the displayed binding.
+While settings are open, the recording shortcut works only with **F1–F24 except F4**, with or without Ctrl/Alt/Shift. Other assigned keys still work in the viewer and retain their normal editing/navigation behavior in settings.
 During recording, the Recording tab offers pause/resume. Paused time is removed from the file timeline while playback continues.
+At recording start or resume, only audio before the start point is trimmed; the portion after it is retained.
 The corner recording indicator and OSD are not included in the recording.
 
 <br>
@@ -53,6 +56,7 @@ If encoding affects playback or cannot keep up, lower the recording resolution/f
 ## Storage and file protection
 
 The default folder is **Videos → LLCV**. Choose another folder in settings.
+Remaining space updates during recording. If it cannot be checked for the displayed folder, the app shows it as unavailable, not as zero.
 Low space, write failures and overload stop recording with a notice while playback continues.
 Closing during recording asks for confirmation, then finishes saving. If saving stalls, follow the prompt; forcing an exit may lose the final section.
 

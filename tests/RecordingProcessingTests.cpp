@@ -100,6 +100,53 @@ void BenchmarkDecoderStrideScaling(){
         std::chrono::duration<double,std::milli>(middle-before).count()/iterations,
         std::chrono::duration<double,std::milli>(after-middle).count()/iterations,width*rows);
 }
+void TestRecordingStartTimeline(){
+    constexpr int64_t ms=10000;
+    RecordingPauseTimeline videoFirst;
+    const auto video=videoFirst.Map(true,0,100*ms,20*ms);
+    Check(video.keep&&video.time==0,"first arriving video anchors recording start");
+    const auto straddling=videoFirst.Map(false,0,95*ms,20*ms);
+    Check(straddling.keep&&straddling.time==0&&straddling.duration==15*ms&&straddling.skipAudioFrames==240,
+        "late initial PCM retains all 15 ms after first video, trimming only its 5 ms prefix");
+    const auto following=videoFirst.Map(false,0,115*ms,20*ms);
+    Check(following.keep&&following.time==15*ms&&following.duration==20*ms&&!following.skipAudioFrames,
+        "initial trimmed PCM joins the next packet without a gap or duplicate audio");
+
+    RecordingPauseTimeline beforeCut;
+    Check(beforeCut.Map(true,0,100*ms,20*ms).keep,"video anchors prefix-only tests");
+    Check(!beforeCut.Map(false,0,70*ms,20*ms).keep,"PCM wholly before recording start is discarded");
+    Check(!beforeCut.Map(false,0,80*ms,20*ms).keep,"PCM ending exactly at recording start is discarded");
+    const auto atCut=beforeCut.Map(false,0,100*ms,20*ms);
+    Check(atCut.keep&&atCut.time==0&&atCut.duration==20*ms&&!atCut.skipAudioFrames,
+        "discarded prefixes never advance the audio clock past valid initial PCM");
+
+    RecordingPauseTimeline audioFirst;
+    const auto firstAudio=audioFirst.Map(false,0,95*ms,20*ms);
+    Check(firstAudio.keep&&firstAudio.time==0&&firstAudio.duration==20*ms&&!firstAudio.skipAudioFrames,
+        "first arriving audio remains intact and anchors recording start");
+    const auto delayedVideo=audioFirst.Map(true,0,100*ms,20*ms);
+    Check(delayedVideo.keep&&delayedVideo.time==5*ms&&delayedVideo.duration==20*ms,
+        "audio-first recording preserves the original 5 ms video offset");
+    const auto nextAudio=audioFirst.Map(false,0,115*ms,20*ms);
+    Check(nextAudio.keep&&nextAudio.time==20*ms&&!nextAudio.skipAudioFrames,
+        "audio-first packet cadence is unchanged");
+
+    RecordingPauseTimeline rounded;
+    Check(rounded.Map(true,0,100*ms,20*ms).keep,"video anchors sample rounding test");
+    const auto fractional=rounded.Map(false,0,100*ms-1,10*ms);
+    Check(fractional.keep&&fractional.skipAudioFrames==1&&fractional.time==207&&fractional.duration==10*ms-208,
+        "non-aligned initial cut rounds up to one whole 48 kHz PCM frame without negative timestamps");
+
+    // Initial trimming must not change resume's shared video/audio endpoint.
+    Check(!videoFirst.Map(false,1,200*ms,20*ms).keep,"paused initial-overlap audio is omitted");
+    Check(videoFirst.NeedsVideo(2)&&!videoFirst.Map(false,2,995*ms,20*ms).keep,
+        "resume still waits for video after initial trimming");
+    const auto resumedVideo=videoFirst.Map(true,2,1000*ms,20*ms);
+    Check(resumedVideo.keep&&resumedVideo.time==35*ms,"resume uses longest pre-pause stream end");
+    const auto resumedAudio=videoFirst.Map(false,2,995*ms,20*ms);
+    Check(resumedAudio.keep&&resumedAudio.time==35*ms&&resumedAudio.duration==15*ms&&resumedAudio.skipAudioFrames==240,
+        "resume PCM trimming stays identical after an initial overlap");
+}
 int main(){
     Hr(MFStartup(MF_VERSION));
     const uint8_t cra[]={0,0,0,1,42,1,7},idr[]={0,0,1,40,1,7},lengthIdr[]={0,0,0,3,40,1,7};
@@ -131,7 +178,7 @@ int main(){
         else{for(int i=1;i<16;i+=2)Check(data[i]==((i%4==3)?180:80),"YUY2 chroma order");}
         Hr(output->Unlock());
     }
-    TestDecoderStrideScaling();BenchmarkDecoderStrideScaling();
+    TestDecoderStrideScaling();BenchmarkDecoderStrideScaling();TestRecordingStartTimeline();
     constexpr int64_t second=10000000;
     RecordingPauseTimeline t;
     Check(t.Map(true,0,0,second/10).keep,"first video");

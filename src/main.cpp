@@ -54,6 +54,7 @@
 #ifdef LLCV_RECORDING
 #include "recording/Recorder.h"
 #include "recording/RecordingGpuIndicator.h"
+#include "recording/EncoderProbeProcess.h"
 #endif
 #include "capture/HardwareToneMapping.h"
 #include "diagnostics/Logger.h"
@@ -147,9 +148,9 @@ constexpr int kSampleRate = 48000;
 constexpr int kChannels = 2;
 constexpr int kBitsPerSample = 16;
 #ifdef LLCV_VSR_EXPERIMENT
-constexpr wchar_t kAppVersionLabel[] = L"v2.1.1-vsr-test";
+constexpr wchar_t kAppVersionLabel[] = L"v2.1.2-vsr-test";
 #else
-constexpr wchar_t kAppVersionLabel[] = L"v2.1.1";
+constexpr wchar_t kAppVersionLabel[] = L"v2.1.2";
 #endif
 
 constexpr int kRecommendedCaptureBufferMs = 20;
@@ -1924,6 +1925,20 @@ static void MergeVideoColorMetadata(
     DirectShowColorMetadata& destination,
     const DirectShowColorMetadata& overrideValues) {
     llcv::video::MergeDirectShowColorMetadata(destination, overrideValues);
+}
+
+static bool ReadConnectedVideoSampleFormat(
+    const AM_MEDIA_TYPE* type, int fps, DirectShowColorMetadata& effectiveColor,
+    llcv::video::VideoSampleFormat& sampleFormat) {
+    if (!llcv::video::ReadVideoSampleFormat(type, fps, sampleFormat)) return false;
+    if (sampleFormat.format == VideoPixelFormat::P010)
+        effectiveColor = llcv::hdr::ConnectedMetadata(effectiveColor, sampleFormat.color);
+    else
+        MergeVideoColorMetadata(effectiveColor, sampleFormat.color);
+    // Playback, dynamic-type validation and the recording decoder must share
+    // the final connected hints, including fields omitted by the driver.
+    sampleFormat.color = effectiveColor;
+    return true;
 }
 
 static void LogDirectShowColorMetadata(
@@ -4156,66 +4171,21 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
             capture, g_activeCaptureDeviceName, configuredFormat, LogModuleMessage, selectedVideoDevicePath);
         if (FAILED(hr = graph->ConnectDirect(videoPin, grabberIn,
                                              nullptr))) break;
-        // Some drivers expose color information only on the negotiated
-        // connection type, not on IAMStreamConfig::GetFormat. Inspect the
-        // Sample Grabber's connected type before starting the graph. For
-        // MJPEG, rebuild the decoder from that definitive type so its output
-        // metadata and DirectShow's extended-color flags can both participate
-        // in the automatic matrix/range decision.
+        // Preserve connection-only hints even if a driver omits them after
+        // the downstream pin connects. The final connected type below still
+        // takes precedence, and initializes the MJPEG decoder exactly once.
         if (colorMetadataRelevant) {
-            AM_MEDIA_TYPE connectedVideoType{};
-            const HRESULT connectedTypeHr =
-                grabber->GetConnectedMediaType(&connectedVideoType);
-            if (SUCCEEDED(connectedTypeHr)) {
-                DirectShowColorMetadata connectedColorInfo{};
-                const bool connectedColorDetected =
-                    ExtractVideoColorMetadata(&connectedVideoType,
-                                                   connectedColorInfo);
-                if (configuredFormat == VideoPixelFormat::P010 &&
-                    connectedColorDetected) {
-                    LogDirectShowColorMetadata(L"P010 connected media type",
-                                               connectedColorInfo);
-                    directShowColorInfo = llcv::hdr::ConnectedMetadata(
-                        directShowColorInfo, connectedColorInfo);
-                }
-                if (SUCCEEDED(hr) && compressedVideo) {
-                    DirectShowColorMetadata effectiveColorInfo =
-                        directShowColorInfo;
-                    MergeVideoColorMetadata(effectiveColorInfo,
-                                                 connectedColorInfo);
-                    if (connectedColorDetected) {
-                        LogDirectShowColorMetadata(
-                            L"MJPEG connected media type", connectedColorInfo);
-                    }
-                    LogDirectShowColorMetadata(L"MJPEG effective metadata",
-                                               effectiveColorInfo);
-                    initializationStage =
-                        L"confirm Media Foundation MJPEG decoder color";
-                    hr = compressedDecoder.initialize(
-                        preset.width, preset.height, configuredFps,
-                        &connectedVideoType,
-                        effectiveColorInfo.present ? &effectiveColorInfo
-                                                   : nullptr,
-                        g_settings.mjpegColorOverride,
-                        LogModuleMessage);
-                    if (SUCCEEDED(hr)) {
-                        const auto connectedColor =
-                            compressedDecoder.colorConfiguration();
-                        if (!(connectedColor == sdrColor)) {
-                            sdrColor = connectedColor;
-                            hr = renderer.initialize(
-                                host, preset.width, preset.height,
-                                configuredFps, rendererInputFormat,
-                                hdrInputMetadataAvailable, sdrColor, hdrColorSpace);
-                        }
-                    }
-                    if (FAILED(hr)) {
-                        LogHr(L"MJPEG connected-type color initialization", hr);
-                    }
+            AM_MEDIA_TYPE connectedType{};
+            if (SUCCEEDED(grabber->GetConnectedMediaType(&connectedType))) {
+                DirectShowColorMetadata connectedColor{};
+                if (ExtractVideoColorMetadata(&connectedType, connectedColor)) {
+                    if (configuredFormat == VideoPixelFormat::P010)
+                        directShowColorInfo = llcv::hdr::ConnectedMetadata(directShowColorInfo, connectedColor);
+                    else
+                        MergeVideoColorMetadata(directShowColorInfo, connectedColor);
                 }
             }
-            FreeMediaType(connectedVideoType);
-            if (FAILED(hr)) break;
+            FreeMediaType(connectedType);
         }
         if (FAILED(hr = graph->ConnectDirect(grabberOut, nullIn,
                                              nullptr))) break;
@@ -4230,15 +4200,10 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
         if (SUCCEEDED(hr) && RequestsExactCaptureRate() &&
             !llcv::video::IsRequestedFrameRate(&connectedLayout, RequestedVideoFrameRate()))
             hr = llcv::video::kRequestedFrameRateMismatch;
-        if (SUCCEEDED(hr) && configuredFormat == VideoPixelFormat::P010) {
-            DirectShowColorMetadata finalColor{};
-            if (ExtractVideoColorMetadata(&connectedLayout, finalColor))
-                directShowColorInfo = llcv::hdr::ConnectedMetadata(directShowColorInfo, finalColor);
-        }
+        if (SUCCEEDED(hr) && !ReadConnectedVideoSampleFormat(
+                &connectedLayout, configuredFps, directShowColorInfo, sampleFormat))
+            hr = HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
         if (SUCCEEDED(hr) && rawSdr) {
-            DirectShowColorMetadata finalColor{};
-            if (ExtractVideoColorMetadata(&connectedLayout, finalColor))
-                MergeVideoColorMetadata(directShowColorInfo, finalColor);
             LogDirectShowColorMetadata(L"raw SDR effective metadata", directShowColorInfo);
             sdrColor = llcv::video_color::Resolve(false, preset.width, preset.height, {},
                 {directShowColorInfo.transferMatrix, directShowColorInfo.nominalRange});
@@ -4248,9 +4213,18 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
                 llcv::video_color::SourceName(sdrColor.matrixSource),
                 llcv::video_color::SourceName(sdrColor.rangeSource));
         }
-        if (SUCCEEDED(hr) && !llcv::video::ReadVideoSampleFormat(
-                &connectedLayout, configuredFps, sampleFormat))
-            hr = HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+        if (SUCCEEDED(hr) && compressedVideo) {
+            // Drivers may publish color only after connection. Rebuild from
+            // the same final type and hints used by the guard and recorder.
+            LogDirectShowColorMetadata(L"MJPEG effective metadata", directShowColorInfo);
+            initializationStage = L"confirm Media Foundation MJPEG decoder color";
+            hr = compressedDecoder.initialize(
+                preset.width, preset.height, configuredFps, &connectedLayout,
+                directShowColorInfo.present ? &directShowColorInfo : nullptr,
+                g_settings.mjpegColorOverride, LogModuleMessage);
+            if (SUCCEEDED(hr)) sdrColor = compressedDecoder.colorConfiguration();
+            else LogHr(L"MJPEG connected-type color initialization", hr);
+        }
         FreeMediaType(connectedLayout);
         if (FAILED(hr)) break;
         if (configuredFormat == VideoPixelFormat::P010) {
@@ -4274,14 +4248,11 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
             hdrColorSpace = input.colorSpace;
         }
         if (configuredFps != previousFps || configuredFormat == VideoPixelFormat::P010 ||
-            (rawSdr && !(sdrColor == renderer.sdrColor))) {
+            ((rawSdr || compressedVideo) && !(sdrColor == renderer.sdrColor))) {
             hr = renderer.initialize(host, preset.width, preset.height, configuredFps,
                                      rendererInputFormat, hdrInputMetadataAvailable, sdrColor, hdrColorSpace);
             if (FAILED(hr)) break;
         }
-        // Guard the same effective metadata used by the renderer, including
-        // selected/active-type hints omitted from the final connected type.
-        sampleFormat.color = directShowColorInfo;
         g_videoConfiguredFps.store(configuredFps, std::memory_order_release);
 #ifdef LLCV_HDR_FRAME_AUDIT
         renderer.auditMetadata = directShowColorInfo;
@@ -4407,8 +4378,6 @@ static bool UnifiedCaptureRenderLoop(HWND host) {
         auto recordingFormat=sampleFormat;
         AM_MEDIA_TYPE recordingType{};
         if(compressedVideo){
-            recordingFormat.color=directShowColorInfo;
-            MergeVideoColorMetadata(recordingFormat.color,sampleFormat.color);
             // Keep the final JPEG initialization data and actual packet bound.
             // A recorder-only setup error must not stop viewing.
             const HRESULT recordingTypeHr=grabber->GetConnectedMediaType(&recordingType);
@@ -4784,7 +4753,7 @@ struct SettingsDialogState : llcv::settings_ui::SettingsControls {
     std::unique_ptr<llcv::settings_ui::SettingsModeCache<SettingsVideoModes>> videoModeCache;
 #ifdef LLCV_RECORDING
     std::atomic<bool> recordingProbeStop{false};
-    std::unique_ptr<llcv::settings_ui::SettingsModeCache<llcv::recording::Capabilities>> recordingProbe;
+    std::unique_ptr<llcv::settings_ui::SettingsModeCache<llcv::recording::EncoderProbeResult>> recordingProbe;
 #endif
     std::optional<llcv::settings_ui::ModeQueryKey> appliedVideoModeKey;
     bool videoModesPending = false;
@@ -6224,8 +6193,8 @@ static void FinishSettingsDialog(HWND hwnd, SettingsDialogState* state, bool acc
 static void RequestRecordingEncoders(SettingsDialogState* state,HWND hwnd){
     if(state->activeTab!=SettingsTab::Recording || state->recordingProbeStop.load() ||
         state->recordingProbe || !state->recordingProbePending || llcv::recording::recorder.Busy())return;
-    state->recordingProbe=std::make_unique<llcv::settings_ui::SettingsModeCache<llcv::recording::Capabilities>>(
-        [state](const auto&){return llcv::recording::ProbeEncoders(&state->recordingProbeStop);},
+    state->recordingProbe=std::make_unique<llcv::settings_ui::SettingsModeCache<llcv::recording::EncoderProbeResult>>(
+        [state](const auto&){return llcv::recording::ProbeEncodersIsolated(&state->recordingProbeStop);},
         [hwnd]{PostMessageW(hwnd,WM_RECORD_ENCODERS_READY,0,0);});
     state->recordingProbe->Request({});
 }
@@ -6523,8 +6492,9 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
     case WM_RECORD_ENCODERS_READY:
         if(state&&state->recordingProbe){
             if(auto result=state->recordingProbe->Request({})){
-                state->recordingCapabilities=std::move(*result);state->recordingProbePending=false;
-                g_recordingCapabilities=state->recordingCapabilities;
+                state->recordingCapabilities=std::move(result->capabilities);state->recordingProbePending=false;
+                state->recordingProbeFailed=!result->completed;
+                if(result->completed)g_recordingCapabilities=state->recordingCapabilities;
                 llcv::settings_ui::RefreshRecordingSettings(state);
             }
         }
@@ -6845,6 +6815,20 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
+#ifdef LLCV_RECORDING
+static bool ProcessSettingsRecordingShortcut(HWND dialog, const MSG& message, unsigned modifiers) {
+    if (!keys::KeyDown(message.message) ||
+        !keys::AllowedInSettings(static_cast<UINT>(message.wParam)) ||
+        !(message.hwnd == dialog || IsChild(dialog, message.hwnd)) ||
+        !keys::Match(g_settings.shortcuts, keys::Action::Recording,
+                     static_cast<UINT>(message.wParam), modifiers)) return false;
+    if (!(message.lParam & (LPARAM{1} << 30)))
+        SendMessageW(dialog, WM_COMMAND,
+            MAKEWPARAM(llcv::settings_ui::kRecordingToggleCommand, BN_CLICKED), 0);
+    return true;
+}
+#endif
+
 static bool ShowSettingsDialog(HINSTANCE hInst,
                                bool preferSavedViewerMonitor,HWND liveViewer=nullptr) {
     static const wchar_t kSettingsClass[] = L"LowLatencyCaptureViewerSettingsDialogClass";
@@ -6983,12 +6967,7 @@ static bool ShowSettingsDialog(HINSTANCE hInst,
 #ifdef LLCV_RECORDING
         if(state.recordingLive && keys::KeyDown(msg.message)){
             const bool inDialog=msg.hwnd==hwnd || IsChild(hwnd,msg.hwnd);
-            if(inDialog && keys::Match(g_settings.shortcuts,keys::Action::Recording,
-                static_cast<UINT>(msg.wParam),keys::Modifiers())){
-                if(!(msg.lParam&(LPARAM{1}<<30)))SendMessageW(hwnd,WM_COMMAND,
-                    MAKEWPARAM(llcv::settings_ui::kRecordingToggleCommand,BN_CLICKED),0);
-                continue;
-            }
+            if(ProcessSettingsRecordingShortcut(hwnd,msg,keys::Modifiers()))continue;
             if(!inDialog && HandleViewerShortcut(liveViewer,msg.wParam,msg.lParam,keys::Modifiers()))continue;
             if(!inDialog && keys::Match(g_settings.shortcuts,keys::Action::Screenshot,msg)){
                 if(llcv::viewer_help::IsScreenshotRequest(msg,g_settings.audioOnly,g_settings.shortcuts))
@@ -7339,15 +7318,38 @@ static bool RestoredWindowOrigin(const SIZE& outerSize, POINT& origin) {
     return true;
 }
 
+static RECT NormalPlacementScreenRect(RECT normal, DWORD exStyle,
+                                      const MONITORINFO& monitor) {
+    // WINDOWPLACEMENT is in workspace coordinates for ordinary top-level
+    // windows, but already in screen coordinates for WS_EX_TOOLWINDOW.
+    if (!(exStyle & WS_EX_TOOLWINDOW))
+        OffsetRect(&normal, monitor.rcWork.left - monitor.rcMonitor.left,
+                           monitor.rcWork.top - monitor.rcMonitor.top);
+    return normal;
+}
+
+static bool ReadPersistedWindowRect(HWND hwnd, RECT& rect) {
+    if (g_fullscreen && g_haveLastWindowedRect) {
+        rect = g_lastWindowedRect;
+        return true;
+    }
+    if (!IsIconic(hwnd)) return GetWindowRect(hwnd, &rect) != FALSE;
+    WINDOWPLACEMENT placement{sizeof(placement)};
+    MONITORINFO monitor{sizeof(monitor)};
+    // MonitorFromWindow uses the pre-minimize rectangle for an iconic HWND.
+    if (!GetWindowPlacement(hwnd, &placement) ||
+        !GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitor))
+        return false;
+    rect = NormalPlacementScreenRect(placement.rcNormalPosition,
+        static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_EXSTYLE)), monitor);
+    return true;
+}
+
 static void PersistWindowPosition(HWND hwnd) {
     // Smoke tests and diagnostic probes must not alter the user's placement.
     if (g_suppressSettingsSave) return;
     RECT rect{};
-    if (g_fullscreen && g_haveLastWindowedRect) {
-        rect = g_lastWindowedRect;
-    } else if (!GetWindowRect(hwnd, &rect)) {
-        return;
-    }
+    if (!ReadPersistedWindowRect(hwnd, rect)) return;
     const HMONITOR monitor =
         MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
     MONITORINFOEXW monitorInfo{};
@@ -9377,6 +9379,11 @@ static bool SuppressSettingsWritesForRun(const wchar_t* commandLine) {
 }
 
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
+#ifdef LLCV_RECORDING
+    const int probeExit = llcv::recording::RunEncoderProbeChild(commandLine,
+        [] { return llcv::recording::ProbeEncoders(); });
+    if (probeExit >= 0) return probeExit;
+#endif
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     INITCOMMONCONTROLSEX commonControls{
         sizeof(commonControls), ICC_WIN95_CLASSES};

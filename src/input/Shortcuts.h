@@ -70,6 +70,12 @@ inline unsigned Modifiers() {
         (GetKeyState(VK_SHIFT)<0 ? Shift : 0);
 }
 inline bool KeyDown(UINT message) { return message==WM_KEYDOWN || message==WM_SYSKEYDOWN; }
+// Settings fields own navigation, text/editing chords and the native F4
+// dropdown. Viewer actions may use their function-key bindings there; the
+// viewer itself continues to accept every valid customized binding.
+inline bool AllowedInSettings(UINT key) {
+    return key>=VK_F1 && key<=VK_F24 && key!=VK_F4;
+}
 inline bool Match(const Bindings& bindings,Action action,UINT key,unsigned modifiers) {
     return key<256 && bindings[static_cast<size_t>(action)]==(key|modifiers);
 }

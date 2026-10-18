@@ -1,6 +1,6 @@
 param(
-    [string]$BuildDir = "../build-v2110-release",
-    [string]$OutputDir = "outputs/readme-v2.1.1"
+    [string]$BuildDir = "../build-v2120-release",
+    [string]$OutputDir = "outputs/readme-v2.1.2"
 )
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path

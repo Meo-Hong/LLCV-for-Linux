@@ -268,7 +268,7 @@ bool Window::ProcessMessage(MSG& m,HWND owner,bool english,const wchar_t* versio
     // chords or the native F4 combo dropdown. Function-key help still works
     // from settings; all configured bindings work inside the guide/viewer.
     if (context==MessageContext::Settings && !inHelp && shortcuts::KeyDown(m.message) &&
-        (m.wParam<VK_F1 || m.wParam>VK_F24 || m.wParam==VK_F4)) return false;
+        !shortcuts::AllowedInSettings(static_cast<UINT>(m.wParam))) return false;
     if (shortcuts::KeyDown(m.message) && shortcuts::Match(bindings_,shortcuts::Action::Help,static_cast<UINT>(m.wParam),modifiers)) {
         if (!(m.lParam & (LPARAM{1}<<30))) Toggle(owner,english,version,SW_SHOWNORMAL,lightTheme);
         return true;

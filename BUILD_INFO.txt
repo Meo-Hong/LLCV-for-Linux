@@ -1,4 +1,15 @@
-LLCV v2.1.1 x64 (continued from the v0.14.2 rework)
+LLCV v2.1.2 x64 (continued from the v0.14.2 rework)
+
+v2.1.2 Settings and recording reliability
+----------------------------------------
+- Isolates encoder discovery in a cancellable child process and distinguishes failed queries from unsupported codecs.
+- Refreshes recording free-space information without querying storage on every active UI update.
+- Preserves final connected MJPEG color metadata for playback and recording.
+- Retains usable audio samples when the first recording packet overlaps the video start.
+- Keeps normal settings navigation separate from recording shortcuts; F4 remains reserved for controls.
+- Saves the restored window position when exiting while minimized.
+- Extends automated coverage for these paths; no physical HDMI latency retest is claimed.
+- Preserves recording defaults, existing settings and installation paths.
 
 v2.1.1 Recording and capture options
 ------------------------------------
