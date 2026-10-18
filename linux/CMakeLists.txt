@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22...3.25)
-project(llcv VERSION 2.0.5 LANGUAGES C CXX)
+project(llcv VERSION 2.1.3 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,6 +18,8 @@ set(LLCV_WAYLAND_COLOR_MANAGEMENT AUTO CACHE STRING "Wayland HDR output through 
 set_property(CACHE LLCV_WAYLAND_COLOR_MANAGEMENT PROPERTY STRINGS AUTO ON OFF)
 set(LLCV_SLEEP_INHIBIT AUTO CACHE STRING "Block automatic suspend during playback through the desktop portal over dbus-1 (AUTO, ON, OFF)")
 set_property(CACHE LLCV_SLEEP_INHIBIT PROPERTY STRINGS AUTO ON OFF)
+set(LLCV_RECORDING AUTO CACHE STRING "MP4 recording through FFmpeg libavcodec/libavformat/libswscale (AUTO, ON, OFF)")
+set_property(CACHE LLCV_RECORDING PROPERTY STRINGS AUTO ON OFF)
 set(LLCV_SDL3 AUTO CACHE STRING "SDL3 source: AUTO (system, else bundled), SYSTEM, BUNDLED")
 set_property(CACHE LLCV_SDL3 PROPERTY STRINGS AUTO SYSTEM BUNDLED)
 set(LLCV_SDL3_BUNDLED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/sdl3/SDL3-3.4.18)
@@ -38,7 +40,7 @@ else()
         message(FATAL_ERROR "SDL3 3.2 or newer is not installed. Run tools/fetch-sdl3.sh to download the pinned SDL3 source.")
     endif()
     foreach(option SDL_SHARED SDL_TEST_LIBRARY SDL_TESTS SDL_EXAMPLES SDL_INSTALL SDL_CAMERA SDL_JOYSTICK
-                   SDL_HAPTIC SDL_HIDAPI SDL_SENSOR SDL_GPU SDL_RENDER SDL_DIALOG SDL_TRAY SDL_KMSDRM
+                   SDL_HAPTIC SDL_HIDAPI SDL_SENSOR SDL_GPU SDL_RENDER SDL_TRAY SDL_KMSDRM
                    SDL_VULKAN SDL_JACK SDL_SNDIO SDL_OSS SDL_LIBUDEV)
         set(${option} OFF CACHE BOOL "" FORCE)
     endforeach()
@@ -112,6 +114,17 @@ if (NOT LLCV_SLEEP_INHIBIT STREQUAL "OFF")
 endif()
 message(STATUS "Suspend inhibition during playback (desktop portal over dbus-1): ${LLCV_HAVE_DBUS}")
 
+set(LLCV_HAVE_RECORDING OFF)
+if (NOT LLCV_RECORDING STREQUAL "OFF")
+    pkg_check_modules(FFMPEG IMPORTED_TARGET libavcodec>=58.134 libavformat>=58.76 libavutil>=56.70 libswscale>=5.9)
+    if (FFMPEG_FOUND)
+        set(LLCV_HAVE_RECORDING ON)
+    elseif (LLCV_RECORDING STREQUAL "ON")
+        message(FATAL_ERROR "Recording needs FFmpeg 4.4 or newer (libavcodec, libavformat, libavutil, libswscale development files)")
+    endif()
+endif()
+message(STATUS "MP4 recording (FFmpeg): ${LLCV_HAVE_RECORDING}")
+
 add_executable(llcv
     src/main.cpp
     src/app/App.cpp
@@ -119,6 +132,7 @@ add_executable(llcv
     src/audio/AudioEngine.cpp
     src/audio/AudioMix.cpp
     src/audio/PcmPipeline.cpp
+    src/capture/HardwareToneMapping.cpp
     src/capture/UvcDescriptors.cpp
     src/capture/V4l2Capture.cpp
     src/capture/V4l2Devices.cpp
@@ -129,6 +143,7 @@ add_executable(llcv
     src/platform/PngImage.cpp
     src/platform/SleepInhibitor.cpp
     src/platform/Strings.cpp
+    src/recording/RecordingStorage.cpp
     src/screenshot/Screenshot.cpp
     src/settings/SettingsStore.cpp
     src/ui/ImGuiPlatform.cpp
@@ -184,6 +199,17 @@ if (LLCV_HAVE_DBUS)
     target_link_libraries(llcv PRIVATE PkgConfig::DBUS)
 endif()
 
+if (LLCV_HAVE_RECORDING)
+    target_sources(llcv PRIVATE
+        src/recording/EncoderSupport.cpp
+        src/recording/FfmpegEncoder.cpp
+        src/recording/Recorder.cpp)
+    target_compile_definitions(llcv PRIVATE LLCV_HAVE_RECORDING=1)
+    target_link_libraries(llcv PRIVATE PkgConfig::FFMPEG)
+else()
+    target_sources(llcv PRIVATE src/recording/RecordingUnavailable.cpp)
+endif()
+
 target_compile_options(llcv PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra>)
 
 target_link_libraries(llcv PRIVATE
@@ -218,6 +244,9 @@ install(FILES data/${LLCV_APP_ID}.metainfo.xml
 
 install(FILES data/llcv.1
     DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+
+install(FILES data/70-llcv-elgato-hid.rules
+    DESTINATION lib/udev/rules.d)
 
 foreach(size 16 24 32 48 64 128 256)
     install(FILES data/icons/${size}x${size}/${LLCV_APP_ID}.png

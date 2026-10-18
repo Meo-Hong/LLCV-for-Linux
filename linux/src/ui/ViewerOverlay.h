@@ -1,6 +1,7 @@
 #pragma once
 
 #include "input/Shortcuts.h"
+#include "recording/Recorder.h"
 #include "settings/AppSettings.h"
 #include "ui/HdrSupport.h"
 #include "ui/Theme.h"
@@ -23,6 +24,11 @@ struct AudioMeterState {
     bool boost = false;
     bool available = false;
     bool muted = false;
+    bool playbackMuted = false;
+    bool muteToggled = false;
+    bool unmute = false;
+    ImVec2 controlsMin{0.0f, 0.0f};
+    ImVec2 controlsMax{0.0f, 0.0f};
     int peakLeft = 0;
     int peakRight = 0;
     uint64_t clipEvents = 0;
@@ -41,6 +47,11 @@ bool DrawAudioOsd(AudioMeterState& state, const input::Bindings& shortcuts, cons
 bool DrawAudioOnlyView(AudioMeterState& state, const input::Bindings& shortcuts, const FontSet& fonts, float scale);
 void DrawHelp(bool* open, bool audioOnly, const HdrSupport& hdr, const input::Bindings& shortcuts, const FontSet& fonts,
               float scale);
+void DrawMuteIndicator(float scale);
+void DrawRecordingIndicator(const recording::Status& status, float scale);
+
+enum class ConfirmResult { None, Confirm, Cancel };
+ConfirmResult DrawRecordingConfirm(bool settings, const input::Bindings& shortcuts, const FontSet& fonts, float scale);
 
 enum class MenuCommand {
     None,
@@ -56,6 +67,11 @@ enum class MenuCommand {
     VolumeUp,
     VolumeDown,
     BackgroundMute,
+    Mute,
+    Recording,
+    RecordingPause,
+    OpenRecordings,
+    OpenLastRecording,
     Screenshot,
     OpenScreenshots,
     OpenLogs,
@@ -73,6 +89,11 @@ struct MenuState {
     bool diagnostics = false;
     bool audioOsd = false;
     bool backgroundMute = false;
+    bool playbackMuted = false;
+    bool recording = false;
+    bool recordingPaused = false;
+    bool recordingBusy = false;
+    bool lastRecording = false;
     int volume = 100;
 };
 

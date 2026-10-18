@@ -44,6 +44,7 @@ struct GlApi {
     void (*TexSubImage2D)(GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, const void*);
     void (*Uniform1i)(GLint, GLint);
     void (*Uniform1f)(GLint, GLfloat);
+    void (*Uniform2f)(GLint, GLfloat, GLfloat);
     void (*Uniform3fv)(GLint, GLsizei, const GLfloat*);
     void (*Uniform4f)(GLint, GLfloat, GLfloat, GLfloat, GLfloat);
     void (*UniformMatrix3fv)(GLint, GLsizei, GLboolean, const GLfloat*);

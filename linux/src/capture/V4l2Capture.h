@@ -23,6 +23,7 @@ struct CaptureConfig {
     int height = 1080;
     FrameRate rate;
     bool capture40Fps = false;
+    bool directRate = false;
     video::ColorOverride colorOverride = video::ColorOverride::Auto;
     video::HdrInput hdrInput = video::HdrInput::Auto;
 };
@@ -49,6 +50,25 @@ struct CaptureCounters {
     std::atomic<uint64_t> processingSamples{0};
 };
 
+struct RawFrame {
+    PixelFormat format = PixelFormat::Nv12;
+    const uint8_t* data = nullptr;
+    size_t size = 0;
+    int width = 0;
+    int height = 0;
+    int stride = 0;
+    video::ColorSpec color;
+    uint64_t captureNs = 0;
+};
+
+class RawFrameSink {
+public:
+    virtual void OnRawFrame(const RawFrame& frame) = 0;
+
+protected:
+    ~RawFrameSink() = default;
+};
+
 class V4l2Capture {
 public:
     V4l2Capture() = default;
@@ -64,6 +84,7 @@ public:
     NegotiatedFormat Negotiated() const;
     std::string StatusMessage() const;
     const CaptureCounters& Counters() const { return counters_; }
+    void SetRawFrameSink(RawFrameSink* sink) { sink_.store(sink, std::memory_order_release); }
 
 private:
     struct MappedBuffer {
@@ -94,6 +115,7 @@ private:
     std::thread thread_;
     std::atomic<bool> stopping_{false};
     std::atomic<CaptureState> state_{CaptureState::Stopped};
+    std::atomic<RawFrameSink*> sink_{nullptr};
     CaptureCounters counters_;
     video::MjpegDecoder decoder_;
     mutable std::mutex mutex_;

@@ -59,7 +59,7 @@ jobs:
     container: archlinux:latest
     steps:
       - name: Install build tools
-        run: pacman -Syu --noconfirm --needed base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd
+        run: pacman -Syu --noconfirm --needed base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd ffmpeg
       - uses: actions/checkout@v4
       - name: Build package
         run: |
@@ -150,7 +150,7 @@ jobs:
         run: |
           dir="$(ls -d linux/dist/release/llcv-*)"
           version="${dir##*/llcv-}"
-          cat > release-notes.md <<EOF
+          cat > downloads.md <<EOF
           | 파일 / File | 설치할 OS / Install on |
           | --- | --- |
           | \`llcv_${version}_amd64.deb\` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali |
@@ -166,8 +166,15 @@ jobs:
 
           안내 / Guide: [linux/README.ko.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/linux/README.ko.md) · [linux/README.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/linux/README.md)
           EOF
+          notes="linux/release-notes/v${version}.md"
+          if [ -f "$notes" ]; then
+            { cat "$notes"; printf '\n## 설치 파일 / Downloads\n\n'; cat downloads.md; } > release-notes.md
+          else
+            mv downloads.md release-notes.md
+          fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$dir"/* --clobber
+            gh release edit "$TAG" --notes-file release-notes.md
           else
             gh release create "$TAG" "$dir"/* --title "LLCV for Linux $version" --notes-file release-notes.md
           fi

@@ -93,8 +93,8 @@ cd LLCV-for-Linux/linux
 마지막에 만들어진 파일과 설치 명령이 표시됩니다. 예시:
 
 ```text
-Package: /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.0.5_amd64.deb
-Install: sudo apt install /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.0.5_amd64.deb
+Package: /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3_amd64.deb
+Install: sudo apt install /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3_amd64.deb
 ```
 
 **⑤ 설치**
@@ -155,7 +155,7 @@ SDL3가 없으면 스크립트가 알아서 SDL3 소스를 받고(`tools/fetch-s
 넣어 빌드합니다.
 
 **결과물**: `dist/<배포판>-<버전>/llcv_<버전>~<배포판><버전>_<아키텍처>.deb`
-(예: `dist/debian-13/llcv_2.0.5_arm64.deb`)
+(예: `dist/debian-13/llcv_2.1.3_arm64.deb`)
 
 **설치** — 폴더 이름은 내 배포판(`ID`-`VERSION_ID`)입니다.
 
@@ -211,13 +211,16 @@ sudo dnf builddep packaging/rpm/llcv.spec
 Fedora는 시스템 SDL3를 쓰고, RHEL 계열은 SDL3를 앱에 넣는 데 필요한 패키지가
 자동으로 선택됩니다.
 
+Fedora 빌드는 시스템 FFmpeg(`ffmpeg-free`나 RPM Fusion의 `ffmpeg`)로 녹화 기능을
+넣습니다. RHEL 계열의 기본·CRB 저장소에는 FFmpeg가 없어서 녹화 없이 빌드합니다.
+
 **패키지 만들기**
 
 ```sh
 ./tools/build-rpm.sh
 ```
 
-**결과물**: `dist/<배포판>-<버전>/llcv-2.0.5-1.x86_64.rpm`
+**결과물**: `dist/<배포판>-<버전>/llcv-2.1.3-1.x86_64.rpm`
 (디버그 정보 `llcv-debuginfo`, `llcv-debugsource`와 소스 RPM도 함께 생깁니다.)
 
 **설치** — 폴더 이름은 내 배포판(`ID`-`VERSION_ID`)입니다.
@@ -233,7 +236,7 @@ Arch Linux, Manjaro, EndeavourOS에 해당합니다.
 **빌드 의존성 설치**
 
 ```sh
-sudo pacman -S --needed base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd
+sudo pacman -S --needed base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd dbus ffmpeg
 ```
 
 **패키지 만들기** — `makepkg`는 일반 사용자로 실행해야 합니다(root 불가).
@@ -243,13 +246,13 @@ cd packaging/arch
 makepkg -f
 ```
 
-**결과물**: `packaging/arch/llcv-2.0.5-1-x86_64.pkg.tar.zst`
+**결과물**: `packaging/arch/llcv-2.1.3-1-x86_64.pkg.tar.zst`
 (`./tools/build-package.sh`를 쓰면 `dist/arch/`로 복사됩니다.)
 
 **설치**
 
 ```sh
-sudo pacman -U llcv-2.0.5-1-*.pkg.tar.zst
+sudo pacman -U llcv-2.1.3-1-*.pkg.tar.zst
 ```
 
 `makepkg -si`를 쓰면 의존성 설치, 빌드, 설치를 한 번에 합니다.
@@ -326,6 +329,7 @@ llcv --version
 | 설정 | `~/.config/llcv/` |
 | 로그 | `~/.local/state/llcv/` |
 | 스크린샷 | `~/사진/LLCV/` (사진 폴더 이름은 시스템 언어를 따름) |
+| 녹화 파일 | `~/동영상/LLCV/` (동영상 폴더 이름은 시스템 언어를 따름) |
 
 ## 6. 패키지 없이 직접 빌드 (그 밖의 배포판)
 
@@ -342,11 +346,12 @@ llcv --version
 | 스크린샷 PNG | `libpng` | 예 |
 | HDR 출력 (Wayland) | `wayland-client`, `wayland-scanner` | 아니요 |
 | 재생 중 시스템 자동 절전 방지 | `dbus-1` | 아니요 |
+| MP4 녹화 (FFmpeg 4.4 이상) | `libavcodec`, `libavformat`, `libavutil`, `libswscale` | 아니요 |
 
 openSUSE는 pkg-config 이름으로 바로 설치할 수 있습니다(검증하지 않은 예시).
 
 ```sh
-sudo zypper install cmake gcc-c++ 'pkgconfig(sdl3)' 'pkgconfig(libturbojpeg)' 'pkgconfig(libpng)' 'pkgconfig(wayland-client)' 'pkgconfig(wayland-scanner)' 'pkgconfig(dbus-1)'
+sudo zypper install cmake gcc-c++ 'pkgconfig(sdl3)' 'pkgconfig(libturbojpeg)' 'pkgconfig(libpng)' 'pkgconfig(wayland-client)' 'pkgconfig(wayland-scanner)' 'pkgconfig(dbus-1)' 'pkgconfig(libavcodec)' 'pkgconfig(libavformat)' 'pkgconfig(libavutil)' 'pkgconfig(libswscale)'
 ```
 
 **빌드와 실행**
@@ -386,6 +391,7 @@ ALSA, D-Bus 개발 패키지가 필요합니다.
 | `LLCV_SDL3` | `AUTO` | `SYSTEM`(시스템 SDL3), `BUNDLED`(받아 둔 SDL3를 정적으로 포함), `AUTO`(시스템 우선) |
 | `LLCV_WAYLAND_COLOR_MANAGEMENT` | `AUTO` | Wayland HDR 출력 포함 여부. `ON`이면 필요한 패키지가 없을 때 오류 |
 | `LLCV_SLEEP_INHIBIT` | `AUTO` | 재생 중 데스크톱 포털로 시스템 자동 절전 방지 (`dbus-1` 필요). `ON`이면 `dbus-1`이 없을 때 오류 |
+| `LLCV_RECORDING` | `AUTO` | FFmpeg로 MP4 녹화 기능 포함 (`libavcodec`, `libavformat`, `libavutil`, `libswscale` 필요). `ON`이면 FFmpeg가 없을 때 오류, `OFF`면 녹화 제외 |
 | `LLCV_USE_SYSTEM_IMGUI` | `OFF` | 함께 들어 있는 Dear ImGui 대신 시스템 Dear ImGui 1.92 이상 사용 |
 | `LLCV_SOURCE_TREE_DATA` | `ON` | 설치 없이 실행할 때 소스 폴더에서 글꼴·아이콘 찾기 (패키지 빌드에서는 끔) |
 
@@ -397,6 +403,7 @@ ALSA, D-Bus 개발 패키지가 필요합니다.
 | `dpkg-checkbuilddeps: error: Unmet build dependencies` | 빌드 의존성이 빠졌습니다. `./tools/install-build-deps.sh`를 먼저 실행하세요. |
 | `... the package libsdl3-dev cannot be found` / `Unable to locate package libsdl3-dev` | 그 배포판에 SDL3가 없습니다. `sudo apt build-dep -P pkg.llcv.bundled-sdl3 ./`를 쓰세요. Ubuntu라면 universe 저장소도 확인하세요. |
 | `No match for argument` / `No matching package to install` (dnf) | RHEL 계열에서 CRB 저장소가 꺼져 있습니다. [3.2](#32-fedora--rhel-계열-rpm)를 보세요. |
+| `Recording needs FFmpeg 4.4 or newer` | FFmpeg 개발 패키지 없이 `-DLLCV_RECORDING=ON`으로 설정했습니다. 개발 패키지를 설치하거나(Debian·Ubuntu는 `libavcodec-dev libavformat-dev libavutil-dev libswscale-dev`), `-DLLCV_RECORDING=AUTO`나 `OFF`로 다시 설정하세요. |
 | `SDL3 3.2 or newer is not installed. Run tools/fetch-sdl3.sh` | 직접 빌드에서 SDL3가 없습니다. `./tools/fetch-sdl3.sh` 후 `-DLLCV_SDL3=BUNDLED`로 다시 설정하세요. |
 | `SHA256 mismatch` | 받다가 깨진 SDL3 파일입니다. `third_party/sdl3/`를 지우고 다시 실행하세요. |
 | `curl-minimal ... conflicts with curl` (dnf) | RHEL 계열에 이미 있는 `curl-minimal`과 충돌합니다. `curl`은 설치 목록에서 빼세요. |

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "input/Shortcuts.h"
+#include "recording/RecordingOptions.h"
 #include "video/VideoColor.h"
 
 #include <string>
@@ -16,6 +17,9 @@ enum class DriftCorrection { Off, Auto };
 enum class VolumeHudPosition { TopLeft, TopRight, BottomLeft, BottomRight };
 enum class FullscreenCursor { AutoHide, AlwaysVisible };
 enum class HdrOutputMode { Auto, ToneMap, Hdr };
+enum class FullscreenVideoSize { Fit, Original };
+enum class HdrChromaLocation { Auto, Left, TopLeft };
+enum class FullscreenVideoPosition { Center, TopLeft, Top, TopRight, Left, Right, BottomLeft, Bottom, BottomRight };
 
 inline constexpr const char* kCaptureAudioDisabled = "none";
 inline constexpr int kDeviceFrameOptions[] = {128, 256, 512, 1024};
@@ -37,11 +41,13 @@ struct AppSettings {
     PixelFormatChoice pixelFormat = PixelFormatChoice::Auto;
     int frameRateMilli = 0;
     bool capture40Fps = false;
+    bool allowUnlistedFps = false;
     PresentationMode presentationMode = PresentationMode::Immediate;
     ScalingMode scalingMode = ScalingMode::Smooth;
     video::ColorOverride colorOverride = video::ColorOverride::Auto;
     video::HdrInput hdrInput = video::HdrInput::Auto;
     HdrOutputMode hdrOutput = HdrOutputMode::Auto;
+    HdrChromaLocation hdrChromaLocation = HdrChromaLocation::Auto;
     int sdrWhiteNits = 203;
     bool screenshotClipboard = false;
 
@@ -62,14 +68,19 @@ struct AppSettings {
 
     bool pixelPerfect = true;
     bool borderlessWindow = false;
+    bool keepRelativeWindowSize = false;
     bool startFullscreen = false;
     FullscreenCursor fullscreenCursor = FullscreenCursor::AutoHide;
+    FullscreenVideoSize fullscreenVideoSize = FullscreenVideoSize::Fit;
+    FullscreenVideoPosition fullscreenVideoPosition = FullscreenVideoPosition::Center;
     std::string preferredDisplay;
     int windowWidth = 0;
     int windowHeight = 0;
     bool hasWindowPosition = false;
     int windowX = 0;
     int windowY = 0;
+
+    recording::Options recording;
 };
 
 }

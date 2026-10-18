@@ -32,6 +32,7 @@ capture::ModeRequest RequestFromSettings(const settings::AppSettings& settings) 
     request.format = FormatFromChoice(settings.pixelFormat);
     request.fpsMilli = settings.frameRateMilli;
     request.capture40Fps = settings.capture40Fps;
+    request.allowUnlistedFps = settings.allowUnlistedFps;
     return request;
 }
 

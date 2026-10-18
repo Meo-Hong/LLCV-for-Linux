@@ -56,6 +56,14 @@ struct AudioStatus {
     uint64_t captureCallbacks = 0;
 };
 
+class CaptureTap {
+public:
+    virtual void OnCapturedPcm(const int16_t* samples, size_t frames, uint64_t endNs) = 0;
+
+protected:
+    ~CaptureTap() = default;
+};
+
 class AudioEngine {
 public:
     static constexpr int kSampleRate = 48000;
@@ -72,6 +80,8 @@ public:
 
     void SetVolume(int master, int left, int right);
     void SetBackgroundMuted(bool muted);
+    void SetPlaybackMuted(bool muted);
+    void SetCaptureTap(CaptureTap* tap) { tap_.store(tap, std::memory_order_release); }
     void ResetMinimum();
 
     AudioStatus Status() const;
@@ -113,6 +123,8 @@ private:
     std::atomic<int> leftVolume_{100};
     std::atomic<int> rightVolume_{100};
     std::atomic<bool> backgroundMuted_{false};
+    std::atomic<bool> playbackMuted_{false};
+    std::atomic<CaptureTap*> tap_{nullptr};
     std::atomic<int> peakLeft_{0};
     std::atomic<int> peakRight_{0};
     std::atomic<uint64_t> clipEvents_{0};

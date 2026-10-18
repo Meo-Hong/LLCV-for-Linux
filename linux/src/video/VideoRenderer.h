@@ -18,12 +18,22 @@ struct PixelRect {
 };
 
 enum class OutputMode { Sdr, Pq };
+enum class ChromaSiting { Center, Left, TopLeft };
+
+struct Placement {
+    bool fullscreen = false;
+    bool originalSize = false;
+    int horizontal = 1;
+    int vertical = 1;
+};
 
 class VideoRenderer {
 public:
     bool Initialize(std::string& error, bool gles);
     void Shutdown();
     void Configure(OutputMode output, float sdrWhiteNits);
+    void SetPlacement(const Placement& placement) { placement_ = placement; }
+    void SetP010ChromaSiting(ChromaSiting siting) { p010Siting_ = siting; }
     void Upload(const capture::VideoFrame& frame);
     void Draw(int targetWidth, int targetHeight, bool sharp);
     void BeginUiLayer(int targetWidth, int targetHeight);
@@ -56,6 +66,7 @@ private:
         GLint videoRect = -1;
         GLint hasVideo = -1;
         GLint swapRedBlue = -1;
+        GLint chromaOffset = -1;
         std::array<GLint, 3> samplers{-1, -1, -1};
     };
 
@@ -103,6 +114,8 @@ private:
     OutputMode output_ = OutputMode::Sdr;
     float sdrWhite_ = 203.0f;
     PixelRect lastRect_;
+    Placement placement_;
+    ChromaSiting p010Siting_ = ChromaSiting::Center;
 };
 
 }

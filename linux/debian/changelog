@@ -1,3 +1,41 @@
+llcv (2.1.3) resolute; urgency=medium
+
+  * Follow the Windows LLCV 2.1.0, 2.1.1, 2.1.2 and 2.1.3 updates.
+  * MP4 recording (F9, Settings → Recording) through FFmpeg. NV12, YUY2,
+    MJPEG and BGR24 SDR video with 16-bit stereo capture audio is saved as
+    fragmented MP4 with H.264, HEVC or AV1 on NVENC, VA-API or CPU encoders
+    (x264, x265, SVT-AV1). Quality (constant QP) or target bitrate, 1080p and
+    60 fps limits by default, AAC 128/192 kbps, a recording volume separate
+    from playback, pause/resume from the Alt menu and automatic splitting by
+    duration or size. Encoder support is checked when the Recording page
+    opens; unsupported combinations report an error instead of switching.
+    Opening settings or quitting asks before stopping and saving a
+    recording. HDR input is not recorded.
+  * Playback mute (M) from the audio OSD, the audio-only view or the Audio
+    menu. A translucent icon stays at the top right while the audio OSD is
+    hidden. Recorded sound is not muted; the wheel and volume up/down unmute
+    playback. Existing custom shortcuts are kept, and Recording and Mute get
+    a free function key when F9 or M is already taken.
+  * Allow unlisted FPS (Video): a direct 30 fps request when the driver does
+    not list it, confirmed on Start without falling back to another rate.
+  * Fullscreen video size (fit to screen or original size) and position
+    (center, edges or corners) under Window.
+  * Colorimetry is read again after streaming starts, so the final MJPEG
+    color range and matrix apply.
+  * The window position is no longer saved while the window is minimized.
+  * More Windows features: HDR chroma placement override for P010, hardware
+    HDR-to-SDR requests for AVerMedia UVC-extension and Elgato HD60 S+/X
+    devices (with a udev rule for the Elgato HID interface), fullscreen
+    start and F5 fullscreen when the capture matches the monitor, keep
+    relative window size across monitors, double-click to reset a volume to
+    100 %, mouse wheel per channel, orange boosted volume, a movable and
+    aspect-locked audio-only view that follows Borderless window, Open last
+    recording, and Cancel in settings opened during playback.
+  * Recording keeps up to about 0.75 s of frames so CPU encoders no longer
+    drop frames at keyframes.
+
+ -- Meohong <busimh001@gmail.com>  Mon, 19 Oct 2026 21:00:00 +0900
+
 llcv (2.0.5) resolute; urgency=medium
 
   * Follow the Windows LLCV 2.0.5 update.

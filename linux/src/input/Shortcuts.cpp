@@ -3,7 +3,7 @@
 namespace llcv::input {
 namespace {
 
-constexpr std::string_view kDefaultLabels[kActionCount] = {"F1", "F2", "F3", "F5", "F11", "F12", "Tab", "Esc"};
+constexpr std::string_view kDefaultLabels[kActionCount] = {"F1", "F2", "F3", "F5", "F11", "F12", "Tab", "Esc", "F9", "M"};
 
 bool IsAsciiAlnum(char value) {
     const unsigned char c = static_cast<unsigned char>(value);
@@ -25,6 +25,13 @@ bool EqualsIgnoreCase(std::string_view left, std::string_view right) {
 bool ConsumePrefix(std::string_view& text, std::string_view prefix) {
     if (text.size() < prefix.size() || !EqualsIgnoreCase(text.substr(0, prefix.size()), prefix)) return false;
     text.remove_prefix(prefix.size());
+    return true;
+}
+
+bool IsUnused(const Bindings& bindings, size_t index, Binding binding) {
+    for (size_t i = 0; i < kActionCount; ++i) {
+        if (i != index && bindings[i] == binding) return false;
+    }
     return true;
 }
 
@@ -178,6 +185,28 @@ std::string ExpandKeyLabels(std::string_view text, const Bindings& bindings) {
         if (!replaced) result += text[position++];
     }
     return result;
+}
+
+void AssignFreeDefault(Bindings& bindings, Action action) {
+    const size_t index = static_cast<size_t>(action);
+    const Binding preferred = kDefaultBindings[index];
+    if (IsUnused(bindings, index, preferred)) {
+        bindings[index] = preferred;
+        return;
+    }
+    const int first = action == Action::Recording ? SDL_SCANCODE_F9 : SDL_SCANCODE_F1;
+    for (int key = first; key <= SDL_SCANCODE_F12; ++key) {
+        if (key != SDL_SCANCODE_F4 && IsUnused(bindings, index, static_cast<Binding>(key))) {
+            bindings[index] = static_cast<Binding>(key);
+            return;
+        }
+    }
+    for (int key = SDL_SCANCODE_F13; key <= SDL_SCANCODE_F24; ++key) {
+        if (IsUnused(bindings, index, static_cast<Binding>(key))) {
+            bindings[index] = static_cast<Binding>(key);
+            return;
+        }
+    }
 }
 
 }

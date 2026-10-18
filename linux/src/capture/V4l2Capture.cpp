@@ -1,5 +1,6 @@
 #include "capture/V4l2Capture.h"
 
+#include "capture/HardwareToneMapping.h"
 #include "diagnostics/Logger.h"
 #include "platform/Clock.h"
 #include "platform/Strings.h"
@@ -54,19 +55,22 @@ uint64_t TimestampNs(const v4l2_buffer& buffer, uint64_t fallback) {
     return value ? value : fallback;
 }
 
-bool Confirm40Fps(int fd, bool rateSet, int rateError, const v4l2_streamparm& requested, FrameRate& rate,
-                  std::string& error) {
+using RateCheck = bool (*)(const FrameRate&);
+
+bool ConfirmRequestedRate(int fd, bool rateSet, int rateError, const v4l2_streamparm& requested, const char* label,
+                          RateCheck matches, FrameRate& rate, std::string& error) {
     if (!rateSet) {
-        error = platform::Format("40 fps rejected: VIDIOC_S_PARM failed (%s)", std::strerror(rateError));
+        error = platform::Format("%s rejected: VIDIOC_S_PARM failed (%s)", label, std::strerror(rateError));
         return false;
     }
     if (!(requested.parm.capture.capability & V4L2_CAP_TIMEPERFRAME)) {
-        error = "40 fps rejected: the driver does not support frame-rate requests (no V4L2_CAP_TIMEPERFRAME)";
+        error = platform::Format("%s rejected: the driver does not support frame-rate requests (no V4L2_CAP_TIMEPERFRAME)",
+                                 label);
         return false;
     }
     const auto& reported = requested.parm.capture.timeperframe;
     if (!reported.numerator || !reported.denominator) {
-        error = "40 fps rejected: the driver reported no frame interval";
+        error = platform::Format("%s rejected: the driver reported no frame interval", label);
         return false;
     }
     rate = {reported.numerator, reported.denominator};
@@ -76,10 +80,10 @@ bool Confirm40Fps(int fd, bool rateSet, int rateError, const v4l2_streamparm& re
         active.parm.capture.timeperframe.denominator) {
         rate = {active.parm.capture.timeperframe.numerator, active.parm.capture.timeperframe.denominator};
     }
-    diagnostics::Log("[capture] 40 fps request: driver reports %u/%u s per frame (%s fps)",
-                     rate.numerator, rate.denominator, FormatRate(rate).c_str());
-    if (!IsFortyFps(rate)) {
-        error = platform::Format("40 fps rejected: the driver set %s fps", FormatRate(rate).c_str());
+    diagnostics::Log("[capture] %s request: driver reports %u/%u s per frame (%s fps)", label, rate.numerator,
+                     rate.denominator, FormatRate(rate).c_str());
+    if (!matches(rate)) {
+        error = platform::Format("%s rejected: the driver set %s fps", label, FormatRate(rate).c_str());
         return false;
     }
     return true;
@@ -196,6 +200,9 @@ bool V4l2Capture::OpenDevice(std::string& error) {
         }
     }
 
+    ConfigureHardwareToneMapping(fd_, config_.devicePath, config_.format,
+                                 config_.hdrInput == video::HdrInput::ForceHdr10);
+
     NegotiatedFormat negotiated;
     negotiated.format = config_.format;
     negotiated.width = config_.width;
@@ -226,7 +233,14 @@ bool V4l2Capture::OpenDevice(std::string& error) {
     } else {
         diagnostics::Log("[capture] VIDIOC_S_PARM failed: %s", std::strerror(rateSet ? EINVAL : rateError));
     }
-    if (config_.capture40Fps && !Confirm40Fps(fd_, rateSet, rateError, parameters, negotiated.rate, error)) {
+    if (config_.capture40Fps && !ConfirmRequestedRate(fd_, rateSet, rateError, parameters, "40 fps", IsFortyFps,
+                                                      negotiated.rate, error)) {
+        CloseDevice();
+        return false;
+    }
+    if (!config_.capture40Fps && config_.directRate &&
+        !ConfirmRequestedRate(fd_, rateSet, rateError, parameters, "Direct 30 fps", IsThirtyFps, negotiated.rate,
+                              error)) {
         CloseDevice();
         return false;
     }
@@ -278,6 +292,15 @@ bool V4l2Capture::OpenDevice(std::string& error) {
     streaming_ = true;
     haveSequence_ = false;
     negotiated.bufferCount = static_cast<int>(request.count);
+    v4l2_format active{};
+    active.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    if (Ioctl(fd_, VIDIOC_G_FMT, &active) == 0 && active.fmt.pix.pixelformat == fourcc) {
+        colorInput.colorspace = active.fmt.pix.colorspace;
+        colorInput.ycbcrEncoding = active.fmt.pix.ycbcr_enc;
+        colorInput.quantization = active.fmt.pix.quantization;
+        colorInput.transferFunction = active.fmt.pix.xfer_func;
+        negotiated.color = video::ResolveV4l2Color(colorInput, config_.colorOverride, config_.hdrInput);
+    }
     {
         std::lock_guard<std::mutex> lock(mutex_);
         negotiated_ = negotiated;
@@ -406,12 +429,26 @@ bool V4l2Capture::DrainAndPublish() {
             frame.readyNs = readyNs;
             frame.sequence = latest.sequence;
             frame.sourceFormat = config_.format;
+            const video::ColorSpec color = frame.color;
+            const uint64_t captureNs = frame.captureNs;
             if (mailbox_->Publish()) counters_.replaced.fetch_add(1, std::memory_order_relaxed);
             counters_.frames.fetch_add(1, std::memory_order_relaxed);
             counters_.lastFrameNs.store(readyNs, std::memory_order_release);
             counters_.processingNsTotal.fetch_add(readyNs - dequeueNs, std::memory_order_relaxed);
             counters_.processingSamples.fetch_add(1, std::memory_order_relaxed);
             if (onFrame_) onFrame_();
+            if (RawFrameSink* sink = sink_.load(std::memory_order_acquire)) {
+                RawFrame raw;
+                raw.format = config_.format;
+                raw.data = static_cast<const uint8_t*>(buffers_[latest.index].data);
+                raw.size = latest.bytesused;
+                raw.width = config_.width;
+                raw.height = config_.height;
+                raw.stride = static_cast<int>(bytesPerLine_);
+                raw.color = color;
+                raw.captureNs = captureNs;
+                sink->OnRawFrame(raw);
+            }
         }
     }
     if (!usable) counters_.corrupt.fetch_add(1, std::memory_order_relaxed);

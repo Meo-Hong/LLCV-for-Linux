@@ -20,6 +20,8 @@ inline constexpr Shortcut kShortcuts[] = {
     {input::Action::Screenshot, N_("Save screenshot"), true},
     {input::Action::Diagnostics, N_("Live diagnostics"), false},
     {input::Action::Exit, N_("Leave fullscreen / exit"), false},
+    {input::Action::Recording, N_("Start / stop recording"), true},
+    {input::Action::Mute, N_("Toggle playback mute"), false},
 };
 
 struct FixedShortcut {

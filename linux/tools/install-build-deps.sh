@@ -51,7 +51,7 @@ case "$family" in
         run dnf builddep -y "$root/packaging/rpm/llcv.spec"
         ;;
     arch)
-        run pacman -S --needed --noconfirm base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd dbus
+        run pacman -S --needed --noconfirm base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd dbus ffmpeg
         ;;
     *)
         echo "Unsupported distribution: $ID. See BUILDING.md, section \"Other distributions\"." >&2

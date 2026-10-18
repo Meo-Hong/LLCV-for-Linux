@@ -5,8 +5,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-15 01:15+0900\n"
-"PO-Revision-Date: 2026-10-15 00:00+0900\n"
+"POT-Creation-Date: 2026-10-19 02:55+0900\n"
+"PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
 "Language: ja\n"
@@ -16,10 +16,71 @@ msgstr ""
 "Plural-Forms: nplurals=1; plural=0;\n"
 
 #: src/app/App.cpp
+msgid "The previous recording is still being finalized."
+msgstr "前の録画をまだ仕上げています。"
+
+#: src/app/App.cpp
+msgid ""
+"This build has no recording support. Rebuild LLCV with the FFmpeg "
+"development files installed."
+msgstr ""
+"このビルドには録画機能がありません。FFmpegの開発ファイルをインストールして"
+"LLCVをビルドし直してください。"
+
+#: src/app/App.cpp
+msgid "This input format cannot be recorded."
+msgstr "この入力形式は録画できません。"
+
+#: src/app/App.cpp
+msgid "HDR input cannot be recorded. Recording supports SDR video only."
+msgstr "HDR入力は録画できません。録画はSDR映像のみに対応しています。"
+
+#: src/app/App.cpp
+msgid "The recording folder is unavailable."
+msgstr "録画の保存先フォルダーを使用できません。"
+
+#: src/app/App.cpp
+msgid "Not enough free space in the recording folder."
+msgstr "録画の保存先フォルダーの空き容量が不足しています。"
+
+#: src/app/App.cpp
+msgid "Recording stopped: not enough disk space."
+msgstr "空き容量が不足したため録画を停止しました。"
+
+#: src/app/App.cpp
+msgid "Recording stopped: the file could not be written."
+msgstr "ファイルに書き込めなかったため録画を停止しました。"
+
+#: src/app/App.cpp
+msgid ""
+"Recording stopped: encoding or writing could not keep up. Lower the "
+"recording resolution or frame limit."
+msgstr ""
+"エンコードまたはファイルの書き込みが追いつかないため録画を停止しました。録画"
+"の解像度またはフレームレートの上限を下げてください。"
+
+#: src/app/App.cpp
+msgid "Recording stopped: the encoder reported an error."
+msgstr "エンコーダーでエラーが発生したため録画を停止しました。"
+
+#: src/app/App.cpp
+msgid "The recording file could not be finalized."
+msgstr "録画ファイルを仕上げられませんでした。"
+
+#: src/app/App.cpp
+msgid "Recording could not be completed."
+msgstr "録画を完了できませんでした。"
+
+#: src/app/App.cpp
 msgid ""
 "Audio device disconnected · it is restored automatically when it returns"
 msgstr ""
 "オーディオデバイスの接続が切れました · 再接続されると自動的に復旧します"
+
+#: src/app/App.cpp
+#, c-format
+msgid "The folder dialog is unavailable: %s"
+msgstr "フォルダーの選択ダイアログを開けません：%s"
 
 #: src/app/App.cpp
 msgid "Audio restored."
@@ -219,8 +280,33 @@ msgid "Volume"
 msgstr "音量"
 
 #: src/app/App.cpp
+msgid " · playback muted"
+msgstr " · 再生ミュート中"
+
+#: src/app/App.cpp
 msgid " · muted in background"
 msgstr " · バックグラウンドでミュート"
+
+#: src/app/App.cpp
+msgid "Preparing"
+msgstr "準備中"
+
+#: src/app/App.cpp
+msgid "Finalizing"
+msgstr "仕上げ中"
+
+#: src/app/App.cpp
+msgid "Paused · "
+msgstr "一時停止中 · "
+
+#: src/app/App.cpp
+#, c-format
+msgid " · dropped %llu"
+msgstr " · 欠落 %llu"
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+msgid "Recording"
+msgstr "録画"
 
 #: src/app/App.cpp
 msgid "System default output"
@@ -238,6 +324,10 @@ msgstr "キャプチャオーディオデバイスを選択してください。
 #: src/app/App.cpp
 msgid "No capture device."
 msgstr "キャプチャデバイスがありません。"
+
+#: src/app/App.cpp
+msgid " (direct request)"
+msgstr "（直接要求）"
 
 #: src/app/App.cpp
 msgid "no audio"
@@ -291,6 +381,20 @@ msgstr ""
 "拒否されたり別のFPSが報告されたりすることがあります。映像 → 40fpsキャプチャの"
 "チェックを外すと、通常のフレームレート選択で再試行できます。形式の拒否か、そ"
 "の他の開始エラーかは診断ログで確認してください。"
+
+#: src/app/App.cpp
+msgid ""
+"\n"
+"\n"
+"30 fps was requested directly because the driver does not list it. The "
+"driver rejected it or applied another rate. Choose a listed frame rate or "
+"turn off Video → Allow unlisted FPS."
+msgstr ""
+"\n"
+"\n"
+"ドライバーの一覧にない30fpsを直接要求しましたが、ドライバーが拒否したか、別の"
+"フレームレートを適用しました。一覧にあるフレームレートを選ぶか、映像 → 一覧に"
+"ないFPSを要求をオフにしてください。"
 
 #: src/app/App.cpp
 msgid "Could not start audio: "
@@ -428,6 +532,66 @@ msgid "Settings could not be saved. The previous settings file is kept: %s"
 msgstr ""
 "設定を保存できませんでした。既存の設定ファイルはそのまま保持されます：%s"
 
+#: src/app/App.cpp
+msgid "Recording is available in video mode."
+msgstr "録画は映像モードで使用できます。"
+
+#: src/app/App.cpp
+msgid "Recording started · press F9 again to stop"
+msgstr "録画を開始しました · もう一度F9を押すと停止します"
+
+#: src/app/App.cpp src/ui/ViewerOverlay.cpp
+msgid "Finalizing recording…"
+msgstr "録画を仕上げています…"
+
+#: src/app/App.cpp
+msgid "Recording paused. Playback continues."
+msgstr "録画を一時停止しました。再生は続きます。"
+
+#: src/app/App.cpp
+msgid "Recording resumed."
+msgstr "録画を再開しました。"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Recording saved: %s"
+msgstr "録画を保存しました：%s"
+
+#: src/app/App.cpp
+#, c-format
+msgid " (%d files)"
+msgstr "（ファイル%d個）"
+
+#: src/app/App.cpp
+msgid "The part before the stop was saved."
+msgstr "停止前までの部分は保存しました。"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Recording could not start: %s"
+msgstr "録画を開始できませんでした：%s"
+
+#: src/app/App.cpp
+msgid "Nothing was recorded."
+msgstr "何も録画されませんでした。"
+
+#: src/app/App.cpp
+msgid "1:1 size · the capture matches this monitor, so fullscreen is used."
+msgstr "1:1サイズ · キャプチャ解像度がこのモニターと同じため、全画面表示にします。"
+
+#: src/app/App.cpp
+msgid "A 1:1 window does not fit this monitor, so it was reduced to fit."
+msgstr "1:1サイズのウィンドウがこのモニターに収まらないため、縮小しました。"
+
+#: src/app/App.cpp
+msgid "The last recording file no longer exists."
+msgstr "最後の録画ファイルが見つかりません。"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Could not open the file: %s"
+msgstr "ファイルを開けませんでした：%s"
+
 #: src/capture/V4l2Capture.cpp
 msgid "Another application is using the capture device"
 msgstr "別のアプリがキャプチャデバイスを使用中です"
@@ -469,6 +633,34 @@ msgstr ""
 #: src/ui/SettingsScreen.cpp
 msgid "Check the measured input rate under Actual FPS in the Tab diagnostics."
 msgstr "実際の受信レートは、Tab診断画面の「実測FPS」で確認してください。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Adds 30 fps to the frame-rate list when the driver does not list it. Off by "
+"default."
+msgstr ""
+"ドライバーの一覧に30fpsがない場合に、フレームレートの一覧へ追加します。既定で"
+"はオフです。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"It is a direct request, not a support confirmation. If the driver rejects 30 "
+"fps or applies another rate, Start stops with a notice."
+msgstr ""
+"対応の確認ではなく直接の要求です。ドライバーが30fpsを拒否するか別のフレーム"
+"レートを適用した場合は、開始時に通知して中止します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Turn off 40 fps capture first. It does not convert 60 fps to 30 fps in "
+"software."
+msgstr ""
+"先に40fpsキャプチャをオフにしてください。60fpsをソフトウェアで30fpsに変換する"
+"機能ではありません。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "After starting, check Actual FPS in the Tab diagnostics."
+msgstr "開始後、Tab診断の「実測FPS」を確認してください。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "MJPEG (compressed · high resolution/refresh)"
@@ -528,12 +720,24 @@ msgid "Window##window"
 msgstr "ウィンドウ##window"
 
 #: src/ui/SettingsScreen.cpp
+msgid "Recording##recording"
+msgstr "録画##recording"
+
+#: src/ui/SettingsScreen.cpp
 msgid "Guide & logs##guide"
 msgstr "ガイド・ログ##guide"
 
 #: src/ui/SettingsScreen.cpp
 msgid "App##app"
 msgstr "アプリ##app"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Cancel##settingsCancel"
+msgstr "キャンセル##settingsCancel"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Discard the changes and resume playback"
+msgstr "変更を破棄して再生を再開します"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Quit##quit"
@@ -598,6 +802,20 @@ msgid "Auto (highest uncompressed rate)"
 msgstr "自動（非圧縮の最高フレームレート）"
 
 #: src/ui/SettingsScreen.cpp
+msgid "30 fps · direct request"
+msgstr "30fps · 直接要求"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Direct request: 30 fps. This is not a support confirmation. Start stops with "
+"a notice if the driver rejects it or applies another rate; check Actual FPS "
+"in the Tab diagnostics."
+msgstr ""
+"直接要求：30fps。対応を確認した表示ではありません。ドライバーが拒否するか別の"
+"フレームレートを適用した場合は、開始時に通知して中止します。Tab診断の「実測"
+"FPS」を確認してください。"
+
+#: src/ui/SettingsScreen.cpp
 msgid "40 fps capture"
 msgstr "40fpsキャプチャ"
 
@@ -616,6 +834,10 @@ msgid ""
 msgstr ""
 "自動検出された一覧に40fpsがありません。開始時にドライバーが受け入れるかどうか"
 "を確認し、拒否された場合は別のFPSに切り替えずにエラーを表示します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Allow unlisted FPS (30 fps)"
+msgstr "一覧にないFPSを要求（30fps）"
 
 #: src/ui/SettingsScreen.cpp
 #, c-format
@@ -701,6 +923,28 @@ msgstr "常にSDRトーンマッピング"
 #: src/ui/SettingsScreen.cpp
 msgid "Always HDR output (Wayland)"
 msgstr "常にHDR出力（Wayland）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "HDR chroma placement"
+msgstr "HDRのクロマ位置"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (default)"
+msgstr "自動（既定）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Left"
+msgstr "左"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Top-left"
+msgstr "左上"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"A compatibility override for P010 when color edges look shifted. Leave it on "
+"Auto otherwise."
+msgstr "P010で色の境界がずれて見える場合の互換用設定です。それ以外は自動のままにしてください。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "SDR reference white"
@@ -884,6 +1128,10 @@ msgid "Borderless window"
 msgstr "枠なしウィンドウ"
 
 #: src/ui/SettingsScreen.cpp
+msgid "Keep relative window size when moving monitors"
+msgstr "モニター間の移動時に相対的なウィンドウサイズを維持"
+
+#: src/ui/SettingsScreen.cpp
 msgid "Start in fullscreen"
 msgstr "全画面表示で起動"
 
@@ -898,6 +1146,52 @@ msgstr "自動的に隠す（推奨）"
 #: src/ui/SettingsScreen.cpp
 msgid "Always visible"
 msgstr "常に表示"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Fullscreen video size"
+msgstr "全画面表示の映像サイズ"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Fit to screen (default)"
+msgstr "画面に合わせる（既定）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Original size (1:1 · reduced if larger)"
+msgstr "元のサイズ（1:1 · 画面より大きい場合は縮小）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Fullscreen video position"
+msgstr "全画面表示の映像の位置"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Center (default)"
+msgstr "中央（既定）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Top"
+msgstr "上"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Right"
+msgstr "右"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Bottom"
+msgstr "下"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Applies in fullscreen when the video does not fill the screen. Margins stay "
+"black and the video is never cropped."
+msgstr ""
+"全画面表示で映像が画面全体を埋めない場合に適用されます。余白は黒で表示され、"
+"映像が切り取られることはありません。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"When the capture resolution matches the monitor, playback starts in "
+"fullscreen and F5 uses fullscreen for 1:1 pixels."
+msgstr "キャプチャ解像度がモニターと同じ場合は全画面表示で再生を開始し、F5でも1:1ピクセルのために全画面表示を使います。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Monitor"
@@ -923,6 +1217,276 @@ msgstr ""
 #: src/ui/SettingsScreen.cpp
 msgid "X11 mode: the startup monitor and last window position are restored."
 msgstr "X11モード：起動時のモニターと前回のウィンドウ位置を復元します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"This build has no recording support. Install the FFmpeg development files "
+"(libavcodec, libavformat, libavutil, libswscale) and rebuild LLCV."
+msgstr ""
+"このビルドには録画機能がありません。FFmpegの開発ファイル（libavcodec、"
+"libavformat、libavutil、libswscale）をインストールしてLLCVをビルドし直してく"
+"ださい。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Recording video (F9)"
+msgstr "録画の映像（F9）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Checking encoder support…"
+msgstr "エンコーダーの対応状況を確認しています…"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"The encoder check could not finish. This does not mean the codecs are "
+"unsupported; open the Recording page again to retry."
+msgstr ""
+"エンコーダーの確認を完了できませんでした。コーデックが非対応という意味ではあ"
+"りません。録画ページを開き直すと再確認します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Codec"
+msgstr "コーデック"
+
+#: src/ui/SettingsScreen.cpp
+msgid " (not supported)"
+msgstr "（非対応）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Encoder"
+msgstr "エンコーダー"
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Automatic hardware (%s)"
+msgstr "ハードウェア自動選択（%s）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Automatic hardware"
+msgstr "ハードウェア自動選択"
+
+#: src/ui/SettingsScreen.cpp
+msgid "CPU"
+msgstr "CPU"
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "CPU (%s)"
+msgstr "CPU（%s）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Rate control"
+msgstr "レート制御"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Quality (constant QP)"
+msgstr "品質優先（固定QP）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Target bitrate"
+msgstr "ビットレート指定"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Quality"
+msgstr "品質"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Smaller files (QP 26)"
+msgstr "ファイルサイズ優先（QP 26）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Balanced (QP 23 · default)"
+msgstr "バランス（QP 23 · 既定）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Higher quality (QP 20)"
+msgstr "高画質（QP 20）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "AV1 uses an equivalent quantizer for these presets."
+msgstr "AV1では、これらのプリセットに相当する量子化値を使用します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Video bitrate"
+msgstr "映像のビットレート"
+
+#: src/ui/SettingsScreen.cpp
+msgid " (default)"
+msgstr "（既定）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Resolution limit"
+msgstr "解像度の上限"
+
+#: src/ui/SettingsScreen.cpp
+msgid "1080p (default)"
+msgstr "1080p（既定）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Match capture"
+msgstr "キャプチャと同じ"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Frame-rate limit"
+msgstr "フレームレートの上限"
+
+#: src/ui/SettingsScreen.cpp
+msgid "60 fps (default)"
+msgstr "60fps（既定）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Lower input is kept as is. These limits never change playback."
+msgstr ""
+"これより低い入力はそのまま録画します。これらの上限は再生には影響しません。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"This codec, encoder and rate control combination is not supported here. "
+"Recording reports an error instead of switching to another codec or the CPU."
+msgstr ""
+"この環境ではサポートされていないコーデック・エンコーダー・レート制御の組み合"
+"わせです。録画時に別のコーデックやCPUへ切り替えず、エラーを表示します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Recording audio"
+msgstr "録画のオーディオ"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Audio (AAC)"
+msgstr "オーディオ（AAC）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "192 kbps (default)"
+msgstr "192 kbps（既定）"
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Recording volume %d%%"
+msgstr "録画音量 %d%%"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Recording volume is separate from playback volume and playback mute. 0% "
+"records silence."
+msgstr "録画音量は再生音量や再生ミュートとは別です。0%では無音で録画します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Files"
+msgstr "ファイル"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Save folder"
+msgstr "保存先フォルダー"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Choose…##recordingFolder"
+msgstr "選択…##recordingFolder"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Open folder##recordingFolder"
+msgstr "フォルダーを開く##recordingFolder"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Default##recordingFolder"
+msgstr "既定のフォルダー##recordingFolder"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Free space"
+msgstr "空き容量"
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "%.1f GB free"
+msgstr "空き %.1f GB"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Unavailable"
+msgstr "確認できません"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Automatic splitting"
+msgstr "自動分割"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Off (default)"
+msgstr "オフ（既定）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "By duration"
+msgstr "時間で分割"
+
+#: src/ui/SettingsScreen.cpp
+msgid "By size"
+msgstr "サイズで分割"
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Every %d minutes"
+msgstr "%d分ごと"
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Every %d GiB"
+msgstr "%d GiBごと"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"A new file starts at the next keyframe, so a part can run slightly past the "
+"limit."
+msgstr ""
+"次のキーフレームで新しいファイルを開始するため、上限を少し超えることがありま"
+"す。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Recordings are fragmented MP4. Parts already written usually survive a "
+"crash, but the last seconds are not guaranteed."
+msgstr ""
+"録画ファイルはフラグメント化MP4です。異常終了しても書き込み済みの部分はたいて"
+"い残りますが、最後の数秒は保証されません。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Last recording"
+msgstr "最後の録画"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Open##lastRecording"
+msgstr "開く##lastRecording"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Supported input"
+msgstr "対応する入力"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Records NV12, YUY2, MJPEG and BGR24 SDR video with 16-bit stereo capture "
+"audio to MP4."
+msgstr ""
+"NV12、YUY2、MJPEG、BGR24のSDR映像と16ビットステレオのキャプチャオーディオを"
+"MP4に録画します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"HDR input (P010 or Force HDR10) is not recorded. MJPEG recording decodes "
+"every frame again and uses more CPU."
+msgstr ""
+"HDR入力（P010またはHDR10を強制）は録画しません。MJPEGの録画ではすべてのフレー"
+"ムをもう一度デコードするため、CPU使用率が上がります。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Start playback, then press F9 to start or stop. Pause and resume are in the "
+"Alt menu under Recording."
+msgstr ""
+"再生を開始してから、F9で録画を開始または停止します。一時停止と再開は、Altメ"
+"ニューの「録画」にあります。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Opening settings or quitting stops the recording and saves it first. "
+"Overlays, playback volume and playback mute are not recorded."
+msgstr ""
+"設定を開くか終了すると、先に録画を停止して保存します。オーバーレイ、再生音"
+"量、再生ミュートは録画に含まれません。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Keyboard shortcuts"
@@ -982,6 +1546,10 @@ msgstr "ログの場所"
 #: src/ui/SettingsScreen.cpp
 msgid "Open logs folder##logs"
 msgstr "ログフォルダーを開く##logs"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Unlisted 30 fps requests"
+msgstr "一覧にない30fpsの要求"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Troubleshooting"
@@ -1147,6 +1715,14 @@ msgid "Leave fullscreen / exit"
 msgstr "全画面表示を解除 / 終了"
 
 #: src/ui/Shortcuts.h
+msgid "Start / stop recording"
+msgstr "録画の開始 / 停止"
+
+#: src/ui/Shortcuts.h
+msgid "Toggle playback mute"
+msgstr "再生ミュートの切り替え"
+
+#: src/ui/Shortcuts.h
 msgid "Show / hide the menu bar"
 msgstr "メニューバーの表示 / 非表示"
 
@@ -1165,6 +1741,14 @@ msgstr "ダブルクリック"
 #: src/ui/Shortcuts.h
 msgid "Toggle fullscreen"
 msgstr "全画面表示の切り替え"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Mute playback (M)"
+msgstr "再生をミュート（M）"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Unmute playback (M)"
+msgstr "再生のミュートを解除（M）"
 
 #: src/ui/ViewerOverlay.cpp
 msgid "No capture audio"
@@ -1188,6 +1772,10 @@ msgstr "クリッピングなし"
 #, c-format
 msgid "Volume %d%%"
 msgstr "音量 %d%%"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Playback muted · recordings keep their sound"
+msgstr "再生ミュート中 · 録画の音はそのまま残ります"
 
 #: src/ui/ViewerOverlay.cpp
 msgid "Muted in background"
@@ -1220,8 +1808,8 @@ msgid "Audio only"
 msgstr "オーディオ専用"
 
 #: src/ui/ViewerOverlay.cpp
-msgid "F2 settings · Tab diagnostics · F1 help · wheel volume"
-msgstr "F2：設定 · Tab：診断 · F1：ヘルプ · ホイール：音量"
+msgid "F2 settings · Tab diagnostics · F1 help · M mute · wheel volume"
+msgstr "F2：設定 · Tab：診断 · F1：ヘルプ · M：ミュート · ホイール：音量"
 
 #: src/ui/ViewerOverlay.cpp
 msgid "Low Latency Capture Viewer · Linux (V4L2 · OpenGL · SDL3)"
@@ -1238,6 +1826,39 @@ msgstr "対応"
 #: src/ui/ViewerOverlay.cpp
 msgid "Close (F1 / Esc)###close"
 msgstr "閉じる（F1 / Esc）###close"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Recording paused"
+msgstr "録画一時停止中"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Preparing recording…"
+msgstr "録画を準備しています…"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Recording in progress"
+msgstr "録画中"
+
+#: src/ui/ViewerOverlay.cpp
+msgid ""
+"Opening settings stops playback. The recording is stopped and saved first."
+msgstr "設定を開くと再生が停止します。先に録画を停止して保存します。"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "The recording is stopped and saved before LLCV quits."
+msgstr "LLCVを終了する前に、録画を停止して保存します。"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Stop recording and open settings"
+msgstr "録画を停止して設定を開く"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Stop recording and quit"
+msgstr "録画を停止して終了"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Cancel (Esc)###cancelRecordingConfirm"
+msgstr "キャンセル（Esc）###cancelRecordingConfirm"
 
 #: src/ui/ViewerOverlay.cpp
 msgid "View"
@@ -1281,8 +1902,36 @@ msgid "Wheel down"
 msgstr "ホイールを下へ"
 
 #: src/ui/ViewerOverlay.cpp
+msgid "Mute playback"
+msgstr "再生をミュート"
+
+#: src/ui/ViewerOverlay.cpp
 msgid "Mute in background"
 msgstr "バックグラウンドで自動ミュート"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Start recording"
+msgstr "録画を開始"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Stop recording"
+msgstr "録画を停止"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Pause recording"
+msgstr "録画を一時停止"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Resume recording"
+msgstr "録画を再開"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Open last recording"
+msgstr "最後の録画を開く"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Open recordings folder"
+msgstr "録画フォルダーを開く"
 
 #: src/ui/ViewerOverlay.cpp
 msgid "Tools"

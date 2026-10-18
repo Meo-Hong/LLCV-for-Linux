@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <cstdio>
 #include <cstdlib>
 #include <iterator>
 
@@ -79,17 +80,25 @@ void Note(const std::string& text) {
     Note(text, CurrentPalette().secondary);
 }
 
-bool Combo(const char* id, int& index, const std::vector<std::string>& items) {
+bool Combo(const char* id, int& index, const std::vector<std::string>& items, int accentIndex = -1,
+           const std::vector<bool>* enabled = nullptr) {
     const char* preview = index >= 0 && index < static_cast<int>(items.size()) ? items[index].c_str() : "";
+    const bool accentPreview = accentIndex >= 0 && index == accentIndex;
+    if (accentPreview) ImGui::PushStyleColor(ImGuiCol_Text, CurrentPalette().accent);
+    const bool open = ImGui::BeginCombo(id, preview);
+    if (accentPreview) ImGui::PopStyleColor();
     bool changed = false;
-    if (ImGui::BeginCombo(id, preview)) {
+    if (open) {
         for (int i = 0; i < static_cast<int>(items.size()); ++i) {
             ImGui::PushID(i);
             const bool selected = i == index;
-            if (ImGui::Selectable(items[i].c_str(), selected)) {
+            const bool available = !enabled || (*enabled)[static_cast<size_t>(i)];
+            if (i == accentIndex) ImGui::PushStyleColor(ImGuiCol_Text, CurrentPalette().accent);
+            if (ImGui::Selectable(items[i].c_str(), selected, available ? 0 : ImGuiSelectableFlags_Disabled)) {
                 index = i;
                 changed = true;
             }
+            if (i == accentIndex) ImGui::PopStyleColor();
             if (selected) ImGui::SetItemDefaultFocus();
             ImGui::PopID();
         }
@@ -138,6 +147,14 @@ constexpr const char* kCapture40Guide[] = {
     N_("It does not interpolate frames, lock a game to 40 fps, or replace VRR."),
     N_("A 40 fps game can also be viewed with 120 fps capture, so it is not required just for 40 fps games."),
     N_("Check the measured input rate under Actual FPS in the Tab diagnostics."),
+};
+
+constexpr const char* kUnlistedFpsGuide[] = {
+    N_("Adds 30 fps to the frame-rate list when the driver does not list it. Off by default."),
+    N_("It is a direct request, not a support confirmation. If the driver rejects 30 fps or applies another rate, "
+       "Start stops with a notice."),
+    N_("Turn off 40 fps capture first. It does not convert 60 fps to 30 fps in software."),
+    N_("After starting, check Actual FPS in the Tab diagnostics."),
 };
 
 void HelpMarker(const char* const* lines, size_t count) {
@@ -227,10 +244,17 @@ SettingsAction SettingsScreen::Draw(AppSettings& settings, const SettingsContext
         ImGui::Dummy(ImVec2(0.0f, 6.0f * g_scale));
     }
 
+    if (page_ == Page::Recording) {
+        if (!recordingShown_) recordingOpened_ = true;
+        recordingShown_ = true;
+    } else {
+        recordingShown_ = false;
+    }
     switch (page_) {
     case Page::Video: DrawVideo(settings, context); break;
     case Page::Audio: DrawAudio(settings, context); break;
     case Page::Window: DrawWindow(settings, context); break;
+    case Page::Recording: DrawRecording(settings, context); break;
     case Page::Guide: DrawGuide(settings, context); break;
     case Page::App: DrawApp(settings, context); break;
     }
@@ -247,7 +271,8 @@ SettingsAction SettingsScreen::Draw(AppSettings& settings, const SettingsContext
     ImGui::EndChild();
 
     ImGui::End();
-    if (page_ != Page::Guide || action_ == SettingsAction::Start || action_ == SettingsAction::Quit) {
+    if (page_ != Page::Guide || action_ == SettingsAction::Start || action_ == SettingsAction::Quit ||
+        action_ == SettingsAction::Cancel) {
         CancelShortcutCapture();
     }
     return action_;
@@ -275,6 +300,7 @@ void SettingsScreen::DrawSidebar(const SettingsContext& context, float height) {
         {Page::Video, T("Video##video")},
         {Page::Audio, T("Audio##audio")},
         {Page::Window, T("Window##window")},
+        {Page::Recording, T("Recording##recording")},
         {Page::Guide, T("Guide & logs##guide")},
         {Page::App, T("App##app")},
     };
@@ -292,7 +318,8 @@ void SettingsScreen::DrawFooter(const SettingsContext& context) {
     const Palette& palette = CurrentPalette();
     const ImGuiStyle& style = ImGui::GetStyle();
     const float buttonWidth = 112.0f * g_scale;
-    const float buttonsWidth = buttonWidth * 2.0f + style.ItemSpacing.x;
+    const int buttonCount = context.canCancel ? 3 : 2;
+    const float buttonsWidth = buttonWidth * static_cast<float>(buttonCount) + style.ItemSpacing.x * (buttonCount - 1);
     const float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
     const float textWidth = ImGui::GetContentRegionAvail().x - buttonsWidth - style.ItemSpacing.x * 2.0f;
 
@@ -307,6 +334,11 @@ void SettingsScreen::DrawFooter(const SettingsContext& context) {
     ImGui::PopClipRect();
 
     ImGui::SameLine(rightEdge - buttonsWidth);
+    if (context.canCancel) {
+        if (ImGui::Button(T("Cancel##settingsCancel"), ImVec2(buttonWidth, 0.0f))) action_ = SettingsAction::Cancel;
+        ImGui::SetItemTooltip("%s", T("Discard the changes and resume playback"));
+        ImGui::SameLine();
+    }
     if (ImGui::Button(T("Quit##quit"), ImVec2(buttonWidth, 0.0f))) {
         action_ = SettingsAction::Quit;
     }
@@ -422,16 +454,30 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
                     rateIndex = static_cast<int>(rateValues.size()) - 1;
                 }
             }
+            int directIndex = -1;
+            if (s.allowUnlistedFps && !s.capture40Fps && !rates.empty() &&
+                !capture::ListsFpsMilli(rates, capture::kDirectRequestFpsMilli)) {
+                rateItems.push_back(T("30 fps · direct request"));
+                rateValues.push_back(capture::kDirectRequestFpsMilli);
+                directIndex = static_cast<int>(rateValues.size()) - 1;
+                if (std::abs(s.frameRateMilli - capture::kDirectRequestFpsMilli) <= 10) rateIndex = directIndex;
+            }
             if (rateIndex < 0) {
                 rateItems.push_back(platform::Format("%.2f fps%s", s.frameRateMilli / 1000.0,
                                                      T(" (unsupported)")));
                 rateValues.push_back(s.frameRateMilli);
                 rateIndex = static_cast<int>(rateItems.size()) - 1;
             }
-            if (Combo("##frameRate", rateIndex, rateItems)) {
+            if (Combo("##frameRate", rateIndex, rateItems, directIndex)) {
                 s.frameRateMilli = rateValues[static_cast<size_t>(rateIndex)];
             }
             ImGui::EndDisabled();
+            if (directIndex >= 0 && rateIndex == directIndex) {
+                ValueRow();
+                Note(Keys(T("Direct request: 30 fps. This is not a support confirmation. Start stops with a notice if "
+                            "the driver rejects it or applies another rate; check Actual FPS in the Tab diagnostics.")),
+                     palette.accent);
+            }
 
             ValueRow();
             ImGui::Checkbox(T("40 fps capture"), &s.capture40Fps);
@@ -449,6 +495,12 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
                 }
             }
 
+            ValueRow();
+            ImGui::BeginDisabled(s.capture40Fps);
+            ImGui::Checkbox(T("Allow unlisted FPS (30 fps)"), &s.allowUnlistedFps);
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            HelpMarker(kUnlistedFpsGuide, std::size(kUnlistedFpsGuide));
             ValueRow();
             if (const auto mode = capture::ResolveMode(*device, app::RequestFromSettings(s))) {
                 Note(platform::Format(T("Selected mode: %d × %d · %s · %s fps"),
@@ -515,6 +567,13 @@ void SettingsScreen::DrawHdr(AppSettings& s, const SettingsContext& context) {
             {{settings::HdrOutputMode::Auto, T("Auto (HDR output on HDR displays, else tone mapping)")},
              {settings::HdrOutputMode::ToneMap, T("Always SDR tone mapping")},
              {settings::HdrOutputMode::Hdr, T("Always HDR output (Wayland)")}});
+        Row(T("HDR chroma placement"));
+        EnumCombo<settings::HdrChromaLocation>("##hdrChroma", s.hdrChromaLocation,
+                                               {{settings::HdrChromaLocation::Auto, T("Auto (default)")},
+                                                {settings::HdrChromaLocation::Left, T("Left")},
+                                                {settings::HdrChromaLocation::TopLeft, T("Top-left")}});
+        ValueRow();
+        Note(T("A compatibility override for P010 when color edges look shifted. Leave it on Auto otherwise."));
         Row(T("SDR reference white"));
         std::vector<std::pair<int, std::string>> whiteOptions;
         for (const int nits : settings::kSdrWhiteOptions) {
@@ -683,12 +742,37 @@ void SettingsScreen::DrawWindow(AppSettings& s, const SettingsContext& context) 
         ValueRow();
         ImGui::Checkbox(T("Borderless window"), &s.borderlessWindow);
         ValueRow();
+        ImGui::Checkbox(T("Keep relative window size when moving monitors"), &s.keepRelativeWindowSize);
+        ValueRow();
         ImGui::Checkbox(T("Start in fullscreen"), &s.startFullscreen);
         Row(T("Fullscreen cursor"));
         EnumCombo<settings::FullscreenCursor>(
             "##cursor", s.fullscreenCursor,
             {{settings::FullscreenCursor::AutoHide, T("Auto-hide (recommended)")},
              {settings::FullscreenCursor::AlwaysVisible, T("Always visible")}});
+        Row(T("Fullscreen video size"));
+        EnumCombo<settings::FullscreenVideoSize>(
+            "##fullscreenSize", s.fullscreenVideoSize,
+            {{settings::FullscreenVideoSize::Fit, T("Fit to screen (default)")},
+             {settings::FullscreenVideoSize::Original, T("Original size (1:1 · reduced if larger)")}});
+        Row(T("Fullscreen video position"));
+        EnumCombo<settings::FullscreenVideoPosition>(
+            "##fullscreenPosition", s.fullscreenVideoPosition,
+            {{settings::FullscreenVideoPosition::Center, T("Center (default)")},
+             {settings::FullscreenVideoPosition::TopLeft, T("Top-left")},
+             {settings::FullscreenVideoPosition::Top, T("Top")},
+             {settings::FullscreenVideoPosition::TopRight, T("Top-right")},
+             {settings::FullscreenVideoPosition::Left, T("Left")},
+             {settings::FullscreenVideoPosition::Right, T("Right")},
+             {settings::FullscreenVideoPosition::BottomLeft, T("Bottom-left")},
+             {settings::FullscreenVideoPosition::Bottom, T("Bottom")},
+             {settings::FullscreenVideoPosition::BottomRight, T("Bottom-right")}});
+        ValueRow();
+        Note(T("Applies in fullscreen when the video does not fill the screen. Margins stay black and the video is "
+               "never cropped."));
+        ValueRow();
+        Note(Keys(T("When the capture resolution matches the monitor, playback starts in fullscreen and F5 uses "
+                    "fullscreen for 1:1 pixels.")));
     }
     EndCard(table);
 
@@ -722,6 +806,222 @@ void SettingsScreen::DrawWindow(AppSettings& s, const SettingsContext& context) 
         }
     }
     EndCard(table);
+}
+
+void SettingsScreen::DrawRecording(AppSettings& s, const SettingsContext& context) {
+    const Palette& palette = CurrentPalette();
+    recording::Options& r = s.recording;
+    if (!context.recordingAvailable) {
+        const bool table = BeginCard("##recordingUnavailable", T("Recording"));
+        if (table) {
+            ValueRow();
+            Note(T("This build has no recording support. Install the FFmpeg development files (libavcodec, "
+                   "libavformat, libavutil, libswscale) and rebuild LLCV."),
+                 palette.warning);
+        }
+        EndCard(table);
+        return;
+    }
+
+    const recording::EncoderSupport& support = context.encoders;
+    const bool checked = support.state == recording::ProbeState::Done;
+    const bool checking =
+        support.state == recording::ProbeState::Running || support.state == recording::ProbeState::NotStarted;
+    const recording::CodecSupport& codecSupport = support.For(r.codec);
+    const recording::EncoderEntry& encoder = codecSupport.For(r.encoder);
+
+    bool table = BeginCard("##recordingVideo", Keys(T("Recording video (F9)")).c_str());
+    if (table) {
+        if (checking) {
+            ValueRow();
+            Note(T("Checking encoder support…"), palette.accent);
+        } else if (support.state == recording::ProbeState::Failed) {
+            ValueRow();
+            Note(T("The encoder check could not finish. This does not mean the codecs are unsupported; open the "
+                   "Recording page again to retry."),
+                 palette.warning);
+        }
+
+        Row(T("Codec"));
+        {
+            const char* names[] = {"H.264", "HEVC (H.265)", "AV1"};
+            std::vector<std::string> items;
+            std::vector<bool> enabled;
+            for (int i = 0; i < recording::kCodecCount; ++i) {
+                const bool available = !checked || support.codecs[static_cast<size_t>(i)].Any();
+                items.push_back(std::string(names[i]) + (available ? "" : T(" (not supported)")));
+                enabled.push_back(available);
+            }
+            int index = static_cast<int>(r.codec);
+            if (Combo("##recordingCodec", index, items, -1, &enabled)) r.codec = static_cast<recording::Codec>(index);
+        }
+
+        Row(T("Encoder"));
+        {
+            const recording::EncoderEntry& hardware = codecSupport.hardware;
+            const recording::EncoderEntry& cpu = codecSupport.cpu;
+            std::vector<std::string> items{
+                checked && hardware.available
+                    ? platform::Format(T("Automatic hardware (%s)"), recording::BackendName(hardware.backend))
+                    : std::string(T("Automatic hardware")),
+                checked && cpu.available ? platform::Format(T("CPU (%s)"), cpu.name.c_str()) : std::string(T("CPU"))};
+            if (checked && !hardware.available) items[0] += T(" (not supported)");
+            if (checked && !cpu.available) items[1] += T(" (not supported)");
+            const std::vector<bool> enabled{!checked || hardware.available, !checked || cpu.available};
+            int index = r.encoder == recording::EncoderChoice::Cpu ? 1 : 0;
+            if (Combo("##recordingEncoder", index, items, -1, &enabled)) {
+                r.encoder = index == 1 ? recording::EncoderChoice::Cpu : recording::EncoderChoice::AutoHardware;
+            }
+        }
+
+        Row(T("Rate control"));
+        {
+            std::vector<std::string> items{T("Quality (constant QP)"), T("Target bitrate")};
+            const std::vector<bool> enabled{!checked || encoder.quality, !checked || encoder.bitrate};
+            int index = r.rateControl == recording::RateControl::Bitrate ? 1 : 0;
+            if (Combo("##recordingRate", index, items, -1, &enabled)) {
+                r.rateControl = index == 1 ? recording::RateControl::Bitrate : recording::RateControl::Quality;
+            }
+        }
+        if (r.rateControl == recording::RateControl::Quality) {
+            Row(T("Quality"));
+            EnumCombo<recording::Quality>("##recordingQuality", r.quality,
+                                          {{recording::Quality::Compact, T("Smaller files (QP 26)")},
+                                           {recording::Quality::Balanced, T("Balanced (QP 23 · default)")},
+                                           {recording::Quality::High, T("Higher quality (QP 20)")}});
+            if (r.codec == recording::Codec::Av1) {
+                ValueRow();
+                Note(T("AV1 uses an equivalent quantizer for these presets."));
+            }
+        } else {
+            Row(T("Video bitrate"));
+            std::vector<std::pair<int, std::string>> options;
+            for (const int mbps : recording::kVideoMbpsOptions) {
+                options.emplace_back(mbps, platform::Format("%d Mbps%s", mbps, mbps == 20 ? T(" (default)") : ""));
+            }
+            EnumCombo<int>("##recordingMbps", r.videoMbps, options);
+        }
+
+        Row(T("Resolution limit"));
+        EnumCombo<int>("##recordingHeight", r.maxHeight,
+                       {{0, T("Match capture")}, {1440, "1440p"}, {1080, T("1080p (default)")}, {720, "720p"}});
+        Row(T("Frame-rate limit"));
+        EnumCombo<int>("##recordingFps", r.maxFps,
+                       {{0, T("Match capture")}, {60, T("60 fps (default)")}, {30, "30 fps"}});
+        ValueRow();
+        Note(T("Lower input is kept as is. These limits never change playback."));
+        if (checked && !encoder.Supports(r.rateControl)) {
+            ValueRow();
+            Note(T("This codec, encoder and rate control combination is not supported here. Recording reports an "
+                   "error instead of switching to another codec or the CPU."),
+                 palette.warning);
+        }
+    }
+    EndCard(table);
+
+    table = BeginCard("##recordingAudio", T("Recording audio"));
+    if (table) {
+        Row(T("Audio (AAC)"));
+        const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+        ImGui::SetNextItemWidth(half);
+        EnumCombo<int>("##recordingAudioKbps", r.audioKbps, {{128, "128 kbps"}, {192, T("192 kbps (default)")}});
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(half);
+        ImGui::SliderInt("##recordingVolume", &r.volumePercent, 0, 100, T("Recording volume %d%%"));
+        ValueRow();
+        Note(T("Recording volume is separate from playback volume and playback mute. 0% records silence."));
+    }
+    EndCard(table);
+
+    table = BeginCard("##recordingFiles", T("Files"));
+    if (table) {
+        Row(T("Save folder"));
+        if (!folderEditing_) {
+            std::snprintf(folderBuffer_, sizeof(folderBuffer_), "%s", context.recordingDirectory.c_str());
+        }
+        ImGui::InputText("##recordingFolder", folderBuffer_, sizeof(folderBuffer_));
+        folderEditing_ = ImGui::IsItemActive();
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            const std::string folder = platform::Trim(folderBuffer_);
+            if (folder != context.recordingDirectory) r.folder = folder;
+        }
+        ValueRow();
+        if (ImGui::Button(T("Choose…##recordingFolder"))) action_ = SettingsAction::ChooseRecordingFolder;
+        ImGui::SameLine();
+        if (ImGui::Button(T("Open folder##recordingFolder"))) action_ = SettingsAction::OpenRecordingFolder;
+        ImGui::SameLine();
+        ImGui::BeginDisabled(r.folder.empty());
+        if (ImGui::Button(T("Default##recordingFolder"))) r.folder.clear();
+        ImGui::EndDisabled();
+
+        Row(T("Free space"));
+        ImGui::AlignTextToFramePadding();
+        if (context.recordingFreeBytes) {
+            const double gib = static_cast<double>(*context.recordingFreeBytes) / (1024.0 * 1024.0 * 1024.0);
+            ImGui::Text(T("%.1f GB free"), gib);
+        } else {
+            ImGui::TextUnformatted(T("Unavailable"));
+        }
+
+        Row(T("Automatic splitting"));
+        EnumCombo<recording::SplitMode>("##recordingSplit", r.splitMode,
+                                        {{recording::SplitMode::Off, T("Off (default)")},
+                                         {recording::SplitMode::Duration, T("By duration")},
+                                         {recording::SplitMode::Size, T("By size")}});
+        if (r.splitMode == recording::SplitMode::Duration) {
+            ValueRow();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            std::vector<std::pair<int, std::string>> options;
+            for (const int minutes : recording::kSplitMinutesOptions) {
+                options.emplace_back(minutes, platform::Format(T("Every %d minutes"), minutes));
+            }
+            EnumCombo<int>("##recordingSplitMinutes", r.splitMinutes, options);
+        } else if (r.splitMode == recording::SplitMode::Size) {
+            ValueRow();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            std::vector<std::pair<int, std::string>> options;
+            for (const int gib : recording::kSplitGibOptions) {
+                options.emplace_back(gib, platform::Format(T("Every %d GiB"), gib));
+            }
+            EnumCombo<int>("##recordingSplitGib", r.splitGib, options);
+        }
+        if (r.splitMode != recording::SplitMode::Off) {
+            ValueRow();
+            Note(T("A new file starts at the next keyframe, so a part can run slightly past the limit."));
+        }
+        ValueRow();
+        Note(T("Recordings are fragmented MP4. Parts already written usually survive a crash, but the last seconds "
+               "are not guaranteed."));
+        if (!context.lastRecording.empty()) {
+            bool open = false;
+            PathRow(T("Last recording"), context.lastRecording, T("Open##lastRecording"), open);
+            if (open) action_ = SettingsAction::OpenLastRecording;
+        }
+    }
+    EndCard(table);
+
+    table = BeginCard("##recordingGuide", T("Supported input"));
+    if (table) {
+        const char* notes[] = {
+            T("Records NV12, YUY2, MJPEG and BGR24 SDR video with 16-bit stereo capture audio to MP4."),
+            T("HDR input (P010 or Force HDR10) is not recorded. MJPEG recording decodes every frame again and uses "
+              "more CPU."),
+            T("Start playback, then press F9 to start or stop. Pause and resume are in the Alt menu under Recording."),
+            T("Opening settings or quitting stops the recording and saves it first. Overlays, playback volume and "
+              "playback mute are not recorded."),
+        };
+        for (const char* note : notes) {
+            ValueRow();
+            Note(Keys(note));
+        }
+    }
+    EndCard(table);
+}
+
+bool SettingsScreen::TakeRecordingPageOpened() {
+    const bool opened = recordingOpened_;
+    recordingOpened_ = false;
+    return opened;
 }
 
 void SettingsScreen::CancelShortcutCapture() {
@@ -857,6 +1157,15 @@ void SettingsScreen::DrawGuide(AppSettings& s, const SettingsContext& context) {
     }
     EndCard(table);
 
+    table = BeginCard("##unlistedFps", T("Unlisted 30 fps requests"));
+    if (table) {
+        for (const auto& line : kUnlistedFpsGuide) {
+            ValueRow();
+            Note(Keys(T(line)));
+        }
+    }
+    EndCard(table);
+
     table = BeginCard("##troubleshooting", T("Troubleshooting"));
     if (table) {
         const char* notes[] = {
@@ -947,7 +1256,9 @@ void SettingsScreen::DrawApp(AppSettings& s, const SettingsContext& context) {
         ImGui::Text("%s %s · Linux", app::kAppName, app::kVersion);
         Row(T("Components"));
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("V4L2 · OpenGL 3.3 · SDL3 · Dear ImGui · libjpeg-turbo");
+        ImGui::TextUnformatted(context.recordingAvailable
+                                   ? "V4L2 · OpenGL 3.3 · SDL3 · Dear ImGui · libjpeg-turbo · FFmpeg"
+                                   : "V4L2 · OpenGL 3.3 · SDL3 · Dear ImGui · libjpeg-turbo");
         Row(T("License"));
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("GPL-3.0-or-later · Pretendard, Noto Sans JP (OFL-1.1)");

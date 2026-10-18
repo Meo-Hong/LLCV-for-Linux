@@ -10,6 +10,7 @@
 #include <map>
 #include <string>
 #include <system_error>
+#include <vector>
 
 namespace llcv::settings {
 namespace {
@@ -52,6 +53,28 @@ constexpr EnumName<VolumeHudPosition> kHud[] = {
     {VolumeHudPosition::BottomLeft, "bottom-left"}, {VolumeHudPosition::BottomRight, "bottom-right"}};
 constexpr EnumName<FullscreenCursor> kCursor[] = {
     {FullscreenCursor::AutoHide, "auto-hide"}, {FullscreenCursor::AlwaysVisible, "visible"}};
+constexpr EnumName<HdrChromaLocation> kHdrChroma[] = {
+    {HdrChromaLocation::Auto, "auto"}, {HdrChromaLocation::Left, "left"}, {HdrChromaLocation::TopLeft, "top-left"}};
+constexpr EnumName<FullscreenVideoSize> kFullscreenSize[] = {
+    {FullscreenVideoSize::Fit, "fit"}, {FullscreenVideoSize::Original, "original"}};
+constexpr EnumName<FullscreenVideoPosition> kFullscreenPosition[] = {
+    {FullscreenVideoPosition::Center, "center"}, {FullscreenVideoPosition::TopLeft, "top-left"},
+    {FullscreenVideoPosition::Top, "top"}, {FullscreenVideoPosition::TopRight, "top-right"},
+    {FullscreenVideoPosition::Left, "left"}, {FullscreenVideoPosition::Right, "right"},
+    {FullscreenVideoPosition::BottomLeft, "bottom-left"}, {FullscreenVideoPosition::Bottom, "bottom"},
+    {FullscreenVideoPosition::BottomRight, "bottom-right"}};
+constexpr EnumName<recording::Codec> kRecordingCodecs[] = {
+    {recording::Codec::H264, "h264"}, {recording::Codec::Hevc, "hevc"}, {recording::Codec::Av1, "av1"}};
+constexpr EnumName<recording::EncoderChoice> kRecordingEncoders[] = {
+    {recording::EncoderChoice::AutoHardware, "auto"}, {recording::EncoderChoice::Cpu, "cpu"}};
+constexpr EnumName<recording::RateControl> kRecordingRates[] = {
+    {recording::RateControl::Quality, "quality"}, {recording::RateControl::Bitrate, "bitrate"}};
+constexpr EnumName<recording::Quality> kRecordingQualities[] = {
+    {recording::Quality::Balanced, "balanced"}, {recording::Quality::Compact, "compact"},
+    {recording::Quality::High, "high"}};
+constexpr EnumName<recording::SplitMode> kRecordingSplits[] = {
+    {recording::SplitMode::Off, "off"}, {recording::SplitMode::Duration, "duration"},
+    {recording::SplitMode::Size, "size"}};
 
 template <typename E, size_t N>
 E ReadEnum(const Values& values, const char* key, const EnumName<E> (&names)[N], E fallback) {
@@ -123,12 +146,19 @@ const char* Bool(bool value) {
 
 input::Bindings ReadShortcuts(const Values& values) {
     input::Bindings bindings = input::kDefaultBindings;
+    std::vector<input::Action> missing;
     for (size_t i = 0; i < input::kActionCount; ++i) {
         const auto it = values.find(std::string("Shortcuts.") + input::kActionNames[i]);
-        if (it == values.end()) continue;
+        if (it == values.end()) {
+            missing.push_back(static_cast<input::Action>(i));
+            continue;
+        }
         const auto binding = input::Parse(it->second);
         if (!binding) return input::kDefaultBindings;
         bindings[i] = *binding;
+    }
+    if (missing.size() < input::kActionCount) {
+        for (const input::Action action : missing) input::AssignFreeDefault(bindings, action);
     }
     return input::IsValid(bindings) ? bindings : input::kDefaultBindings;
 }
@@ -153,11 +183,13 @@ AppSettings LoadSettings(const std::filesystem::path& path) {
     s.pixelFormat = ReadEnum(v, "Video.PixelFormat", kFormats, s.pixelFormat);
     s.frameRateMilli = ReadInt(v, "Video.FrameRateMilli", s.frameRateMilli, 0, 1000000);
     s.capture40Fps = ReadBool(v, "Video.Capture40Fps", s.capture40Fps);
+    s.allowUnlistedFps = ReadBool(v, "Video.AllowUnlistedFps", s.allowUnlistedFps);
     s.presentationMode = ReadEnum(v, "Video.Presentation", kPresentation, s.presentationMode);
     s.scalingMode = ReadEnum(v, "Video.Scaling", kScaling, s.scalingMode);
     s.colorOverride = ReadEnum(v, "Video.Color", kColors, s.colorOverride);
     s.hdrInput = ReadEnum(v, "Video.HdrInput", kHdrInput, s.hdrInput);
     s.hdrOutput = ReadEnum(v, "Video.HdrOutput", kHdrOutput, s.hdrOutput);
+    s.hdrChromaLocation = ReadEnum(v, "Video.HdrChroma", kHdrChroma, s.hdrChromaLocation);
     s.sdrWhiteNits = ReadOption(v, "Video.SdrWhiteNits", s.sdrWhiteNits, kSdrWhiteOptions);
     s.screenshotClipboard = ReadBool(v, "Video.ScreenshotClipboard", s.screenshotClipboard);
 
@@ -179,14 +211,33 @@ AppSettings LoadSettings(const std::filesystem::path& path) {
 
     s.pixelPerfect = ReadBool(v, "Window.PixelPerfect", s.pixelPerfect);
     s.borderlessWindow = ReadBool(v, "Window.Borderless", s.borderlessWindow);
+    s.keepRelativeWindowSize = ReadBool(v, "Window.KeepRelativeSize", s.keepRelativeWindowSize);
     s.startFullscreen = ReadBool(v, "Window.StartFullscreen", s.startFullscreen);
     s.fullscreenCursor = ReadEnum(v, "Window.FullscreenCursor", kCursor, s.fullscreenCursor);
+    s.fullscreenVideoSize = ReadEnum(v, "Window.FullscreenVideoSize", kFullscreenSize, s.fullscreenVideoSize);
+    s.fullscreenVideoPosition =
+        ReadEnum(v, "Window.FullscreenVideoPosition", kFullscreenPosition, s.fullscreenVideoPosition);
     s.preferredDisplay = ReadString(v, "Window.Display");
     s.windowWidth = ReadInt(v, "Window.Width", 0, 0, 16384);
     s.windowHeight = ReadInt(v, "Window.Height", 0, 0, 16384);
     s.hasWindowPosition = ReadBool(v, "Window.HasPosition", false);
     s.windowX = ReadInt(v, "Window.X", 0, -32768, 32767);
     s.windowY = ReadInt(v, "Window.Y", 0, -32768, 32767);
+
+    recording::Options& r = s.recording;
+    r.codec = ReadEnum(v, "Recording.Codec", kRecordingCodecs, r.codec);
+    r.encoder = ReadEnum(v, "Recording.Encoder", kRecordingEncoders, r.encoder);
+    r.rateControl = ReadEnum(v, "Recording.RateControl", kRecordingRates, r.rateControl);
+    r.quality = ReadEnum(v, "Recording.Quality", kRecordingQualities, r.quality);
+    r.videoMbps = ReadOption(v, "Recording.VideoMbps", r.videoMbps, recording::kVideoMbpsOptions);
+    r.maxHeight = ReadOption(v, "Recording.MaxHeight", r.maxHeight, recording::kMaxHeightOptions);
+    r.maxFps = ReadOption(v, "Recording.MaxFps", r.maxFps, recording::kMaxFpsOptions);
+    r.audioKbps = ReadOption(v, "Recording.AudioKbps", r.audioKbps, recording::kAudioKbpsOptions);
+    r.volumePercent = ReadInt(v, "Recording.Volume", r.volumePercent, 0, 100);
+    r.splitMode = ReadEnum(v, "Recording.Split", kRecordingSplits, r.splitMode);
+    r.splitMinutes = ReadOption(v, "Recording.SplitMinutes", r.splitMinutes, recording::kSplitMinutesOptions);
+    r.splitGib = ReadOption(v, "Recording.SplitGiB", r.splitGib, recording::kSplitGibOptions);
+    r.folder = ReadString(v, "Recording.Folder");
 
     s.shortcuts = ReadShortcuts(v);
     return s;
@@ -216,11 +267,13 @@ bool SaveSettings(const std::filesystem::path& path, const AppSettings& s) {
              << "PixelFormat=" << EnumText(s.pixelFormat, kFormats) << "\n"
              << "FrameRateMilli=" << s.frameRateMilli << "\n"
              << "Capture40Fps=" << Bool(s.capture40Fps) << "\n"
+             << "AllowUnlistedFps=" << Bool(s.allowUnlistedFps) << "\n"
              << "Presentation=" << EnumText(s.presentationMode, kPresentation) << "\n"
              << "Scaling=" << EnumText(s.scalingMode, kScaling) << "\n"
              << "Color=" << EnumText(s.colorOverride, kColors) << "\n"
              << "HdrInput=" << EnumText(s.hdrInput, kHdrInput) << "\n"
              << "HdrOutput=" << EnumText(s.hdrOutput, kHdrOutput) << "\n"
+             << "HdrChroma=" << EnumText(s.hdrChromaLocation, kHdrChroma) << "\n"
              << "SdrWhiteNits=" << s.sdrWhiteNits << "\n"
              << "ScreenshotClipboard=" << Bool(s.screenshotClipboard) << "\n\n"
              << "[Audio]\n"
@@ -241,14 +294,31 @@ bool SaveSettings(const std::filesystem::path& path, const AppSettings& s) {
              << "[Window]\n"
              << "PixelPerfect=" << Bool(s.pixelPerfect) << "\n"
              << "Borderless=" << Bool(s.borderlessWindow) << "\n"
+             << "KeepRelativeSize=" << Bool(s.keepRelativeWindowSize) << "\n"
              << "StartFullscreen=" << Bool(s.startFullscreen) << "\n"
              << "FullscreenCursor=" << EnumText(s.fullscreenCursor, kCursor) << "\n"
+             << "FullscreenVideoSize=" << EnumText(s.fullscreenVideoSize, kFullscreenSize) << "\n"
+             << "FullscreenVideoPosition=" << EnumText(s.fullscreenVideoPosition, kFullscreenPosition) << "\n"
              << "Display=" << s.preferredDisplay << "\n"
              << "Width=" << s.windowWidth << "\n"
              << "Height=" << s.windowHeight << "\n"
              << "HasPosition=" << Bool(s.hasWindowPosition) << "\n"
              << "X=" << s.windowX << "\n"
              << "Y=" << s.windowY << "\n\n"
+             << "[Recording]\n"
+             << "Codec=" << EnumText(s.recording.codec, kRecordingCodecs) << "\n"
+             << "Encoder=" << EnumText(s.recording.encoder, kRecordingEncoders) << "\n"
+             << "RateControl=" << EnumText(s.recording.rateControl, kRecordingRates) << "\n"
+             << "Quality=" << EnumText(s.recording.quality, kRecordingQualities) << "\n"
+             << "VideoMbps=" << s.recording.videoMbps << "\n"
+             << "MaxHeight=" << s.recording.maxHeight << "\n"
+             << "MaxFps=" << s.recording.maxFps << "\n"
+             << "AudioKbps=" << s.recording.audioKbps << "\n"
+             << "Volume=" << s.recording.volumePercent << "\n"
+             << "Split=" << EnumText(s.recording.splitMode, kRecordingSplits) << "\n"
+             << "SplitMinutes=" << s.recording.splitMinutes << "\n"
+             << "SplitGiB=" << s.recording.splitGib << "\n"
+             << "Folder=" << s.recording.folder << "\n\n"
              << "[Shortcuts]\n";
         const input::Bindings& shortcuts = input::IsValid(s.shortcuts) ? s.shortcuts : input::kDefaultBindings;
         for (size_t i = 0; i < input::kActionCount; ++i) {

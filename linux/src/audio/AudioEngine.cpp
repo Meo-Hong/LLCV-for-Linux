@@ -200,6 +200,10 @@ void AudioEngine::SetBackgroundMuted(bool muted) {
     backgroundMuted_ = muted;
 }
 
+void AudioEngine::SetPlaybackMuted(bool muted) {
+    playbackMuted_ = muted;
+}
+
 void AudioEngine::ResetMinimum() {
     resetMinimum_ = true;
 }
@@ -249,6 +253,9 @@ void AudioEngine::OnCapture(SDL_AudioStream* stream) {
         if (received < 4) break;
         const size_t frames = static_cast<size_t>(received) / 4;
         ring_->Push(captureScratch_.data(), frames);
+        if (CaptureTap* tap = tap_.load(std::memory_order_acquire)) {
+            tap->OnCapturedPcm(captureScratch_.data(), frames, platform::MonotonicNs());
+        }
         captureCallbacks_.fetch_add(1, std::memory_order_relaxed);
         lastCapturePacketFrames_.store(static_cast<uint32_t>(frames), std::memory_order_relaxed);
     }
@@ -332,7 +339,9 @@ size_t AudioEngine::Render(int16_t* output, size_t frames) {
 }
 
 StereoGain AudioEngine::TargetGain() const {
-    if (backgroundMuted_.load(std::memory_order_relaxed)) return {0.0, 0.0};
+    if (backgroundMuted_.load(std::memory_order_relaxed) || playbackMuted_.load(std::memory_order_relaxed)) {
+        return {0.0, 0.0};
+    }
     const double master = volume_.load(std::memory_order_relaxed) / 100.0;
     return {master * leftVolume_.load(std::memory_order_relaxed) / 100.0,
             master * rightVolume_.load(std::memory_order_relaxed) / 100.0};

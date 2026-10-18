@@ -5,6 +5,8 @@
 #include "capture/V4l2Capture.h"
 #include "capture/V4l2Devices.h"
 #include "platform/SleepInhibitor.h"
+#include "recording/EncoderSupport.h"
+#include "recording/Recorder.h"
 #include "screenshot/Screenshot.h"
 #include "settings/AppSettings.h"
 #include "ui/HdrSupport.h"
@@ -17,9 +19,11 @@
 
 #include <SDL3/SDL.h>
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -43,6 +47,7 @@ public:
 
 private:
     enum class Screen { Settings, Video, AudioOnly };
+    enum class ExitRequest { None, Quit, Settings };
 
     bool InitializeSdl(settings::DisplayBackend backend);
     bool InitializeWindow();
@@ -84,7 +89,13 @@ private:
     void EnterSettings();
     bool StartAudio(std::string& error);
     void ConfigureSessionWindow();
-    void ApplyVideoWindowSize(bool useSavedSize);
+    bool ApplyVideoWindowSize(bool useSavedSize);
+    bool CaptureMatchesDisplay() const;
+    void RestoreOneToOne();
+    void RememberWindowDisplay();
+    void FollowDisplayChange();
+    void OpenLastRecording();
+    static SDL_HitTestResult SDLCALL AudioOnlyHitTest(SDL_Window* window, const SDL_Point* point, void* data);
     void ApplyWindowConstraints();
     void PositionOnPreferredDisplay();
     void SetFullscreen(bool fullscreen);
@@ -99,6 +110,21 @@ private:
     void UpdateBackgroundMute();
     void ChangeVolume(int delta);
     void RememberWindowGeometry();
+    void RequestQuit();
+    void RequestSettings();
+    void PerformExit(ExitRequest request);
+    void DrawRecordingConfirm();
+    void ToggleRecording();
+    void StartRecording();
+    void StopRecording();
+    void ToggleRecordingPause();
+    void PollRecording();
+    bool RecordingActive() const;
+    void ToggleMute();
+    void SetPlaybackMuted(bool muted);
+    void ChooseRecordingFolder();
+    static void SDLCALL OnRecordingFolderChosen(void* userdata, const char* const* files, int filter);
+    void ApplyPlacement();
     void RequestScreenshot();
     void PollScreenshots();
     void CopyPngToClipboard(std::vector<uint8_t> png);
@@ -130,6 +156,8 @@ private:
     ui::SettingsScreen settingsScreen_;
     float scale_ = 1.0f;
 
+    recording::Recorder recorder_;
+    recording::EncoderProbe encoderProbe_;
     video::VideoRenderer renderer_;
     video::HdrOutput hdrOutput_;
     video::PreferredColor preferredColor_;
@@ -174,6 +202,18 @@ private:
     bool altTapPending_ = false;
     SDL_Scancode shortcutKeyToRelease_ = SDL_SCANCODE_UNKNOWN;
     ui::MenuCommand pendingMenuCommand_ = ui::MenuCommand::None;
+    bool playbackMuted_ = false;
+    ExitRequest confirmExit_ = ExitRequest::None;
+    ExitRequest pendingExit_ = ExitRequest::None;
+    std::string lastRecordingText_;
+    std::filesystem::path lastRecordingPath_;
+    std::optional<settings::AppSettings> settingsBeforeEdit_;
+    SDL_DisplayID windowDisplay_ = 0;
+    SDL_Rect windowDisplayBounds_{0, 0, 0, 0};
+    std::array<float, 4> audioOnlyControls_{0.0f, 0.0f, 0.0f, 0.0f};
+    std::mutex folderMutex_;
+    std::optional<std::string> chosenFolder_;
+    std::string folderError_;
     bool cursorHidden_ = false;
     uint64_t lastMouseMoveMs_ = 0;
     float wheelAccumulator_ = 0.0f;

@@ -55,6 +55,7 @@ bool LoadGlApi(std::string& missing) {
            Resolve(gl.TexSubImage2D, "glTexSubImage2D", missing) &&
            Resolve(gl.Uniform1i, "glUniform1i", missing) &&
            Resolve(gl.Uniform1f, "glUniform1f", missing) &&
+           Resolve(gl.Uniform2f, "glUniform2f", missing) &&
            Resolve(gl.Uniform3fv, "glUniform3fv", missing) &&
            Resolve(gl.Uniform4f, "glUniform4f", missing) &&
            Resolve(gl.UniformMatrix3fv, "glUniformMatrix3fv", missing) &&

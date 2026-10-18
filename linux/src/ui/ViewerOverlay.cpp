@@ -96,7 +96,92 @@ void Meter(const char* label, int peak, float scale) {
     Bar(fraction, color, 9.0f * scale, scale);
 }
 
-bool AudioControls(AudioMeterState& state, float scale) {
+void DrawSpeaker(ImDrawList* drawList, ImVec2 origin, float size, bool muted, ImU32 color) {
+    const float unit = size / 24.0f;
+    const float thickness = std::max(1.0f, 1.7f * unit);
+    const auto line = [&](float x0, float y0, float x1, float y1) {
+        drawList->AddLine(ImVec2(origin.x + x0 * unit, origin.y + y0 * unit),
+                          ImVec2(origin.x + x1 * unit, origin.y + y1 * unit), color, thickness);
+    };
+    line(2, 9, 6, 9);
+    line(6, 9, 11, 5);
+    line(11, 5, 11, 19);
+    line(11, 19, 6, 15);
+    line(6, 15, 2, 15);
+    line(2, 15, 2, 9);
+    if (muted) {
+        line(15, 9, 21, 15);
+        line(15, 15, 21, 9);
+    } else {
+        line(15, 8, 17, 12);
+        line(17, 12, 15, 16);
+        line(19, 5, 22, 12);
+        line(22, 12, 19, 19);
+    }
+}
+
+bool SpeakerButton(bool muted, const input::Bindings& shortcuts, float scale) {
+    const float size = ImGui::GetFrameHeight();
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    const bool pressed = ImGui::InvisibleButton("##playbackMute", ImVec2(size, size));
+    const bool hovered = ImGui::IsItemHovered();
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddRectFilled(origin, ImVec2(origin.x + size, origin.y + size),
+                            hovered ? IM_COL32(66, 66, 66, 255) : IM_COL32(39, 39, 39, 255), 4.0f * scale);
+    const float inset = size * 0.16f;
+    DrawSpeaker(drawList, ImVec2(origin.x + inset, origin.y + inset), size - inset * 2.0f, muted,
+                muted ? OverlayColors::kMeterHot : OverlayColors::kText);
+    if (hovered) {
+        const std::string tip =
+            input::ExpandKeyLabels(muted ? T("Unmute playback (M)") : T("Mute playback (M)"), shortcuts);
+        ImGui::SetTooltip("%s", tip.c_str());
+    }
+    return pressed;
+}
+
+float g_wheelAccumulator = 0.0f;
+ImGuiID g_resetItem = 0;
+
+bool AdjustHoveredVolume(int& value, int maximum, bool& unmute) {
+    const ImGuiID item = ImGui::GetItemID();
+    if (g_resetItem != 0 && g_resetItem == item) {
+        value = std::min(100, maximum);
+        unmute = true;
+        if (!ImGui::IsItemActive()) g_resetItem = 0;
+        return true;
+    }
+    if (!ImGui::IsItemHovered()) return false;
+    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        g_resetItem = item;
+        value = std::min(100, maximum);
+        unmute = true;
+        return true;
+    }
+    const float wheel = ImGui::GetIO().MouseWheel;
+    if (wheel == 0.0f) return false;
+    g_wheelAccumulator += wheel;
+    int steps = 0;
+    while (g_wheelAccumulator >= 1.0f) {
+        ++steps;
+        g_wheelAccumulator -= 1.0f;
+    }
+    while (g_wheelAccumulator <= -1.0f) {
+        --steps;
+        g_wheelAccumulator += 1.0f;
+    }
+    if (steps == 0) return false;
+    value = std::min(maximum, (std::clamp(value + steps * 5, 0, maximum) + 2) / 5 * 5);
+    unmute = true;
+    return true;
+}
+
+std::string FormatBytes(uint64_t bytes) {
+    const double mib = static_cast<double>(bytes) / (1024.0 * 1024.0);
+    if (mib < 1024.0) return platform::Format("%.0f MB", mib);
+    return platform::Format("%.2f GB", mib / 1024.0);
+}
+
+bool AudioControls(AudioMeterState& state, const input::Bindings& shortcuts, float scale) {
     if (!state.available) {
         ImGui::PushStyleColor(ImGuiCol_Text, OverlayColors::kMeterHot);
         ImGui::TextWrapped("%s", state.status.empty() ? T("No capture audio") : state.status.c_str());
@@ -117,15 +202,31 @@ bool AudioControls(AudioMeterState& state, float scale) {
     }
     ImGui::Spacing();
     bool changed = false;
+    if (SpeakerButton(state.playbackMuted, shortcuts, scale)) {
+        state.muteToggled = true;
+        changed = true;
+    }
+    ImGui::SameLine();
     ImGui::SetNextItemWidth(-1.0f);
-    changed |= ImGui::SliderInt("##osdMaster", &state.master, 0, state.boost ? 200 : 100,
-                                T("Volume %d%%"));
+    const int masterMaximum = state.boost ? 200 : 100;
+    const bool boosted = state.master > 100;
+    if (boosted) ImGui::PushStyleColor(ImGuiCol_Text, OverlayColors::kMeterHot);
+    changed |= ImGui::SliderInt("##osdMaster", &state.master, 0, masterMaximum, T("Volume %d%%"));
+    if (boosted) ImGui::PopStyleColor();
+    changed |= AdjustHoveredVolume(state.master, masterMaximum, state.unmute);
     const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
     ImGui::SetNextItemWidth(half);
     changed |= ImGui::SliderInt("##osdLeft", &state.left, 0, 100, T("Left %d%%"));
+    changed |= AdjustHoveredVolume(state.left, 100, state.unmute);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(half);
     changed |= ImGui::SliderInt("##osdRight", &state.right, 0, 100, T("Right %d%%"));
+    changed |= AdjustHoveredVolume(state.right, 100, state.unmute);
+    if (state.playbackMuted) {
+        ImGui::PushStyleColor(ImGuiCol_Text, OverlayColors::kMeterHot);
+        ImGui::TextWrapped("%s", T("Playback muted · recordings keep their sound"));
+        ImGui::PopStyleColor();
+    }
     if (state.muted) ImGui::TextDisabled("%s", T("Muted in background"));
     return changed;
 }
@@ -176,7 +277,8 @@ void DrawVolumeHud(int volume, bool muted, settings::VolumeHudPosition position,
                 ImGui::Text(T("Volume  %d%%"), volume);
             }
             const float maximum = volume > 100 ? 200.0f : 100.0f;
-            Bar(static_cast<float>(volume) / maximum, IM_COL32(225, 225, 225, 255), 6.0f * scale, scale);
+            Bar(static_cast<float>(volume) / maximum, volume > 100 ? OverlayColors::kMeterHot : IM_COL32(225, 225, 225, 255),
+                6.0f * scale, scale);
         }
         ImGui::End();
     }
@@ -239,7 +341,7 @@ bool DrawAudioOsd(AudioMeterState& state, const input::Bindings& shortcuts, cons
         ImGui::SameLine();
         ImGui::TextDisabled("%s", input::ExpandKeyLabels(T("[F3 close]"), shortcuts).c_str());
         ImGui::Separator();
-        changed = AudioControls(state, scale);
+        changed = AudioControls(state, shortcuts, scale);
     }
     ImGui::End();
     return changed;
@@ -265,10 +367,14 @@ bool DrawAudioOnlyView(AudioMeterState& state, const input::Bindings& shortcuts,
         ImGui::TextDisabled("%s", state.captureName.empty() ? "-" : state.captureName.c_str());
         ImGui::TextDisabled("→ %s", state.outputName.empty() ? "-" : state.outputName.c_str());
         ImGui::Separator();
-        changed = AudioControls(state, scale);
+        const ImVec2 controlsStart = ImGui::GetCursorScreenPos();
+        changed = AudioControls(state, shortcuts, scale);
+        const ImVec2 windowPos = ImGui::GetWindowPos();
+        state.controlsMin = ImVec2(windowPos.x, controlsStart.y);
+        state.controlsMax = ImVec2(windowPos.x + ImGui::GetWindowWidth(), ImGui::GetCursorScreenPos().y);
         ImGui::Spacing();
         const std::string hint = input::ExpandKeyLabels(
-            T("F2 settings · Tab diagnostics · F1 help · wheel volume"), shortcuts);
+            T("F2 settings · Tab diagnostics · F1 help · M mute · wheel volume"), shortcuts);
         ImGui::PushTextWrapPos(0.0f);
         ImGui::TextDisabled("%s", hint.c_str());
         ImGui::PopTextWrapPos();
@@ -340,6 +446,90 @@ void DrawHelp(bool* open, bool audioOnly, const HdrSupport& hdr, const input::Bi
     ImGui::End();
 }
 
+void DrawMuteIndicator(float scale) {
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const float size = 30.0f * scale;
+    const float margin = 14.0f * scale;
+    const ImVec2 maximum(viewport->WorkPos.x + viewport->WorkSize.x - margin, viewport->WorkPos.y + margin + size);
+    const ImVec2 minimum(maximum.x - size, maximum.y - size);
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+    drawList->AddRectFilled(minimum, maximum, IM_COL32(17, 17, 17, 140), 6.0f * scale);
+    const float inset = size * 0.18f;
+    DrawSpeaker(drawList, ImVec2(minimum.x + inset, minimum.y + inset), size - inset * 2.0f, true,
+                IM_COL32(235, 235, 235, 190));
+}
+
+void DrawRecordingIndicator(const recording::Status& status, float scale) {
+    if (status.phase == recording::Phase::Idle) return;
+    OverlayStyle style(scale);
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - 12.0f * scale,
+                                   viewport->WorkPos.y + viewport->WorkSize.y - 12.0f * scale),
+                            ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+    ImGui::SetNextWindowBgAlpha(0.82f);
+    if (ImGui::Begin("##recordingIndicator", nullptr, kPassiveFlags)) {
+        const float lineHeight = ImGui::GetTextLineHeight();
+        const float radius = 5.0f * scale;
+        const ImVec2 cursor = ImGui::GetCursorScreenPos();
+        const ImVec2 center(cursor.x + radius, cursor.y + lineHeight * 0.5f);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const bool active = status.phase == recording::Phase::Recording;
+        if (active && status.paused) {
+            const float bar = radius * 0.7f;
+            drawList->AddRectFilled(ImVec2(center.x - radius, center.y - radius),
+                                    ImVec2(center.x - radius + bar, center.y + radius), OverlayColors::kText);
+            drawList->AddRectFilled(ImVec2(center.x + radius - bar, center.y - radius),
+                                    ImVec2(center.x + radius, center.y + radius), OverlayColors::kText);
+        } else if (active) {
+            drawList->AddCircleFilled(center, radius, OverlayColors::kDanger);
+        } else {
+            drawList->AddCircle(center, radius, OverlayColors::kSecondary, 0, 1.5f * scale);
+        }
+        ImGui::Dummy(ImVec2(radius * 2.0f, lineHeight));
+        ImGui::SameLine();
+        if (active) {
+            const unsigned long long seconds = status.elapsedMs / 1000;
+            ImGui::Text("%s  %02llu:%02llu:%02llu", status.paused ? T("Recording paused") : T("Recording"),
+                        seconds / 3600, seconds / 60 % 60, seconds % 60);
+            if (status.bytes > 0) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("%s", FormatBytes(status.bytes).c_str());
+            }
+        } else {
+            ImGui::TextUnformatted(status.phase == recording::Phase::Starting ? T("Preparing recording…")
+                                                                              : T("Finalizing recording…"));
+        }
+    }
+    ImGui::End();
+}
+
+ConfirmResult DrawRecordingConfirm(bool settings, const input::Bindings& shortcuts, const FontSet& fonts, float scale) {
+    ConfirmResult result = ConfirmResult::None;
+    OverlayStyle style(scale);
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f,
+                                   viewport->Pos.y + viewport->Size.y * 0.5f),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(440.0f * scale, 0.0f));
+    if (ImGui::Begin("##recordingConfirm", nullptr, kInteractiveFlags)) {
+        ImGui::PushFont(fonts.semibold, 18.0f);
+        ImGui::TextUnformatted(T("Recording in progress"));
+        ImGui::PopFont();
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", settings ? T("Opening settings stops playback. The recording is stopped and saved first.")
+                                           : T("The recording is stopped and saved before LLCV quits."));
+        ImGui::PopTextWrapPos();
+        ImGui::Spacing();
+        if (ImGui::Button(settings ? T("Stop recording and open settings") : T("Stop recording and quit"))) {
+            result = ConfirmResult::Confirm;
+        }
+        ImGui::SameLine();
+        const std::string cancel = input::ExpandKeyLabels(T("Cancel (Esc)###cancelRecordingConfirm"), shortcuts);
+        if (ImGui::Button(cancel.c_str())) result = ConfirmResult::Cancel;
+    }
+    ImGui::End();
+    return result;
+}
 
 MenuCommand DrawMenuBar(const MenuState& state, const input::Bindings& shortcuts, float scale) {
     MenuCommand command = MenuCommand::None;
@@ -396,8 +586,19 @@ MenuCommand DrawMenuBar(const MenuState& state, const input::Bindings& shortcuts
             item(up.c_str(), T("Wheel up"), false, MenuCommand::VolumeUp);
             item(T("Volume down"), T("Wheel down"), false, MenuCommand::VolumeDown);
             ImGui::Separator();
+            item(T("Mute playback"), key(input::Action::Mute).c_str(), state.playbackMuted, MenuCommand::Mute);
             item(T("Mute in background"), nullptr, state.backgroundMute,
                  MenuCommand::BackgroundMute);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu(T("Recording"))) {
+            item(state.recording ? T("Stop recording") : T("Start recording"), key(input::Action::Recording).c_str(),
+                 false, MenuCommand::Recording, !state.audioOnly && !state.recordingBusy);
+            item(state.recordingPaused ? T("Resume recording") : T("Pause recording"), nullptr, false,
+                 MenuCommand::RecordingPause, state.recording);
+            ImGui::Separator();
+            item(T("Open last recording"), nullptr, false, MenuCommand::OpenLastRecording, state.lastRecording);
+            item(T("Open recordings folder"), nullptr, false, MenuCommand::OpenRecordings);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu(T("Tools"))) {

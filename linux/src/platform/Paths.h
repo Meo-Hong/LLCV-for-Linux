@@ -11,6 +11,8 @@ std::filesystem::path StateDirectory();
 std::filesystem::path LogDirectory();
 std::filesystem::path PicturesDirectory();
 std::filesystem::path ScreenshotDirectory();
+std::filesystem::path VideosDirectory();
+std::filesystem::path DefaultRecordingDirectory();
 std::filesystem::path ExecutableDirectory();
 std::filesystem::path SettingsFilePath();
 std::filesystem::path FindFont(const std::string& fileName);

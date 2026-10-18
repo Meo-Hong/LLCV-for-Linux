@@ -1,4 +1,4 @@
-.TH LLCV 1 "2026-10-14" "LLCV 2.0.5" "User Commands"
+.TH LLCV 1 "2026-10-19" "LLCV 2.1.3" "User Commands"
 .SH NAME
 llcv \- low-latency viewer for USB HDMI capture devices
 .SH SYNOPSIS
@@ -12,8 +12,14 @@ frame is presented with OpenGL, and capture audio is played through the
 system audio server (PipeWire) with a small drift-corrected buffer.
 .PP
 The settings screen selects the capture device, resolution, pixel format,
-frame rate, audio devices and window behavior. Settings are stored in
+frame rate, audio devices, window behavior and recording options. Settings are
+stored in
 .IR $XDG_CONFIG_HOME/llcv/settings.ini .
+.PP
+Recording saves SDR video (NV12, YUY2, MJPEG or BGR24) with stereo capture
+audio as fragmented MP4 through FFmpeg, using H.264, HEVC or AV1 on NVENC,
+VA-API or CPU encoders. HDR input is not recorded. Builds without FFmpeg show
+recording as unavailable.
 .SH OPTIONS
 .TP
 .B \-\-x11
@@ -53,7 +59,8 @@ Stop playback and open the settings screen.
 Audio meters and volume controls.
 .TP
 .B F5
-Restore the 1:1 source size.
+Restore the 1:1 source size. When the capture resolution matches the monitor,
+fullscreen is used instead; playback also starts in fullscreen in that case.
 .TP
 .BR F11 ", " Alt+Enter
 Toggle fullscreen.
@@ -66,6 +73,13 @@ Live diagnostics.
 .TP
 .B Esc
 Leave fullscreen, or exit.
+.TP
+.B F9
+Start or stop recording. Pause and resume are in the Recording menu.
+.TP
+.B M
+Mute or unmute playback. Recordings keep their sound; the mouse wheel also
+unmutes.
 .SH FILES
 .TP
 .I $XDG_CONFIG_HOME/llcv/settings.ini
@@ -76,6 +90,9 @@ Diagnostic log, when enabled.
 .TP
 .I $XDG_PICTURES_DIR/LLCV/
 Screenshots.
+.TP
+.I $XDG_VIDEOS_DIR/LLCV/
+Recordings, unless another folder is chosen in the settings.
 .SH HDR
 P010 (10-bit HDR10) capture needs Linux 7.1 or newer, or a uvcvideo module
 with P010 support. On Wayland compositors that offer the

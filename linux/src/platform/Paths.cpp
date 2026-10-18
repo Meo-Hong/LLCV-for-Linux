@@ -66,10 +66,9 @@ std::filesystem::path LogDirectory() {
     return StateDirectory() / "logs";
 }
 
-std::filesystem::path PicturesDirectory() {
+static std::filesystem::path UserDirectory(std::string_view key, const char* fallback) {
     std::ifstream file(XdgBase("XDG_CONFIG_HOME", ".config") / "user-dirs.dirs");
     std::string line;
-    constexpr std::string_view key = "XDG_PICTURES_DIR=";
     constexpr std::string_view homeToken = "$HOME";
     while (std::getline(file, line)) {
         if (line.rfind(key, 0) != 0) continue;
@@ -79,11 +78,23 @@ std::filesystem::path PicturesDirectory() {
         }
         if (!value.empty() && value.front() == '/') return value;
     }
-    return HomeDirectory() / "Pictures";
+    return HomeDirectory() / fallback;
+}
+
+std::filesystem::path PicturesDirectory() {
+    return UserDirectory("XDG_PICTURES_DIR=", "Pictures");
 }
 
 std::filesystem::path ScreenshotDirectory() {
     return PicturesDirectory() / "LLCV";
+}
+
+std::filesystem::path VideosDirectory() {
+    return UserDirectory("XDG_VIDEOS_DIR=", "Videos");
+}
+
+std::filesystem::path DefaultRecordingDirectory() {
+    return VideosDirectory() / "LLCV";
 }
 
 std::filesystem::path ExecutableDirectory() {

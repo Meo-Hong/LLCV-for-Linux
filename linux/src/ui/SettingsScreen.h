@@ -3,11 +3,13 @@
 #include "audio/AudioEngine.h"
 #include "capture/V4l2Devices.h"
 #include "input/Shortcuts.h"
+#include "recording/EncoderSupport.h"
 #include "settings/AppSettings.h"
 #include "ui/HdrSupport.h"
 #include "ui/Theme.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -29,6 +31,12 @@ struct SettingsContext {
     std::string errorMessage;
     std::string logDirectory;
     std::string screenshotDirectory;
+    bool recordingAvailable = false;
+    recording::EncoderSupport encoders;
+    std::string recordingDirectory;
+    std::optional<uint64_t> recordingFreeBytes;
+    std::string lastRecording;
+    bool canCancel = false;
     bool canStart = false;
     std::string startSummary;
     HdrSupport hdr;
@@ -47,6 +55,10 @@ enum class SettingsAction {
     LogToggled,
     OpenLogFolder,
     OpenScreenshotFolder,
+    OpenRecordingFolder,
+    ChooseRecordingFolder,
+    OpenLastRecording,
+    Cancel,
 };
 
 class SettingsScreen {
@@ -55,9 +67,11 @@ public:
     bool CapturingShortcut() const { return editingShortcut_ >= 0; }
     bool CaptureShortcut(settings::AppSettings& settings, input::Binding binding);
     void CancelShortcutCapture();
+    bool TakeRecordingPageOpened();
+    void ResetRecordingPage() { recordingShown_ = false; }
 
 private:
-    enum class Page { Video, Audio, Window, Guide, App };
+    enum class Page { Video, Audio, Window, Recording, Guide, App };
     enum class ShortcutNotice { None, Reserved, Duplicate };
 
     void DrawSidebar(const SettingsContext& context, float height);
@@ -66,6 +80,7 @@ private:
     void DrawHdr(settings::AppSettings& settings, const SettingsContext& context);
     void DrawAudio(settings::AppSettings& settings, const SettingsContext& context);
     void DrawWindow(settings::AppSettings& settings, const SettingsContext& context);
+    void DrawRecording(settings::AppSettings& settings, const SettingsContext& context);
     void DrawShortcuts(settings::AppSettings& settings);
     void DrawGuide(settings::AppSettings& settings, const SettingsContext& context);
     void DrawApp(settings::AppSettings& settings, const SettingsContext& context);
@@ -74,6 +89,10 @@ private:
     SettingsAction action_ = SettingsAction::None;
     int editingShortcut_ = -1;
     ShortcutNotice shortcutNotice_ = ShortcutNotice::None;
+    char folderBuffer_[1024] = {};
+    bool folderEditing_ = false;
+    bool recordingShown_ = false;
+    bool recordingOpened_ = false;
 };
 
 }

@@ -22,6 +22,7 @@
       <li>Immediate or VSync presentation with OpenGL</li>
       <li>Audio-only mode, volume boost and background mute</li>
       <li>Source-resolution PNG screenshots and live diagnostics</li>
+      <li>MP4 recording with H.264, HEVC or AV1 through FFmpeg</li>
       <li>Wayland by default, with an optional X11 (XWayland) mode</li>
     </ul>
   </description>
@@ -40,6 +41,20 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="2.1.3" date="2026-10-19">
+      <description>
+        <p>Follows the Windows LLCV 2.1.0 to 2.1.3 updates.</p>
+        <ul>
+          <li>MP4 recording (F9) of SDR video with stereo audio, using H.264, HEVC or AV1 on NVENC, VA-API or CPU encoders.</li>
+          <li>Recording options: quality or bitrate, resolution and frame-rate limits, recording volume, pause and resume, and automatic splitting.</li>
+          <li>Playback mute (M) from the audio OSD, the audio-only view or the menu. Recordings keep their sound.</li>
+          <li>Optional direct 30 fps request when the driver does not list it.</li>
+          <li>Fullscreen video size and position settings.</li>
+          <li>Fullscreen when the capture matches the monitor, relative window size across monitors, and a movable audio-only view.</li>
+          <li>HDR chroma placement and hardware HDR-to-SDR requests for supported AVerMedia and Elgato devices.</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.0.5" date="2026-10-14">
       <description>
         <p>Follows the Windows LLCV 2.0.5 update.</p>

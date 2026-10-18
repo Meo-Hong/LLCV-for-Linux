@@ -3,7 +3,7 @@
 > [한국어](README.ko.md)
 
 LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices with low
-latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.0.5 viewer
+latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.1.3 viewer
 by [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer). The
 reference device is the AVerMedia Live Gamer ULTRA S GC553Pro. The reference
 desktop is Ubuntu 26.04 (GNOME, Wayland).
@@ -15,6 +15,21 @@ desktop is Ubuntu 26.04 (GNOME, Wayland).
 > does not maintain it. Report Linux problems in
 > [this repository's issues](https://github.com/Meo-Hong/LLCV-for-Linux/issues),
 > not in the original repository.
+
+## What's new in 2.1.3
+
+- **Recording (F9)**: MP4 with H.264, HEVC or AV1 on NVENC, VA-API or CPU
+  encoders, with pause, splitting and a separate recording volume. See
+  [Recording](#recording).
+- **Playback mute (M)** that leaves recordings untouched. See
+  [Playback mute](#playback-mute).
+- Unlisted 30 fps requests, fullscreen video size and position, fullscreen
+  when the capture matches the monitor, and relative window size across
+  monitors.
+- HDR chroma placement, hardware tone-mapping requests for supported AVerMedia
+  and Elgato devices, a movable audio-only view, and Cancel in settings.
+
+Full list: [release notes](release-notes/v2.1.3.md).
 
 | Area | Windows build | Linux build |
 | --- | --- | --- |
@@ -28,10 +43,15 @@ desktop is Ubuntu 26.04 (GNOME, Wayland).
 | Settings | `%LOCALAPPDATA%` | `~/.config/llcv/settings.ini` |
 | Logs | `%LOCALAPPDATA%` | `~/.local/state/llcv/logs/` |
 | Screenshots | Pictures | `$XDG_PICTURES_DIR/LLCV/` |
+| Recording | Media Foundation | FFmpeg: NVENC, VA-API, x264, x265, SVT-AV1 |
+| Recordings | Videos | `$XDG_VIDEOS_DIR/LLCV/` |
 | Updates | In-app update check | APT repository (`.deb`) |
 
 Not available on Linux: NVIDIA VSR, WASAPI Exclusive, ASIO, console LPCM 5.1,
-and the vendor tone-mapping requests.
+the exclusive fullscreen and Compatibility (Blt) presentation modes (see
+[Fullscreen](#fullscreen)), window edge snapping and rounded corners (the
+compositor or window manager handles them), and the in-app update check (the
+package manager handles updates).
 
 ## Install
 
@@ -40,11 +60,11 @@ Download the file for your system from
 
 | File | Install on | Command |
 | --- | --- | --- |
-| `llcv_2.0.5_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.0.5_amd64.deb` |
-| `llcv_2.0.5_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.0.5_arm64.deb` |
-| `llcv_2.0.5_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.0.5_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.0.5-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.0.5-1.x86_64.rpm` |
-| `llcv-2.0.5-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.0.5-1-x86_64.pkg.tar.zst` |
+| `llcv_2.1.3_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.3_amd64.deb` |
+| `llcv_2.1.3_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.1.3_arm64.deb` |
+| `llcv_2.1.3_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.1.3_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.1.3-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.1.3-1.x86_64.rpm` |
+| `llcv-2.1.3-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.3-1-x86_64.pkg.tar.zst` |
 
 - Installing a `.deb` also registers the LLCV APT repository, so later
   versions arrive through `apt upgrade` or Software Updater. For `.rpm` and
@@ -62,12 +82,12 @@ Download the file for your system from
 | --- | --- | --- | --- |
 | Ubuntu 26.04 | amd64 `.deb` | yes (GNOME 48 or newer) | **runs on real hardware**, APT updates work |
 | Ubuntu 24.04, Linux Mint 22, Pop!_OS 24.04, Zorin OS 18 | amd64 `.deb` | no (GNOME 46) | build, install check |
-| Ubuntu 22.04, Linux Mint 21, Pop!_OS 22.04, Zorin OS 17, elementary OS 7 | amd64 `.deb` | no (GNOME 42) | build, install check |
+| Ubuntu 22.04, Linux Mint 21, Pop!_OS 22.04, Zorin OS 17, elementary OS 7 | amd64 `.deb` | no (GNOME 42) | build, install check, recording check (container) |
 | Debian 13, Kali | amd64 `.deb` | yes (GNOME 48 / KDE Plasma 6) | install check |
 | Debian 12, LMDE 6 | amd64 `.deb` | no (GNOME 43) | install check |
 | Raspberry Pi OS 64-bit (bookworm, trixie) | arm64 `.deb` | no | build |
 | Raspberry Pi OS 32-bit (trixie) | armhf `.deb` | no | build |
-| Fedora 43 or newer, Nobara | `.rpm` | yes (GNOME 48 or newer / KDE Plasma 6) | install check (Fedora 44) |
+| Fedora 43 or newer, Nobara | `.rpm` | yes (GNOME 48 or newer / KDE Plasma 6) | build, install check, recording check (Fedora 44, container) |
 | RHEL, Rocky Linux, AlmaLinux 9 and 10 | `.rpm` | no (GNOME 40 / 47) | build, install check |
 | Arch Linux, Manjaro, EndeavourOS | `.pkg.tar.zst` | yes (GNOME 48 or newer / KDE Plasma 6) | build |
 
@@ -130,6 +150,109 @@ Unchecking it restores that selection.
   required for it.
 - Check the measured input rate under **Actual FPS** in the Tab diagnostics.
 
+### Unlisted 30 fps requests
+
+**Video → Capture → Allow unlisted FPS (30 fps)** is off by default. When it is
+checked and the driver does not list 30 fps for the selected resolution and
+format, the frame-rate list gains **30 fps · direct request**, shown in the
+accent color.
+
+- It is a direct request, not a support confirmation. On **Start**, LLCV checks
+  the rate the driver set. If the driver rejects 30 fps or applies another
+  rate, startup stops with a notice instead of using another rate.
+- Turn off 40 fps capture first. It does not convert 60 fps to 30 fps in
+  software.
+- After starting, check **Actual FPS** in the Tab diagnostics.
+
+## Recording
+
+**F9** records the playing video and capture audio to MP4. Press it again to
+stop and finish the file. The options are under **Settings → Recording**.
+
+- **Input.** NV12, YUY2, MJPEG and BGR24 SDR video with 16-bit stereo capture
+  audio. HDR input (P010 or Force HDR10) is not recorded. MJPEG is decoded a
+  second time for the recording, which uses more CPU.
+- **Codec and encoder.** H.264, HEVC or AV1. **Automatic hardware** tries
+  NVIDIA NVENC, then VA-API (AMD, Intel). **CPU** uses x264, x265 or SVT-AV1
+  from the system FFmpeg. Opening the Recording page checks which encoders
+  work and greys out the rest. An unsupported combination reports an error
+  instead of switching codec or falling back to the CPU.
+- **Defaults.** H.264, automatic hardware, quality mode (constant QP 23),
+  1080p and 60 fps limits, AAC 192 kbps, recording volume 100 % and no
+  splitting. The limits never raise the source size or rate, and they do not
+  change playback.
+- **Quality.** Smaller files (QP 26), balanced (QP 23) or higher quality
+  (QP 20); AV1 uses an equivalent quantizer. Target bitrate mode offers
+  2 to 100 Mbps.
+- **Recording volume** (0 to 100 %) is separate from playback volume and
+  playback mute. 0 % records silence.
+- **Automatic splitting** by duration (15, 30, 60 or 120 minutes) or size (1,
+  2, 4, 8 or 16 GiB). A new file starts at the next keyframe, so a part can run
+  slightly past the limit.
+- **Files.** Recordings go to `$XDG_VIDEOS_DIR/LLCV/` (usually `~/Videos/LLCV`)
+  as `LLCV_YYYYMMDD_HHMMSS.mp4`; later parts end in `_part02`, `_part03` and so
+  on. Another folder can be chosen on the Recording page. The files are
+  fragmented MP4, so parts already written usually survive a crash. The last
+  seconds are not guaranteed.
+- **Pause and resume** are in the menu bar (**Alt → Recording**). Paused time
+  is left out of the file while playback continues.
+- A corner indicator shows the recording time and size. The indicator, the
+  other overlays, playback volume and playback mute are not recorded.
+- Opening settings or quitting during a recording asks first, then stops the
+  recording and saves it. Low disk space, write errors and an encoder that
+  cannot keep up stop the recording with a notice; playback continues.
+
+Recording needs FFmpeg 4.4 or newer at build time. The `.deb`, Fedora `.rpm`
+and Arch packages include it. The RHEL, Rocky Linux and AlmaLinux `.rpm` is
+built without FFmpeg and shows recording as unavailable.
+
+### Recording tests (2.1.3)
+
+Before the 2.1.3 release, recording was checked with test programs that link
+the same recording, capture and settings code as the app. Containers have no
+GPU, so they used the CPU encoders.
+
+| Environment | What was checked | Result |
+| --- | --- | --- |
+| Ubuntu 26.04, GeForce RTX 2070, FFmpeg 8.0 | H.264 and HEVC (NVENC and CPU), AV1 (CPU); quality and bitrate modes; NV12, YUY2, MJPEG and BGR24 input; pause; 1440p 120 fps limited to 1080p 60 fps; recording volume 0 %; no audio; 1-minute splitting | All files saved and decoded. Paused time left out; the second part starts at a keyframe |
+| Ubuntu 26.04, GC553Pro | NV12 1080p 60 fps and MJPEG 240 fps capture (device test screen, no HDMI source) | 60 fps recorded with no dropped frames; color range and matrix kept |
+| Ubuntu 26.04, GC553Pro | Direct 30 fps request on modes without 30 fps | Stopped with a notice when the driver applied 59.94 fps; 29.97 fps accepted |
+| Ubuntu 26.04 | Settings from 2.0.5 (F9 or M already used), saving and loading the new options | Existing keys kept; Recording and Mute got free keys |
+| Ubuntu 22.04 container, FFmpeg 4.4 | `.deb` build, install, run; x264 recording in both modes | Passed |
+| Fedora 44 container, `ffmpeg-free` 8.1 | `.rpm` build, install, run; SVT-AV1 recording | Passed. x264 and x265 are not in `ffmpeg-free` |
+| Fedora 44 container with RPM Fusion FFmpeg (Nobara setup) | Same `.rpm`; x264, x265 and SVT-AV1 in both modes | Passed |
+| Build without FFmpeg (RHEL family) | Compile | Passed |
+
+Not checked yet: VA-API encoding on AMD and Intel, NVENC on other
+distributions, sound level and A/V sync with a live HDMI source, and the
+recording UI (Recording page, indicator, confirm dialog), which was built but
+not operated in these tests. The hardware tone-mapping requests (see [HDR](#hdr))
+were not checked on a real device either: the GC553Pro has no such control, so
+only the HID report layout was compared with the Windows build.
+
+## Playback mute
+
+**M** mutes playback without changing the volume. The speaker button in the
+audio OSD (F3) and in the audio-only view, and **Alt → Audio → Mute playback**,
+do the same. While the audio OSD is hidden, a translucent speaker icon stays at
+the top right of the video.
+
+- Recordings keep their sound.
+- Turning the mouse wheel, or volume up/down in the menu, unmutes playback.
+- Mute is cleared when LLCV quits, and it works independently of **Mute
+  automatically in background**.
+
+## Audio controls and the audio-only view
+
+- Double-click the master, left or right volume control in the audio OSD (F3)
+  or the audio-only view to reset it to 100 %. This also unmutes playback.
+- Turn the mouse wheel over the left or right control to change only that
+  channel; over the master control or anywhere else it changes the master volume.
+- Volumes above 100 % (with **Allow volume boost** on) are shown in orange.
+- Drag inside the audio-only view, outside the controls, to move the window.
+  Its size keeps the aspect ratio. **Window → Borderless window** also hides
+  the title bar of the audio-only view; drag its edges to resize it.
+
 ## Building from source
 
 ```sh
@@ -165,6 +288,19 @@ command for your system. [BUILDING.md](BUILDING.md) covers the rest:
 
 Screenshots of HDR input are always saved as SDR PNGs.
 
+**Video → HDR → HDR chroma placement** stays on **Auto** unless color edges of
+P010 input look shifted; **Left** and **Top-left** are compatibility overrides
+for devices that place the chroma samples differently.
+
+At each start LLCV asks a supported capture device to tone map HDR to SDR
+itself for 8-bit formats (NV12, YUY2, MJPEG, BGR24), and to pass HDR through
+for P010 or **Force HDR10**, like the Windows build. This covers AVerMedia
+devices with the AVerMedia UVC extension control and the Elgato HD60 S+, HD60 X
+and HD60 X Rev.2. The packages install a udev rule that lets the logged-in user
+reach the Elgato HID interface; reconnect the device once after installing. The GC553Pro has no such control, so nothing is
+sent to it. A request the device accepts does not prove the input encoding;
+the diagnostic log shows the result in `[capture-hdr]` lines.
+
 If a 10-bit buffer misbehaves with a driver, start with `llcv --sdr`, or use the
 "Start without HDR" launcher action. Then choose **HDR presentation → Always SDR
 tone mapping**.
@@ -180,6 +316,28 @@ LLCV uses Wayland by default. To use X11 (XWayland), do one of these:
 On Wayland the compositor places windows. Because of this, the startup monitor
 setting applies only to fullscreen, and the last window position is not
 restored. X11 mode restores both, but has no HDR output.
+
+## Fullscreen
+
+**Window → Fullscreen video size** chooses **Fit to screen** (default) or
+**Original size**, which shows the capture 1:1 and shrinks it only when it is
+larger than the screen. **Window → Fullscreen video position** places the video
+in the center, at an edge or in a corner when it does not fill the screen, for
+example 16:9 video on an ultrawide monitor. Margins stay black, and the video
+is never cropped.
+
+When the capture resolution matches the monitor (for example 2560 × 1440 on a
+1440p monitor), playback starts in fullscreen, and **F5** uses fullscreen too,
+because that is the only way to show those pixels 1:1. Otherwise F5 restores a
+1:1 window and says so when it has to shrink the window to fit the monitor.
+
+**Window → Keep relative window size when moving monitors** (off by default)
+keeps a similar share of the screen when the window moves to a monitor with a
+different size. Press F5 afterwards for exact 1:1 again.
+
+The Windows build's exclusive fullscreen mode has no Linux counterpart. Wayland
+compositors can show a fullscreen window directly, without composition, and on
+X11 SDL asks the compositor to leave fullscreen windows uncomposited.
 
 ## Sleep prevention
 
@@ -202,8 +360,12 @@ says so.
 ## Menu bar
 
 Press and release **Alt** during playback to show the menu bar. It holds the
-View, Audio, Tools, Settings and Help commands, so you can use them without
-remembering the function keys. Press Alt or the Exit key (default Esc) again,
+View, Audio, Recording, Tools, Settings and Help commands, so you can use them
+without remembering the function keys. **Recording → Open last recording**
+opens the most recent file in the default player.
+
+Settings opened during playback (F2 or the menu) have a **Cancel** button that
+discards the changes and resumes playback with the previous settings. Press Alt or the Exit key (default Esc) again,
 or click outside the menu, to close it.
 
 ## Shortcuts
@@ -217,12 +379,14 @@ The keys below are the defaults. They can be changed under
 | F1 | App information and shortcuts |
 | F2 | Stop playback and open settings |
 | F3 | Audio meters and volume |
-| F5 | Restore the 1:1 source size |
+| F5 | Restore the 1:1 source size (fullscreen when the capture matches the monitor) |
 | F11 / Alt+Enter | Fullscreen |
 | F12 | PNG screenshot at the capture resolution |
 | Tab | Live diagnostics |
 | Esc | Leave fullscreen, or exit |
-| Mouse wheel | Volume ±5% |
+| F9 | Start or stop recording |
+| M | Mute or unmute playback |
+| Mouse wheel | Volume ±5% (also unmutes) |
 | Double-click | Toggle fullscreen |
 
 ### Changing shortcuts
@@ -233,11 +397,15 @@ The keys below are the defaults. They can be changed under
    button again to cancel.
 3. Choose **Start**. The new keys are saved with the other settings.
 
-All eight shortcuts can be changed, including **Leave fullscreen / exit**
+All ten shortcuts can be changed, including **Leave fullscreen / exit**
 (Esc). None can be empty. Duplicate keys, modifier-only keys, Super (Windows
 key) combinations and reserved combinations such as Alt+F4, Alt+Tab,
 Ctrl+Alt+Delete and Ctrl+Alt+F1 to F12 cannot be assigned. **Reset defaults**
-restores all eight. Alt (menu bar) and Alt+Enter (fullscreen) stay fixed.
+restores all ten. Alt (menu bar) and Alt+Enter (fullscreen) stay fixed.
+
+When a profile from an earlier version already uses F9 or M for another action,
+that key is kept, and Start / stop recording or Toggle playback mute gets an
+unused function key instead. Check the assigned keys under **Guide & logs**.
 
 Keys are matched by their physical position, so they keep working when a
 Korean or other input method is active. The help window, menu bar, overlays
@@ -263,6 +431,21 @@ and settings show the assigned keys.
   device, resolution or format, or set another rate. Read the error and the
   `40 fps request` line in the diagnostic log, then choose another resolution
   or format, or uncheck **40 fps capture**.
+- **Recording is unavailable or greyed out.** The package was built without
+  FFmpeg (RHEL family), or no encoder works for the chosen codec. For hardware
+  encoding install the VA-API driver (`intel-media-va-driver` for Intel,
+  `mesa-va-drivers` for AMD) or the NVIDIA driver, or choose **CPU**. The
+  diagnostic log lists the result of each encoder check. Fedora's default
+  `ffmpeg-free` has no x264 or x265, so CPU H.264 and HEVC are unavailable
+  there; SVT-AV1 and the hardware encoders still work. Switching to the RPM
+  Fusion FFmpeg (`sudo dnf swap ffmpeg-free ffmpeg --allowerasing`) adds them,
+  and Nobara ships it already. On AMD, Fedora also needs
+  `mesa-va-drivers-freeworld` from RPM Fusion for H.264 and HEVC.
+- **Recording stops with "could not keep up".** Lower **Resolution limit** or
+  **Frame-rate limit**, or use a hardware encoder.
+- **Unlisted 30 fps will not start.** The driver rejected 30 fps or applied
+  another rate. Read the `Direct 30 fps request` line in the diagnostic log,
+  then choose a listed rate or uncheck **Allow unlisted FPS**.
 - **A shortcut does not work.** Click the viewer to focus LLCV, then check
   the keys under **Settings → Guide & logs**. Video-only actions do nothing in
   audio-only mode. If you forget the settings key, open settings from the

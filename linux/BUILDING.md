@@ -94,8 +94,8 @@ for your password.
 At the end, it prints the package and the install command, for example:
 
 ```text
-Package: /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.0.5_amd64.deb
-Install: sudo apt install /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.0.5_amd64.deb
+Package: /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3_amd64.deb
+Install: sudo apt install /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3_amd64.deb
 ```
 
 **5. Install**
@@ -158,7 +158,7 @@ Without SDL3, the script downloads the SDL3 source (`tools/fetch-sdl3.sh`)
 and builds it in.
 
 **Result**: `dist/<distro>-<version>/llcv_<version>~<distro><version>_<arch>.deb`
-(for example `dist/debian-13/llcv_2.0.5_arm64.deb`)
+(for example `dist/debian-13/llcv_2.1.3_arm64.deb`)
 
 **Install.** The folder name is your `ID`-`VERSION_ID`:
 
@@ -216,13 +216,17 @@ sudo dnf builddep packaging/rpm/llcv.spec
 Fedora uses the system SDL3. On the RHEL family, the packages needed to build
 SDL3 into the program are selected automatically.
 
+Fedora builds include recording through the system FFmpeg (`ffmpeg-free`, or
+the RPM Fusion `ffmpeg`). The base and CRB repositories of the RHEL family have
+no FFmpeg, so that build has no recording.
+
 **Build the package**
 
 ```sh
 ./tools/build-rpm.sh
 ```
 
-**Result**: `dist/<distro>-<version>/llcv-2.0.5-1.x86_64.rpm`
+**Result**: `dist/<distro>-<version>/llcv-2.1.3-1.x86_64.rpm`
 (debug packages `llcv-debuginfo` and `llcv-debugsource`, and a source RPM, are
 created too)
 
@@ -239,7 +243,7 @@ For Arch Linux, Manjaro and EndeavourOS.
 **Install the build dependencies**
 
 ```sh
-sudo pacman -S --needed base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd
+sudo pacman -S --needed base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd dbus ffmpeg
 ```
 
 **Build the package.** Run `makepkg` as a normal user (not root):
@@ -249,13 +253,13 @@ cd packaging/arch
 makepkg -f
 ```
 
-**Result**: `packaging/arch/llcv-2.0.5-1-x86_64.pkg.tar.zst`
+**Result**: `packaging/arch/llcv-2.1.3-1-x86_64.pkg.tar.zst`
 (`./tools/build-package.sh` also copies it to `dist/arch/`)
 
 **Install**
 
 ```sh
-sudo pacman -U llcv-2.0.5-1-*.pkg.tar.zst
+sudo pacman -U llcv-2.1.3-1-*.pkg.tar.zst
 ```
 
 `makepkg -si` installs the dependencies, builds and installs in one step.
@@ -332,6 +336,7 @@ Per-user data stays after removal. To remove it too, delete these folders:
 | Settings | `~/.config/llcv/` |
 | Logs | `~/.local/state/llcv/` |
 | Screenshots | `~/Pictures/LLCV/` (the folder name follows the system language) |
+| Recordings | `~/Videos/LLCV/` (the folder name follows the system language) |
 
 ## 6. Building without a package (other distributions)
 
@@ -348,11 +353,12 @@ app without installing it.
 | PNG screenshots | `libpng` | yes |
 | HDR output (Wayland) | `wayland-client`, `wayland-scanner` | no |
 | Blocking automatic suspend during playback | `dbus-1` | no |
+| MP4 recording (FFmpeg 4.4 or newer) | `libavcodec`, `libavformat`, `libavutil`, `libswscale` | no |
 
 openSUSE can install by pkg-config name (an untested example):
 
 ```sh
-sudo zypper install cmake gcc-c++ 'pkgconfig(sdl3)' 'pkgconfig(libturbojpeg)' 'pkgconfig(libpng)' 'pkgconfig(wayland-client)' 'pkgconfig(wayland-scanner)' 'pkgconfig(dbus-1)'
+sudo zypper install cmake gcc-c++ 'pkgconfig(sdl3)' 'pkgconfig(libturbojpeg)' 'pkgconfig(libpng)' 'pkgconfig(wayland-client)' 'pkgconfig(wayland-scanner)' 'pkgconfig(dbus-1)' 'pkgconfig(libavcodec)' 'pkgconfig(libavformat)' 'pkgconfig(libavutil)' 'pkgconfig(libswscale)'
 ```
 
 **Build and run**
@@ -393,6 +399,7 @@ ALSA and D-Bus development packages.
 | `LLCV_SDL3` | `AUTO` | `SYSTEM` (system SDL3), `BUNDLED` (link the downloaded SDL3 statically), `AUTO` (system first) |
 | `LLCV_WAYLAND_COLOR_MANAGEMENT` | `AUTO` | Build HDR output for Wayland; `ON` makes missing dependencies an error |
 | `LLCV_SLEEP_INHIBIT` | `AUTO` | Block automatic suspend during playback through the desktop portal (needs `dbus-1`); `ON` makes a missing `dbus-1` an error |
+| `LLCV_RECORDING` | `AUTO` | Build MP4 recording through FFmpeg (needs `libavcodec`, `libavformat`, `libavutil`, `libswscale`); `ON` makes missing FFmpeg an error, `OFF` leaves recording out |
 | `LLCV_USE_SYSTEM_IMGUI` | `OFF` | Use a system Dear ImGui 1.92 or newer instead of the bundled copy |
 | `LLCV_SOURCE_TREE_DATA` | `ON` | Find fonts and icons in the source tree when not installed (off for packages) |
 
@@ -404,6 +411,7 @@ ALSA and D-Bus development packages.
 | `dpkg-checkbuilddeps: error: Unmet build dependencies` | Build dependencies are missing. Run `./tools/install-build-deps.sh` first. |
 | `... the package libsdl3-dev cannot be found` / `Unable to locate package libsdl3-dev` | The release has no SDL3. Use `sudo apt build-dep -P pkg.llcv.bundled-sdl3 ./`. On Ubuntu, also check the universe repository. |
 | `No match for argument` / `No matching package to install` (dnf) | The CRB repository is off on the RHEL family. See [3.2](#32-fedora-and-rhel-family-rpm). |
+| `Recording needs FFmpeg 4.4 or newer` | `-DLLCV_RECORDING=ON` without FFmpeg development files. Install them (`libavcodec-dev libavformat-dev libavutil-dev libswscale-dev` on Debian and Ubuntu), or configure with `-DLLCV_RECORDING=AUTO` or `OFF`. |
 | `SDL3 3.2 or newer is not installed. Run tools/fetch-sdl3.sh` | A direct build without SDL3. Run `./tools/fetch-sdl3.sh`, then configure with `-DLLCV_SDL3=BUNDLED`. |
 | `SHA256 mismatch` | The SDL3 download is damaged. Delete `third_party/sdl3/` and run again. |
 | `curl-minimal ... conflicts with curl` (dnf) | The RHEL family already has `curl-minimal`. Leave `curl` out of the install list. |

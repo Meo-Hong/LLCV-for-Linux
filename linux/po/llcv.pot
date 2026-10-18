@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-15 01:15+0900\n"
+"POT-Creation-Date: 2026-10-19 02:55+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,8 +18,65 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 
 #: src/app/App.cpp
+msgid "The previous recording is still being finalized."
+msgstr ""
+
+#: src/app/App.cpp
+msgid ""
+"This build has no recording support. Rebuild LLCV with the FFmpeg "
+"development files installed."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "This input format cannot be recorded."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "HDR input cannot be recorded. Recording supports SDR video only."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "The recording folder is unavailable."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Not enough free space in the recording folder."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Recording stopped: not enough disk space."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Recording stopped: the file could not be written."
+msgstr ""
+
+#: src/app/App.cpp
+msgid ""
+"Recording stopped: encoding or writing could not keep up. Lower the "
+"recording resolution or frame limit."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Recording stopped: the encoder reported an error."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "The recording file could not be finalized."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Recording could not be completed."
+msgstr ""
+
+#: src/app/App.cpp
 msgid ""
 "Audio device disconnected · it is restored automatically when it returns"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "The folder dialog is unavailable: %s"
 msgstr ""
 
 #: src/app/App.cpp
@@ -218,7 +275,32 @@ msgid "Volume"
 msgstr ""
 
 #: src/app/App.cpp
+msgid " · playback muted"
+msgstr ""
+
+#: src/app/App.cpp
 msgid " · muted in background"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Preparing"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Finalizing"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Paused · "
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid " · dropped %llu"
+msgstr ""
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp src/ui/ViewerOverlay.cpp
+msgid "Recording"
 msgstr ""
 
 #: src/app/App.cpp
@@ -236,6 +318,10 @@ msgstr ""
 
 #: src/app/App.cpp
 msgid "No capture device."
+msgstr ""
+
+#: src/app/App.cpp
+msgid " (direct request)"
 msgstr ""
 
 #: src/app/App.cpp
@@ -281,6 +367,15 @@ msgid ""
 "fps or report a different rate. Uncheck Video → 40 fps capture to retry with "
 "the normal frame-rate selection. The diagnostic log tells a format rejection "
 "apart from other startup errors."
+msgstr ""
+
+#: src/app/App.cpp
+msgid ""
+"\n"
+"\n"
+"30 fps was requested directly because the driver does not list it. The "
+"driver rejected it or applied another rate. Choose a listed frame rate or "
+"turn off Video → Allow unlisted FPS."
 msgstr ""
 
 #: src/app/App.cpp
@@ -405,6 +500,66 @@ msgstr ""
 msgid "Settings could not be saved. The previous settings file is kept: %s"
 msgstr ""
 
+#: src/app/App.cpp
+msgid "Recording is available in video mode."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Recording started · press F9 again to stop"
+msgstr ""
+
+#: src/app/App.cpp src/ui/ViewerOverlay.cpp
+msgid "Finalizing recording…"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Recording paused. Playback continues."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Recording resumed."
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "Recording saved: %s"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid " (%d files)"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "The part before the stop was saved."
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "Recording could not start: %s"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Nothing was recorded."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "1:1 size · the capture matches this monitor, so fullscreen is used."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "A 1:1 window does not fit this monitor, so it was reduced to fit."
+msgstr ""
+
+#: src/app/App.cpp
+msgid "The last recording file no longer exists."
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "Could not open the file: %s"
+msgstr ""
+
 #: src/capture/V4l2Capture.cpp
 msgid "Another application is using the capture device"
 msgstr ""
@@ -437,6 +592,28 @@ msgstr ""
 
 #: src/ui/SettingsScreen.cpp
 msgid "Check the measured input rate under Actual FPS in the Tab diagnostics."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Adds 30 fps to the frame-rate list when the driver does not list it. Off by "
+"default."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"It is a direct request, not a support confirmation. If the driver rejects 30 "
+"fps or applies another rate, Start stops with a notice."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Turn off 40 fps capture first. It does not convert 60 fps to 30 fps in "
+"software."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "After starting, check Actual FPS in the Tab diagnostics."
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
@@ -497,11 +674,23 @@ msgid "Window##window"
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
+msgid "Recording##recording"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
 msgid "Guide & logs##guide"
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
 msgid "App##app"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Cancel##settingsCancel"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Discard the changes and resume playback"
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
@@ -565,6 +754,17 @@ msgid "Auto (highest uncompressed rate)"
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
+msgid "30 fps · direct request"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Direct request: 30 fps. This is not a support confirmation. Start stops with "
+"a notice if the driver rejects it or applies another rate; check Actual FPS "
+"in the Tab diagnostics."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
 msgid "40 fps capture"
 msgstr ""
 
@@ -578,6 +778,10 @@ msgstr ""
 msgid ""
 "40 fps is not in the detected list. Start checks whether the driver accepts "
 "it; if not, LLCV shows an error instead of using another rate."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Allow unlisted FPS (30 fps)"
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
@@ -663,6 +867,28 @@ msgstr ""
 
 #: src/ui/SettingsScreen.cpp
 msgid "Always HDR output (Wayland)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "HDR chroma placement"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (default)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Left"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Top-left"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"A compatibility override for P010 when color edges look shifted. Leave it on "
+"Auto otherwise."
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
@@ -839,6 +1065,10 @@ msgid "Borderless window"
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
+msgid "Keep relative window size when moving monitors"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
 msgid "Start in fullscreen"
 msgstr ""
 
@@ -852,6 +1082,50 @@ msgstr ""
 
 #: src/ui/SettingsScreen.cpp
 msgid "Always visible"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Fullscreen video size"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Fit to screen (default)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Original size (1:1 · reduced if larger)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Fullscreen video position"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Center (default)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Top"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Right"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Bottom"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Applies in fullscreen when the video does not fill the screen. Margins stay "
+"black and the video is never cropped."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"When the capture resolution matches the monitor, playback starts in "
+"fullscreen and F5 uses fullscreen for 1:1 pixels."
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
@@ -874,6 +1148,256 @@ msgstr ""
 
 #: src/ui/SettingsScreen.cpp
 msgid "X11 mode: the startup monitor and last window position are restored."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"This build has no recording support. Install the FFmpeg development files "
+"(libavcodec, libavformat, libavutil, libswscale) and rebuild LLCV."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Recording video (F9)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Checking encoder support…"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"The encoder check could not finish. This does not mean the codecs are "
+"unsupported; open the Recording page again to retry."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Codec"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid " (not supported)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Encoder"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Automatic hardware (%s)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Automatic hardware"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "CPU"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "CPU (%s)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Rate control"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Quality (constant QP)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Target bitrate"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Quality"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Smaller files (QP 26)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Balanced (QP 23 · default)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Higher quality (QP 20)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "AV1 uses an equivalent quantizer for these presets."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Video bitrate"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid " (default)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Resolution limit"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "1080p (default)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Match capture"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Frame-rate limit"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "60 fps (default)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Lower input is kept as is. These limits never change playback."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"This codec, encoder and rate control combination is not supported here. "
+"Recording reports an error instead of switching to another codec or the CPU."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Recording audio"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Audio (AAC)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "192 kbps (default)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Recording volume %d%%"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Recording volume is separate from playback volume and playback mute. 0% "
+"records silence."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Files"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Save folder"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Choose…##recordingFolder"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Open folder##recordingFolder"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Default##recordingFolder"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Free space"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "%.1f GB free"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Unavailable"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Automatic splitting"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Off (default)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "By duration"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "By size"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Every %d minutes"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Every %d GiB"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"A new file starts at the next keyframe, so a part can run slightly past the "
+"limit."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Recordings are fragmented MP4. Parts already written usually survive a "
+"crash, but the last seconds are not guaranteed."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Last recording"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Open##lastRecording"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Supported input"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Records NV12, YUY2, MJPEG and BGR24 SDR video with 16-bit stereo capture "
+"audio to MP4."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"HDR input (P010 or Force HDR10) is not recorded. MJPEG recording decodes "
+"every frame again and uses more CPU."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Start playback, then press F9 to start or stop. Pause and resume are in the "
+"Alt menu under Recording."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Opening settings or quitting stops the recording and saves it first. "
+"Overlays, playback volume and playback mute are not recorded."
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
@@ -929,6 +1453,10 @@ msgstr ""
 
 #: src/ui/SettingsScreen.cpp
 msgid "Open logs folder##logs"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Unlisted 30 fps requests"
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
@@ -1081,6 +1609,14 @@ msgid "Leave fullscreen / exit"
 msgstr ""
 
 #: src/ui/Shortcuts.h
+msgid "Start / stop recording"
+msgstr ""
+
+#: src/ui/Shortcuts.h
+msgid "Toggle playback mute"
+msgstr ""
+
+#: src/ui/Shortcuts.h
 msgid "Show / hide the menu bar"
 msgstr ""
 
@@ -1098,6 +1634,14 @@ msgstr ""
 
 #: src/ui/Shortcuts.h
 msgid "Toggle fullscreen"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Mute playback (M)"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Unmute playback (M)"
 msgstr ""
 
 #: src/ui/ViewerOverlay.cpp
@@ -1121,6 +1665,10 @@ msgstr ""
 #: src/ui/ViewerOverlay.cpp
 #, c-format
 msgid "Volume %d%%"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Playback muted · recordings keep their sound"
 msgstr ""
 
 #: src/ui/ViewerOverlay.cpp
@@ -1154,7 +1702,7 @@ msgid "Audio only"
 msgstr ""
 
 #: src/ui/ViewerOverlay.cpp
-msgid "F2 settings · Tab diagnostics · F1 help · wheel volume"
+msgid "F2 settings · Tab diagnostics · F1 help · M mute · wheel volume"
 msgstr ""
 
 #: src/ui/ViewerOverlay.cpp
@@ -1171,6 +1719,39 @@ msgstr ""
 
 #: src/ui/ViewerOverlay.cpp
 msgid "Close (F1 / Esc)###close"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Recording paused"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Preparing recording…"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Recording in progress"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid ""
+"Opening settings stops playback. The recording is stopped and saved first."
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "The recording is stopped and saved before LLCV quits."
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Stop recording and open settings"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Stop recording and quit"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Cancel (Esc)###cancelRecordingConfirm"
 msgstr ""
 
 #: src/ui/ViewerOverlay.cpp
@@ -1215,7 +1796,35 @@ msgid "Wheel down"
 msgstr ""
 
 #: src/ui/ViewerOverlay.cpp
+msgid "Mute playback"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
 msgid "Mute in background"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Start recording"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Stop recording"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Pause recording"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Resume recording"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Open last recording"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
+msgid "Open recordings folder"
 msgstr ""
 
 #: src/ui/ViewerOverlay.cpp

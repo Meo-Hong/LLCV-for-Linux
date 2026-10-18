@@ -9,6 +9,7 @@
 #include "platform/Paths.h"
 #include "platform/PngImage.h"
 #include "platform/Strings.h"
+#include "recording/RecordingStorage.h"
 #include "settings/SettingsStore.h"
 #include "ui/Text.h"
 #include "video/GlApi.h"
@@ -18,7 +19,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 #include <initializer_list>
+#include <string>
+#include <system_error>
 
 namespace llcv::app {
 namespace {
@@ -79,6 +83,50 @@ float FadeAlpha(uint64_t now, uint64_t until) {
     return 1.0f - static_cast<float>(now - until) / static_cast<float>(kFadeMs);
 }
 
+std::string StartErrorText(recording::StartError error) {
+    switch (error) {
+    case recording::StartError::Busy: return T("The previous recording is still being finalized.");
+    case recording::StartError::Unavailable:
+        return T("This build has no recording support. Rebuild LLCV with the FFmpeg development files installed.");
+    case recording::StartError::UnsupportedFormat: return T("This input format cannot be recorded.");
+    case recording::StartError::HdrInput:
+        return T("HDR input cannot be recorded. Recording supports SDR video only.");
+    case recording::StartError::StorageUnavailable: return T("The recording folder is unavailable.");
+    case recording::StartError::DiskFull: return T("Not enough free space in the recording folder.");
+    case recording::StartError::None: break;
+    }
+    return {};
+}
+
+std::string FailureText(recording::Failure failure) {
+    switch (failure) {
+    case recording::Failure::DiskFull: return T("Recording stopped: not enough disk space.");
+    case recording::Failure::WriteFailed: return T("Recording stopped: the file could not be written.");
+    case recording::Failure::Overload:
+        return T("Recording stopped: encoding or writing could not keep up. Lower the recording resolution or frame "
+                 "limit.");
+    case recording::Failure::EncoderFailed: return T("Recording stopped: the encoder reported an error.");
+    case recording::Failure::StorageUnavailable: return T("The recording folder is unavailable.");
+    case recording::Failure::FinalizeFailed: return T("The recording file could not be finalized.");
+    case recording::Failure::None: break;
+    }
+    return T("Recording could not be completed.");
+}
+
+const char* CodecName(recording::Codec codec) {
+    switch (codec) {
+    case recording::Codec::Hevc: return "HEVC";
+    case recording::Codec::Av1: return "AV1";
+    case recording::Codec::H264: break;
+    }
+    return "H.264";
+}
+
+std::string Elapsed(uint64_t milliseconds) {
+    const unsigned long long seconds = milliseconds / 1000;
+    return Format("%02llu:%02llu:%02llu", seconds / 3600, seconds / 60 % 60, seconds % 60);
+}
+
 }
 
 App::~App() {
@@ -99,6 +147,8 @@ int App::Run(const LaunchOptions& options) {
     ApplyLanguage();
     if (!InitializeWindow()) return 1;
     InitializeImGui();
+    capture_.SetRawFrameSink(&recorder_);
+    audio_.SetCaptureTap(&recorder_);
     screenshotDirectoryText_ = platform::ScreenshotDirectory().string();
     kernelRelease_ = capture::KernelRelease();
     logDirectoryText_ = platform::LogDirectory().string();
@@ -262,8 +312,12 @@ void App::InitializeImGui() {
 }
 
 void App::Shutdown() {
+    recorder_.Stop();
+    if (!recorder_.WaitIdle(15000)) Log("[recording] still finalizing at shutdown");
     capture_.Stop();
     audio_.Stop();
+    capture_.SetRawFrameSink(nullptr);
+    audio_.SetCaptureTap(nullptr);
     sleepInhibitor_.Release();
     hdrOutput_.Shutdown();
     if (imguiInitialized_) {
@@ -307,6 +361,12 @@ void App::MainLoop() {
             ExecuteMenuCommand(command);
             redrawFrames_ = std::max(redrawFrames_, 2);
         }
+        if (pendingExit_ != ExitRequest::None) {
+            const ExitRequest request = pendingExit_;
+            pendingExit_ = ExitRequest::None;
+            PerformExit(request);
+            redrawFrames_ = std::max(redrawFrames_, 3);
+        }
         if (pendingStart_) {
             pendingStart_ = false;
             std::string error;
@@ -343,8 +403,10 @@ void App::HandleEvent(const SDL_Event& event) {
 
     switch (event.type) {
     case SDL_EVENT_QUIT:
-    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
         running_ = false;
+        break;
+    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+        RequestQuit();
         break;
     case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
         pendingStyle_ = true;
@@ -422,6 +484,7 @@ void App::HandleEvent(const SDL_Event& event) {
     case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
         RefreshPreferredColor();
         UpdateHdrState();
+        FollowDisplayChange();
         break;
     default:
         break;
@@ -444,28 +507,28 @@ bool App::CaptureShortcutKey(const SDL_KeyboardEvent& key) {
 
 void App::HandleKey(const SDL_KeyboardEvent& key) {
     if (key.repeat || screen_ == Screen::Settings) return;
+    const auto action = input::FindAction(settings_.shortcuts, input::FromKeyEvent(key));
+    if (confirmExit_ != ExitRequest::None) {
+        if (action == input::Action::Exit) confirmExit_ = ExitRequest::None;
+        return;
+    }
     if ((key.key == SDLK_RETURN || key.key == SDLK_KP_ENTER) && (key.mod & SDL_KMOD_ALT)) {
         SetFullscreen(!fullscreen_);
         return;
     }
-    const auto action = input::FindAction(settings_.shortcuts, input::FromKeyEvent(key));
     if (!action) return;
     switch (*action) {
     case input::Action::Help:
         helpVisible_ = !helpVisible_;
         break;
     case input::Action::Settings:
-        StopSession();
-        EnterSettings();
+        RequestSettings();
         break;
     case input::Action::AudioOsd:
         if (screen_ == Screen::Video) audioOsdVisible_ = !audioOsdVisible_;
         break;
     case input::Action::PixelPerfect:
-        if (screen_ == Screen::Video) {
-            if (fullscreen_) SetFullscreen(false);
-            ApplyVideoWindowSize(false);
-        }
+        RestoreOneToOne();
         break;
     case input::Action::Fullscreen:
         SetFullscreen(!fullscreen_);
@@ -485,8 +548,14 @@ void App::HandleKey(const SDL_KeyboardEvent& key) {
         } else if (fullscreen_) {
             SetFullscreen(false);
         } else {
-            running_ = false;
+            RequestQuit();
         }
+        break;
+    case input::Action::Recording:
+        ToggleRecording();
+        break;
+    case input::Action::Mute:
+        ToggleMute();
         break;
     default:
         break;
@@ -520,6 +589,20 @@ void App::HandleAudioDeviceRemoved(const SDL_AudioDeviceEvent& event) {
 void App::Update() {
     const uint64_t now = platform::MonotonicMs();
     PollScreenshots();
+    PollRecording();
+    {
+        std::lock_guard<std::mutex> lock(folderMutex_);
+        if (chosenFolder_) {
+            settings_.recording.folder = *chosenFolder_;
+            chosenFolder_.reset();
+            redrawFrames_ = std::max(redrawFrames_, 1);
+        }
+        if (!folderError_.empty()) {
+            errorMessage_ = Format(T("The folder dialog is unavailable: %s"), folderError_.c_str());
+            folderError_.clear();
+            redrawFrames_ = std::max(redrawFrames_, 1);
+        }
+    }
 
     if (audioDevicesChanged_) {
         audioDevicesChanged_ = false;
@@ -567,7 +650,10 @@ void App::Update() {
     const bool animating = now < volumeHudUntilMs_ + kFadeMs || now < toastUntilMs_ + kFadeMs;
     const bool liveOverlay =
         screen_ != Screen::Settings && (diagnosticsVisible_ || audioOsdVisible_ || screen_ == Screen::AudioOnly);
-    if (animating || (liveOverlay && now - lastRenderMs_ >= 100)) redrawFrames_ = std::max(redrawFrames_, 1);
+    const bool recordingShown = screen_ == Screen::Video && recorder_.Busy();
+    if (animating || (liveOverlay && now - lastRenderMs_ >= 100) || (recordingShown && now - lastRenderMs_ >= 500)) {
+        redrawFrames_ = std::max(redrawFrames_, 1);
+    }
 }
 
 void App::UpdateStatistics(uint64_t now) {
@@ -617,7 +703,7 @@ void App::UpdateSleepPrevention() {
 void App::UpdateCursor(uint64_t now) {
     const bool autoHide = screen_ == Screen::Video && fullscreen_ &&
                           settings_.fullscreenCursor == settings::FullscreenCursor::AutoHide && !helpVisible_ &&
-                          !audioOsdVisible_ && !menuVisible_;
+                          !audioOsdVisible_ && !menuVisible_ && confirmExit_ == ExitRequest::None;
     if (autoHide && !cursorHidden_ && now - lastMouseMoveMs_ > kCursorHideMs) {
         SDL_HideCursor();
         cursorHidden_ = true;
@@ -631,6 +717,7 @@ void App::RenderFrame() {
     int width = 0;
     int height = 0;
     SDL_GetWindowSizeInPixels(window_, &width, &height);
+    ApplyPlacement();
 
     uint64_t frameCaptureNs = 0;
     if (newVideoFrame_) {
@@ -683,8 +770,11 @@ void App::RenderFrame() {
 
 void App::DrawSettings() {
     const ui::SettingsContext context = BuildSettingsContext();
-    switch (settingsScreen_.Draw(settings_, context)) {
+    const ui::SettingsAction action = settingsScreen_.Draw(settings_, context);
+    if (settingsScreen_.TakeRecordingPageOpened()) encoderProbe_.Start();
+    switch (action) {
     case ui::SettingsAction::Start:
+        settingsBeforeEdit_.reset();
         pendingStart_ = true;
         break;
     case ui::SettingsAction::Quit:
@@ -708,6 +798,26 @@ void App::DrawSettings() {
     case ui::SettingsAction::OpenScreenshotFolder:
         OpenFolder(platform::ScreenshotDirectory());
         break;
+    case ui::SettingsAction::OpenRecordingFolder:
+        OpenFolder(recording::RecordingDirectory(settings_.recording));
+        break;
+    case ui::SettingsAction::ChooseRecordingFolder:
+        ChooseRecordingFolder();
+        break;
+    case ui::SettingsAction::OpenLastRecording:
+        OpenLastRecording();
+        break;
+    case ui::SettingsAction::Cancel:
+        if (settingsBeforeEdit_) {
+            const bool themeChanged = settings_.lightTheme != settingsBeforeEdit_->lightTheme;
+            settings_ = *settingsBeforeEdit_;
+            settingsBeforeEdit_.reset();
+            ApplyLanguage();
+            diagnostics::Logger::Instance().SetFileLogging(settings_.saveLog);
+            if (themeChanged) pendingStyle_ = true;
+            pendingStart_ = true;
+        }
+        break;
     case ui::SettingsAction::None:
         break;
     }
@@ -726,13 +836,18 @@ void App::DrawVideoOverlays() {
     if (audioOsdVisible_) {
         ui::AudioMeterState state = BuildAudioState();
         if (ui::DrawAudioOsd(state, settings_.shortcuts, fonts_, scale_)) ApplyAudioState(state);
+    } else if (playbackMuted_) {
+        ui::DrawMuteIndicator(scale_);
     }
+    if (recorder_.Busy()) ui::DrawRecordingIndicator(recorder_.GetStatus(), scale_);
     DrawCommonOverlays();
 }
 
 void App::DrawAudioOnly() {
     ui::AudioMeterState state = BuildAudioState();
-    if (ui::DrawAudioOnlyView(state, settings_.shortcuts, fonts_, scale_)) ApplyAudioState(state);
+    const bool changed = ui::DrawAudioOnlyView(state, settings_.shortcuts, fonts_, scale_);
+    audioOnlyControls_ = {state.controlsMin.x, state.controlsMin.y, state.controlsMax.x, state.controlsMax.y};
+    if (changed) ApplyAudioState(state);
     DrawCommonOverlays();
 }
 
@@ -741,7 +856,7 @@ void App::DrawCommonOverlays() {
     if (diagnosticsVisible_) ui::DrawDiagnostics(BuildDiagnostics(), settings_.shortcuts, fonts_, scale_);
     const float hudAlpha = FadeAlpha(now, volumeHudUntilMs_);
     if (hudAlpha > 0.0f) {
-        ui::DrawVolumeHud(settings_.volumePercent, settings_.muteWhenBackground && !focused_,
+        ui::DrawVolumeHud(settings_.volumePercent, playbackMuted_ || (settings_.muteWhenBackground && !focused_),
                           settings_.volumeHudPosition, hudAlpha, scale_);
     }
     const float toastAlpha = FadeAlpha(now, toastUntilMs_);
@@ -751,6 +866,7 @@ void App::DrawCommonOverlays() {
                      scale_);
     }
     if (menuVisible_) DrawMenu();
+    if (confirmExit_ != ExitRequest::None) DrawRecordingConfirm();
 }
 
 std::vector<ui::DiagnosticsLine> App::BuildDiagnostics() const {
@@ -845,10 +961,28 @@ std::vector<ui::DiagnosticsLine> App::BuildDiagnostics() const {
         lines.push_back({T("Audio"), text});
     }
     lines.push_back({T("Volume"),
-                     Format("%d%% · L %d%% · R %d%%%s", settings_.volumePercent, settings_.leftVolumePercent,
-                            settings_.rightVolumePercent,
+                     Format("%d%% · L %d%% · R %d%%%s%s", settings_.volumePercent, settings_.leftVolumePercent,
+                            settings_.rightVolumePercent, playbackMuted_ ? T(" · playback muted") : "",
                             settings_.muteWhenBackground && !focused_ ? T(" · muted in background")
                                                                       : "")});
+    const recording::Status recordingStatus = recorder_.GetStatus();
+    if (recordingStatus.phase != recording::Phase::Idle) {
+        std::string text;
+        switch (recordingStatus.phase) {
+        case recording::Phase::Starting: text = T("Preparing"); break;
+        case recording::Phase::Finalizing: text = T("Finalizing"); break;
+        default:
+            text = Format("%s%s · %s · %s · %d × %d @ %.2f fps · %.1f MB", recordingStatus.paused ? T("Paused · ") : "",
+                          Elapsed(recordingStatus.elapsedMs).c_str(), CodecName(settings_.recording.codec),
+                          recordingStatus.encoder.c_str(), recordingStatus.width, recordingStatus.height,
+                          recordingStatus.fps, static_cast<double>(recordingStatus.bytes) / (1024.0 * 1024.0));
+            if (recordingStatus.droppedFrames > 0) {
+                text += Format(T(" · dropped %llu"), U(recordingStatus.droppedFrames));
+            }
+            break;
+        }
+        lines.push_back({T("Recording"), text});
+    }
     return lines;
 }
 
@@ -860,6 +994,7 @@ ui::AudioMeterState App::BuildAudioState() const {
     state.boost = settings_.allowVolumeBoost;
     state.available = audio_.Running();
     state.muted = settings_.muteWhenBackground && !focused_;
+    state.playbackMuted = playbackMuted_;
     state.peakLeft = audio_.PeakLeft();
     state.peakRight = audio_.PeakRight();
     state.clipEvents = audio_.ClipEvents();
@@ -882,6 +1017,11 @@ void App::ApplyAudioState(const ui::AudioMeterState& state) {
     settings_.leftVolumePercent = state.left;
     settings_.rightVolumePercent = state.right;
     ApplyVolume();
+    if (state.muteToggled) {
+        ToggleMute();
+    } else if (state.unmute && playbackMuted_) {
+        SetPlaybackMuted(false);
+    }
 }
 
 ui::SettingsContext App::BuildSettingsContext() {
@@ -900,6 +1040,13 @@ ui::SettingsContext App::BuildSettingsContext() {
     }
     context.logDirectory = logDirectoryText_;
     context.screenshotDirectory = screenshotDirectoryText_;
+    context.recordingAvailable = recording::RecordingAvailable();
+    context.encoders = encoderProbe_.Snapshot();
+    const std::filesystem::path recordingDirectory = recording::RecordingDirectory(settings_.recording);
+    context.recordingDirectory = recordingDirectory.string();
+    context.recordingFreeBytes = recording::FreeBytes(recordingDirectory);
+    context.lastRecording = lastRecordingText_;
+    context.canCancel = settingsBeforeEdit_.has_value();
     context.fonts = fonts_;
     context.scale = scale_;
     context.framebufferBits = framebufferBits_;
@@ -921,8 +1068,9 @@ ui::SettingsContext App::BuildSettingsContext() {
     } else if (const auto mode = capture::ResolveMode(*device, RequestFromSettings(settings_))) {
         context.canStart = true;
         context.startSummary =
-            Format("%s · %d × %d · %s · %s fps · %s", device->Name().c_str(), mode->width, mode->height,
+            Format("%s · %d × %d · %s · %s fps%s · %s", device->Name().c_str(), mode->width, mode->height,
                    capture::PixelFormatName(mode->format), capture::FormatRate(mode->rate).c_str(),
+                   mode->directRequest ? T(" (direct request)") : "",
                    audioName.empty() ? T("no audio")
                                      : T("with audio"));
     } else {
@@ -1010,8 +1158,14 @@ bool App::StartSession(std::string& error) {
         config.height = activeMode_->height;
         config.rate = activeMode_->rate;
         config.capture40Fps = settings_.capture40Fps;
+        config.directRate = activeMode_->directRequest;
         config.colorOverride = settings_.colorOverride;
         config.hdrInput = settings_.hdrInput;
+        switch (settings_.hdrChromaLocation) {
+        case settings::HdrChromaLocation::Left: renderer_.SetP010ChromaSiting(video::ChromaSiting::Left); break;
+        case settings::HdrChromaLocation::TopLeft: renderer_.SetP010ChromaSiting(video::ChromaSiting::TopLeft); break;
+        case settings::HdrChromaLocation::Auto: renderer_.SetP010ChromaSiting(video::ChromaSiting::Center); break;
+        }
         std::string captureError;
         if (!capture_.Start(config, mailbox_, [this] { NotifyFrame(); }, captureError)) {
             error = std::string(T("Could not start capture: ")) + captureError;
@@ -1019,6 +1173,10 @@ bool App::StartSession(std::string& error) {
                 error += T("\n\n40 fps capture is enabled. This device, resolution or format may reject 40 fps or "
                            "report a different rate. Uncheck Video → 40 fps capture to retry with the normal frame-rate "
                            "selection. The diagnostic log tells a format rejection apart from other startup errors.");
+            } else if (activeMode_->directRequest) {
+                error += T("\n\n30 fps was requested directly because the driver does not list it. The driver rejected "
+                           "it or applied another rate. Choose a listed frame rate or turn off Video → Allow unlisted "
+                           "FPS.");
             }
             return false;
         }
@@ -1097,6 +1255,12 @@ bool App::StartSession(std::string& error) {
 
 void App::StopSession() {
     if (screen_ == Screen::Settings) return;
+    if (recorder_.Busy()) {
+        recorder_.Stop();
+        if (!recorder_.WaitIdle(15000)) Log("[recording] finalizing is taking longer than expected");
+        PollRecording();
+    }
+    confirmExit_ = ExitRequest::None;
     sleepInhibitor_.Release();
     capture_.Stop();
     audio_.Stop();
@@ -1123,6 +1287,8 @@ void App::StopSession() {
 
 void App::EnterSettings() {
     screen_ = Screen::Settings;
+    settingsScreen_.ResetRecordingPage();
+    SDL_SetWindowHitTest(window_, nullptr, nullptr);
     if (fullscreen_) SetFullscreen(false);
     SDL_SetWindowAspectRatio(window_, 0.0f, 0.0f);
     SDL_SetWindowBordered(window_, true);
@@ -1148,21 +1314,28 @@ bool App::StartAudio(std::string& error) {
     config.driftCorrection = settings_.driftCorrection == settings::DriftCorrection::Auto;
     ApplyVolume();
     UpdateBackgroundMute();
+    audio_.SetPlaybackMuted(playbackMuted_);
     return audio_.Start(config, error);
 }
 
 void App::ConfigureSessionWindow() {
     SDL_SetWindowTitle(window_, kAppName);
     if (screen_ == Screen::AudioOnly) {
+        const float aspect = std::clamp(static_cast<float>(settings_.audioOnlyWidth) /
+                                            static_cast<float>(std::max(settings_.audioOnlyHeight, 1)),
+                                        0.5f, 4.0f);
         SDL_SetWindowAspectRatio(window_, 0.0f, 0.0f);
-        SDL_SetWindowBordered(window_, true);
+        SDL_SetWindowBordered(window_, !settings_.borderlessWindow);
         SDL_SetWindowResizable(window_, true);
         SDL_SetWindowMinimumSize(window_, 320, 220);
         SDL_SetWindowSize(window_, settings_.audioOnlyWidth, settings_.audioOnlyHeight);
+        SDL_SetWindowAspectRatio(window_, aspect, aspect);
+        SDL_SetWindowHitTest(window_, &App::AudioOnlyHitTest, this);
         SDL_ShowWindow(window_);
         SDL_RaiseWindow(window_);
         return;
     }
+    SDL_SetWindowHitTest(window_, nullptr, nullptr);
     SDL_SetWindowMinimumSize(window_, 160, 90);
     SDL_SetWindowBordered(window_, !settings_.borderlessWindow);
     SDL_ShowWindow(window_);
@@ -1170,11 +1343,12 @@ void App::ConfigureSessionWindow() {
     PositionOnPreferredDisplay();
     ApplyVideoWindowSize(true);
     SDL_RaiseWindow(window_);
-    if (settings_.startFullscreen) SetFullscreen(true);
+    if (settings_.startFullscreen || CaptureMatchesDisplay()) SetFullscreen(true);
+    RememberWindowDisplay();
 }
 
-void App::ApplyVideoWindowSize(bool useSavedSize) {
-    if (!activeMode_ || !window_) return;
+bool App::ApplyVideoWindowSize(bool useSavedSize) {
+    if (!activeMode_ || !window_) return true;
     const float density = std::max(SDL_GetWindowPixelDensity(window_), 0.25f);
     float width = static_cast<float>(activeMode_->width) / density;
     float height = static_cast<float>(activeMode_->height) / density;
@@ -1200,6 +1374,7 @@ void App::ApplyVideoWindowSize(bool useSavedSize) {
     SDL_SetWindowAspectRatio(window_, 0.0f, 0.0f);
     SDL_SetWindowSize(window_, finalWidth, finalHeight);
     ApplyWindowConstraints();
+    return fit >= 0.999f;
 }
 
 void App::ApplyWindowConstraints() {
@@ -1362,11 +1537,13 @@ void App::ChangeVolume(int delta) {
     value = std::min(maximum, (value + 2) / 5 * 5);
     settings_.volumePercent = value;
     ApplyVolume();
+    if (playbackMuted_) SetPlaybackMuted(false);
     volumeHudUntilMs_ = platform::MonotonicMs() + kVolumeHudMs;
 }
 
 void App::RememberWindowGeometry() {
     if (fullscreen_ || !window_) return;
+    if (SDL_GetWindowFlags(window_) & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN)) return;
     if (screen_ == Screen::AudioOnly) {
         int width = 0;
         int height = 0;
@@ -1463,6 +1640,13 @@ void App::DrawMenu() {
     state.diagnostics = diagnosticsVisible_;
     state.audioOsd = audioOsdVisible_;
     state.backgroundMute = settings_.muteWhenBackground;
+    state.playbackMuted = playbackMuted_;
+    const recording::Status recordingStatus = recorder_.GetStatus();
+    state.recording = recordingStatus.phase == recording::Phase::Recording;
+    state.recordingPaused = state.recording && recordingStatus.paused;
+    state.recordingBusy =
+        recordingStatus.phase == recording::Phase::Starting || recordingStatus.phase == recording::Phase::Finalizing;
+    state.lastRecording = !lastRecordingPath_.empty();
     state.volume = settings_.volumePercent;
     const ui::MenuCommand command = ui::DrawMenuBar(state, settings_.shortcuts, scale_);
     if (command != ui::MenuCommand::None) pendingMenuCommand_ = command;
@@ -1476,14 +1660,11 @@ void App::ExecuteMenuCommand(ui::MenuCommand command) {
         SetFullscreen(!fullscreen_);
         break;
     case ui::MenuCommand::RestoreSize:
-        if (screen_ == Screen::Video) {
-            if (fullscreen_) SetFullscreen(false);
-            ApplyVideoWindowSize(false);
-        }
+        RestoreOneToOne();
         break;
     case ui::MenuCommand::Borderless:
         settings_.borderlessWindow = !settings_.borderlessWindow;
-        if (screen_ == Screen::Video) SDL_SetWindowBordered(window_, !settings_.borderlessWindow);
+        SDL_SetWindowBordered(window_, !settings_.borderlessWindow);
         break;
     case ui::MenuCommand::ScalingSmooth:
         settings_.scalingMode = settings::ScalingMode::Smooth;
@@ -1516,6 +1697,21 @@ void App::ExecuteMenuCommand(ui::MenuCommand command) {
         settings_.muteWhenBackground = !settings_.muteWhenBackground;
         UpdateBackgroundMute();
         break;
+    case ui::MenuCommand::Mute:
+        ToggleMute();
+        break;
+    case ui::MenuCommand::Recording:
+        ToggleRecording();
+        break;
+    case ui::MenuCommand::RecordingPause:
+        ToggleRecordingPause();
+        break;
+    case ui::MenuCommand::OpenRecordings:
+        OpenFolder(recording::RecordingDirectory(settings_.recording));
+        break;
+    case ui::MenuCommand::OpenLastRecording:
+        OpenLastRecording();
+        break;
     case ui::MenuCommand::Screenshot:
         if (screen_ == Screen::Video) RequestScreenshot();
         break;
@@ -1526,14 +1722,13 @@ void App::ExecuteMenuCommand(ui::MenuCommand command) {
         OpenFolder(platform::LogDirectory());
         break;
     case ui::MenuCommand::Settings:
-        StopSession();
-        EnterSettings();
+        RequestSettings();
         break;
     case ui::MenuCommand::Help:
         helpVisible_ = true;
         break;
     case ui::MenuCommand::Quit:
-        running_ = false;
+        RequestQuit();
         break;
     case ui::MenuCommand::None:
         break;
@@ -1549,6 +1744,309 @@ void App::SaveSettings() {
     settingsSaveError_ = Format(T("Settings could not be saved. The previous settings file is kept: %s"),
                                 settingsPath_.c_str());
     if (screen_ != Screen::Settings) ShowToast(settingsSaveError_, true);
+}
+
+bool App::RecordingActive() const {
+    const recording::Phase phase = recorder_.GetStatus().phase;
+    return phase == recording::Phase::Starting || phase == recording::Phase::Recording;
+}
+
+void App::RequestQuit() {
+    if (screen_ != Screen::Settings && RecordingActive()) {
+        confirmExit_ = ExitRequest::Quit;
+        menuVisible_ = false;
+        helpVisible_ = false;
+        redrawFrames_ = std::max(redrawFrames_, 2);
+        return;
+    }
+    running_ = false;
+}
+
+void App::RequestSettings() {
+    if (RecordingActive()) {
+        confirmExit_ = ExitRequest::Settings;
+        menuVisible_ = false;
+        helpVisible_ = false;
+        redrawFrames_ = std::max(redrawFrames_, 2);
+        return;
+    }
+    PerformExit(ExitRequest::Settings);
+}
+
+void App::PerformExit(ExitRequest request) {
+    confirmExit_ = ExitRequest::None;
+    switch (request) {
+    case ExitRequest::Quit:
+        running_ = false;
+        break;
+    case ExitRequest::Settings:
+        StopSession();
+        settingsBeforeEdit_ = settings_;
+        EnterSettings();
+        break;
+    case ExitRequest::None:
+        break;
+    }
+}
+
+void App::DrawRecordingConfirm() {
+    switch (ui::DrawRecordingConfirm(confirmExit_ == ExitRequest::Settings, settings_.shortcuts, fonts_, scale_)) {
+    case ui::ConfirmResult::Confirm:
+        pendingExit_ = confirmExit_;
+        confirmExit_ = ExitRequest::None;
+        break;
+    case ui::ConfirmResult::Cancel:
+        confirmExit_ = ExitRequest::None;
+        break;
+    case ui::ConfirmResult::None:
+        break;
+    }
+}
+
+void App::ToggleRecording() {
+    const recording::Phase phase = recorder_.GetStatus().phase;
+    if (phase == recording::Phase::Recording) {
+        StopRecording();
+    } else if (phase == recording::Phase::Idle) {
+        StartRecording();
+    }
+}
+
+void App::StartRecording() {
+    if (screen_ != Screen::Video || !activeMode_) {
+        ShowToast(T("Recording is available in video mode."), true);
+        return;
+    }
+    const capture::NegotiatedFormat negotiated = capture_.Negotiated();
+    recording::StartRequest request;
+    request.options = settings_.recording;
+    request.video.format = negotiated.format;
+    request.video.width = negotiated.width;
+    request.video.height = negotiated.height;
+    request.video.rate = negotiated.rate;
+    request.video.color = negotiated.color;
+    request.audio = audioWanted_;
+    request.folder = recording::RecordingDirectory(settings_.recording);
+    const recording::StartError error = recorder_.Start(request);
+    if (error != recording::StartError::None) {
+        Log("[recording] not started (%d)", static_cast<int>(error));
+        ShowToast(StartErrorText(error), true);
+        return;
+    }
+    ShowToast(input::ExpandKeyLabels(T("Recording started · press F9 again to stop"), settings_.shortcuts));
+}
+
+void App::StopRecording() {
+    recorder_.Stop();
+    ShowToast(T("Finalizing recording…"));
+}
+
+void App::ToggleRecordingPause() {
+    const recording::Status status = recorder_.GetStatus();
+    if (status.phase != recording::Phase::Recording) return;
+    recorder_.SetPaused(!status.paused);
+    ShowToast(status.paused ? T("Recording resumed.") : T("Recording paused. Playback continues."));
+}
+
+void App::PollRecording() {
+    while (auto event = recorder_.PollEvent()) {
+        std::string message;
+        bool error = false;
+        switch (event->kind) {
+        case recording::Event::Kind::Saved:
+            message = Format(T("Recording saved: %s"), event->path.filename().c_str());
+            if (event->segments > 1) message += Format(T(" (%d files)"), event->segments);
+            lastRecordingText_ = event->path.string();
+            lastRecordingPath_ = event->path;
+            break;
+        case recording::Event::Kind::Failed:
+            error = true;
+            if (event->fileKept) {
+                message = FailureText(event->failure) + " " + T("The part before the stop was saved.");
+                lastRecordingText_ = event->path.string();
+                lastRecordingPath_ = event->path;
+            } else if (event->failure == recording::Failure::EncoderFailed && !event->detail.empty()) {
+                message = Format(T("Recording could not start: %s"), event->detail.c_str());
+            } else {
+                message = FailureText(event->failure);
+            }
+            break;
+        case recording::Event::Kind::Empty:
+            error = true;
+            message = T("Nothing was recorded.");
+            break;
+        }
+        Log("[recording] %s", message.c_str());
+        ShowToast(message, error);
+    }
+}
+
+void App::ToggleMute() {
+    SetPlaybackMuted(!playbackMuted_);
+    volumeHudUntilMs_ = platform::MonotonicMs() + kVolumeHudMs;
+}
+
+void App::SetPlaybackMuted(bool muted) {
+    playbackMuted_ = muted;
+    audio_.SetPlaybackMuted(muted);
+    redrawFrames_ = std::max(redrawFrames_, 1);
+}
+
+void App::ChooseRecordingFolder() {
+    std::filesystem::path start = recording::RecordingDirectory(settings_.recording);
+    std::error_code error;
+    while (!start.empty() && !std::filesystem::is_directory(start, error)) {
+        const std::filesystem::path parent = start.parent_path();
+        if (parent == start) break;
+        start = parent;
+    }
+    const std::string location = start.string();
+    SDL_ShowOpenFolderDialog(&App::OnRecordingFolderChosen, this, window_, location.empty() ? nullptr : location.c_str(),
+                             false);
+}
+
+void SDLCALL App::OnRecordingFolderChosen(void* userdata, const char* const* files, int) {
+    auto* app = static_cast<App*>(userdata);
+    std::lock_guard<std::mutex> lock(app->folderMutex_);
+    if (!files) {
+        const char* error = SDL_GetError();
+        app->folderError_ = error && *error ? error : "unknown error";
+        return;
+    }
+    if (files[0] && *files[0]) app->chosenFolder_ = std::string(files[0]);
+}
+
+void App::ApplyPlacement() {
+    video::Placement placement;
+    placement.fullscreen = fullscreen_ && screen_ == Screen::Video;
+    placement.originalSize = settings_.fullscreenVideoSize == settings::FullscreenVideoSize::Original;
+    switch (settings_.fullscreenVideoPosition) {
+    case settings::FullscreenVideoPosition::TopLeft: placement.horizontal = 0; placement.vertical = 0; break;
+    case settings::FullscreenVideoPosition::Top: placement.vertical = 0; break;
+    case settings::FullscreenVideoPosition::TopRight: placement.horizontal = 2; placement.vertical = 0; break;
+    case settings::FullscreenVideoPosition::Left: placement.horizontal = 0; break;
+    case settings::FullscreenVideoPosition::Right: placement.horizontal = 2; break;
+    case settings::FullscreenVideoPosition::BottomLeft: placement.horizontal = 0; placement.vertical = 2; break;
+    case settings::FullscreenVideoPosition::Bottom: placement.vertical = 2; break;
+    case settings::FullscreenVideoPosition::BottomRight: placement.horizontal = 2; placement.vertical = 2; break;
+    case settings::FullscreenVideoPosition::Center: break;
+    }
+    renderer_.SetPlacement(placement);
+}
+
+bool App::CaptureMatchesDisplay() const {
+    if (!activeMode_ || !window_) return false;
+    const SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
+    const SDL_DisplayMode* mode = display ? SDL_GetDesktopDisplayMode(display) : nullptr;
+    if (!mode) return false;
+    const float density = mode->pixel_density > 0.0f ? mode->pixel_density : 1.0f;
+    const int width = static_cast<int>(std::lround(mode->w * density));
+    const int height = static_cast<int>(std::lround(mode->h * density));
+    return width == activeMode_->width && height == activeMode_->height;
+}
+
+void App::RestoreOneToOne() {
+    if (screen_ != Screen::Video || !activeMode_) return;
+    if (CaptureMatchesDisplay()) {
+        if (!fullscreen_) SetFullscreen(true);
+        ShowToast(T("1:1 size · the capture matches this monitor, so fullscreen is used."));
+        return;
+    }
+    if (fullscreen_) SetFullscreen(false);
+    if (!ApplyVideoWindowSize(false)) {
+        ShowToast(T("A 1:1 window does not fit this monitor, so it was reduced to fit."), true);
+    }
+    RememberWindowDisplay();
+}
+
+void App::RememberWindowDisplay() {
+    if (!window_) return;
+    const SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
+    SDL_Rect bounds{0, 0, 0, 0};
+    if (!display || !SDL_GetDisplayUsableBounds(display, &bounds) || bounds.w <= 0 || bounds.h <= 0) return;
+    windowDisplay_ = display;
+    windowDisplayBounds_ = bounds;
+}
+
+void App::FollowDisplayChange() {
+    if (!window_) return;
+    const SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
+    SDL_Rect bounds{0, 0, 0, 0};
+    if (!display || !SDL_GetDisplayUsableBounds(display, &bounds) || bounds.w <= 0 || bounds.h <= 0) return;
+    const bool moved = windowDisplay_ != 0 && display != windowDisplay_ && windowDisplayBounds_.w > 0 &&
+                       windowDisplayBounds_.h > 0;
+    if (moved && settings_.keepRelativeWindowSize && screen_ == Screen::Video && !fullscreen_ && activeMode_) {
+        int width = 0;
+        int height = 0;
+        if (SDL_GetWindowSize(window_, &width, &height) && width > 0 && height > 0) {
+            const double ratio = std::min(static_cast<double>(bounds.w) / windowDisplayBounds_.w,
+                                          static_cast<double>(bounds.h) / windowDisplayBounds_.h);
+            int newWidth = std::max(160, static_cast<int>(std::lround(width * ratio)));
+            int newHeight = std::max(
+                90, static_cast<int>(std::lround(static_cast<double>(newWidth) * activeMode_->height / activeMode_->width)));
+            if (newWidth > bounds.w || newHeight > bounds.h) {
+                const double fit = std::min(static_cast<double>(bounds.w) / newWidth, static_cast<double>(bounds.h) / newHeight);
+                newWidth = std::max(160, static_cast<int>(newWidth * fit));
+                newHeight = std::max(90, static_cast<int>(newHeight * fit));
+            }
+            SDL_SetWindowAspectRatio(window_, 0.0f, 0.0f);
+            SDL_SetWindowSize(window_, newWidth, newHeight);
+            ApplyWindowConstraints();
+            Log("[window] display changed: %dx%d -> %dx%d (relative size)", width, height, newWidth, newHeight);
+        }
+    }
+    windowDisplay_ = display;
+    windowDisplayBounds_ = bounds;
+}
+
+void App::OpenLastRecording() {
+    std::error_code error;
+    if (lastRecordingPath_.empty() || !std::filesystem::exists(lastRecordingPath_, error)) {
+        const std::string message = T("The last recording file no longer exists.");
+        if (screen_ == Screen::Settings) {
+            errorMessage_ = message;
+        } else {
+            ShowToast(message, true);
+        }
+        return;
+    }
+    if (SDL_OpenURL(platform::FileUrl(lastRecordingPath_).c_str())) return;
+    const std::string message = Format(T("Could not open the file: %s"), lastRecordingPath_.c_str());
+    if (screen_ == Screen::Settings) {
+        errorMessage_ = message;
+    } else {
+        ShowToast(message, true);
+    }
+}
+
+SDL_HitTestResult SDLCALL App::AudioOnlyHitTest(SDL_Window* window, const SDL_Point* point, void* data) {
+    auto* app = static_cast<App*>(data);
+    if (!app || app->screen_ != Screen::AudioOnly) return SDL_HITTEST_NORMAL;
+    int width = 0;
+    int height = 0;
+    SDL_GetWindowSize(window, &width, &height);
+    if (app->settings_.borderlessWindow) {
+        constexpr int kEdge = 6;
+        const bool left = point->x < kEdge;
+        const bool right = point->x >= width - kEdge;
+        const bool top = point->y < kEdge;
+        const bool bottom = point->y >= height - kEdge;
+        if (top && left) return SDL_HITTEST_RESIZE_TOPLEFT;
+        if (top && right) return SDL_HITTEST_RESIZE_TOPRIGHT;
+        if (bottom && left) return SDL_HITTEST_RESIZE_BOTTOMLEFT;
+        if (bottom && right) return SDL_HITTEST_RESIZE_BOTTOMRIGHT;
+        if (top) return SDL_HITTEST_RESIZE_TOP;
+        if (bottom) return SDL_HITTEST_RESIZE_BOTTOM;
+        if (left) return SDL_HITTEST_RESIZE_LEFT;
+        if (right) return SDL_HITTEST_RESIZE_RIGHT;
+    }
+    if (app->menuVisible_ || app->helpVisible_ || app->confirmExit_ != ExitRequest::None) return SDL_HITTEST_NORMAL;
+    const float density = std::max(SDL_GetWindowPixelDensity(window), 0.25f);
+    const float x = static_cast<float>(point->x) * density;
+    const float y = static_cast<float>(point->y) * density;
+    const auto& controls = app->audioOnlyControls_;
+    if (x >= controls[0] && x < controls[2] && y >= controls[1] && y < controls[3]) return SDL_HITTEST_NORMAL;
+    return SDL_HITTEST_DRAGGABLE;
 }
 
 void App::NotifyFrame() {

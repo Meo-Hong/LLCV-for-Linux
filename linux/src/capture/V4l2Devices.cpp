@@ -304,6 +304,17 @@ bool IsFortyFps(const FrameRate& rate) {
     return frameNs >= 24900000.0 && frameNs <= 25100000.0;
 }
 
+bool IsThirtyFps(const FrameRate& rate) {
+    if (!rate.numerator || !rate.denominator) return false;
+    const double frameNs = static_cast<double>(rate.numerator) * 1.0e9 / static_cast<double>(rate.denominator);
+    return frameNs >= 33233000.0 && frameNs <= 33434000.0;
+}
+
+bool ListsFpsMilli(const std::vector<FrameRate>& rates, int fpsMilli) {
+    return std::any_of(rates.begin(), rates.end(),
+                       [fpsMilli](const FrameRate& rate) { return std::abs(rate.Milli() - fpsMilli) <= 10; });
+}
+
 std::vector<CaptureDevice> EnumerateCaptureDevices() {
     std::vector<CaptureDevice> devices;
     const auto stableNames = StableNames();
@@ -411,6 +422,11 @@ std::optional<ResolvedMode> ResolveMode(const CaptureDevice& device, const ModeR
             for (const auto& rate : mode->rates) {
                 if (std::abs(rate.Milli() - request.fpsMilli) <= 10) return make(mode, rate);
             }
+        }
+        if (request.allowUnlistedFps && request.fpsMilli == kDirectRequestFpsMilli) {
+            ResolvedMode direct = make(candidates.front(), kThirtyFps);
+            direct.directRequest = true;
+            return direct;
         }
         const CaptureMode* bestMode = nullptr;
         FrameRate bestRate;

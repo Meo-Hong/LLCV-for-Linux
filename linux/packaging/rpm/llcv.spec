@@ -4,12 +4,14 @@
 
 %if 0%{?fedora}
 %bcond_with bundled_sdl3
+%bcond_without recording
 %else
 %bcond_without bundled_sdl3
+%bcond_with recording
 %endif
 
 Name:           llcv
-Version:        2.0.5
+Version:        2.1.3
 Release:        1
 Summary:        Low-latency viewer for USB HDMI capture devices
 
@@ -29,6 +31,12 @@ BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(wayland-scanner)
 BuildRequires:  wayland-protocols-devel
 BuildRequires:  pkgconfig(dbus-1)
+%if %{with recording}
+BuildRequires:  pkgconfig(libavcodec)
+BuildRequires:  pkgconfig(libavformat)
+BuildRequires:  pkgconfig(libavutil)
+BuildRequires:  pkgconfig(libswscale)
+%endif
 %if %{with bundled_sdl3}
 BuildRequires:  pkgconfig(alsa)
 BuildRequires:  pkgconfig(egl)
@@ -75,8 +83,9 @@ capture audio is played through PipeWire with a small drift-corrected buffer.
 
 Features include NV12, YUY2, MJPEG, BGR24 and P010 (HDR10) capture modes, HDR10
 passthrough on Wayland compositors with color management, HDR to SDR tone
-mapping everywhere else, an audio-only mode, PNG screenshots and a live
-diagnostics overlay. P010 capture needs Linux 7.1 or newer.
+mapping everywhere else, an audio-only mode, PNG screenshots, MP4 recording of
+SDR video through FFmpeg (Fedora builds) and a live diagnostics overlay. P010
+capture needs Linux 7.1 or newer.
 
 %prep
 %autosetup -n llcv-%{version}
@@ -93,7 +102,8 @@ cp -p third_party/noto-sans-jp/LICENSE.txt NotoSansJP-LICENSE.txt
     -DLLCV_SOURCE_TREE_DATA=OFF \
     -DLLCV_SDL3=%{?with_bundled_sdl3:BUNDLED}%{!?with_bundled_sdl3:SYSTEM} \
     -DLLCV_WAYLAND_COLOR_MANAGEMENT=ON \
-    -DLLCV_SLEEP_INHIBIT=ON
+    -DLLCV_SLEEP_INHIBIT=ON \
+    -DLLCV_RECORDING=%{?with_recording:ON}%{!?with_recording:OFF}
 %cmake_build
 
 %install
@@ -108,8 +118,28 @@ cp -p third_party/noto-sans-jp/LICENSE.txt NotoSansJP-LICENSE.txt
 %{_datadir}/icons/hicolor/*/apps/%{app_id}.png
 %{_datadir}/llcv/
 %{_mandir}/man1/llcv.1*
+%{_prefix}/lib/udev/rules.d/70-llcv-elgato-hid.rules
 
 %changelog
+* Mon Oct 19 2026 Meohong <busimh001@gmail.com> - 2.1.3-1
+- Follow the Windows LLCV 2.1.0 to 2.1.3 updates.
+- MP4 recording (F9) of NV12, YUY2, MJPEG and BGR24 SDR video with stereo
+  AAC audio through FFmpeg: H.264, HEVC or AV1 on NVENC, VA-API or CPU
+  encoders, quality or bitrate control, resolution/frame-rate limits,
+  separate recording volume, pause/resume and automatic splitting. Built on
+  Fedora; RHEL-family builds have no FFmpeg and show recording as
+  unavailable.
+- Playback mute (M) from the audio OSD, the audio-only view or the menu, with
+  a corner icon while the audio OSD is hidden; recordings keep their sound.
+- Optional direct 30 fps request when the driver does not list it.
+- Fullscreen video size (fit or original) and position settings.
+- The window position is no longer saved while the window is minimized.
+- More Windows features: HDR chroma placement, hardware HDR-to-SDR requests
+  for AVerMedia UVC-extension and Elgato HD60 S+/X devices, fullscreen when
+  the capture matches the monitor, relative window size across monitors,
+  volume reset by double-click, per-channel wheel, a movable audio-only view,
+  Open last recording and Cancel in settings.
+
 * Wed Oct 14 2026 Meohong <busimh001@gmail.com> - 2.0.5-1
 - Follow the Windows LLCV 2.0.5 update.
 - Customizable keyboard shortcuts with Ctrl/Alt/Shift combinations and

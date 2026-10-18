@@ -95,9 +95,10 @@ vec3 finish(vec3 rgb) {
 constexpr const char* kSemiPlanarBody = R"(
 uniform sampler2D uPlane0;
 uniform sampler2D uPlane1;
+uniform vec2 uChromaOffset;
 void main() {
     float y = texelFetch(uPlane0, ivec2(gl_FragCoord.xy), 0).r;
-    vec2 chroma = texture(uPlane1, vUv).rg;
+    vec2 chroma = texture(uPlane1, vUv + uChromaOffset).rg;
     fragColor = vec4(finish(toRgb(vec3(y, chroma))), 1.0);
 }
 )";
@@ -317,6 +318,7 @@ bool VideoRenderer::BuildProgram(ProgramIndex index, const std::string& fragment
     program.videoRect = gl.GetUniformLocation(id, "uVideoRect");
     program.hasVideo = gl.GetUniformLocation(id, "uHasVideo");
     program.swapRedBlue = gl.GetUniformLocation(id, "uSwapRedBlue");
+    program.chromaOffset = gl.GetUniformLocation(id, "uChromaOffset");
     program.samplers = {gl.GetUniformLocation(id, "uPlane0"), gl.GetUniformLocation(id, "uPlane1"),
                         gl.GetUniformLocation(id, "uPlane2")};
     gl.UseProgram(id);
@@ -387,12 +389,17 @@ PixelRect VideoRenderer::FitRect(int targetWidth, int targetHeight) const {
     if (!hasImage_ || targetWidth <= 0 || targetHeight <= 0 || sourceWidth_ <= 0 || sourceHeight_ <= 0) {
         return rect;
     }
-    const double scale = std::min(static_cast<double>(targetWidth) / sourceWidth_,
-                                  static_cast<double>(targetHeight) / sourceHeight_);
-    rect.width = std::min(targetWidth, std::max(1, static_cast<int>(std::lround(sourceWidth_ * scale))));
-    rect.height = std::min(targetHeight, std::max(1, static_cast<int>(std::lround(sourceHeight_ * scale))));
-    rect.x = (targetWidth - rect.width) / 2;
-    rect.y = (targetHeight - rect.height) / 2;
+    const bool original = placement_.fullscreen && placement_.originalSize;
+    const int limitWidth = original ? std::min(targetWidth, sourceWidth_) : targetWidth;
+    const int limitHeight = original ? std::min(targetHeight, sourceHeight_) : targetHeight;
+    const double scale = std::min(static_cast<double>(limitWidth) / sourceWidth_,
+                                  static_cast<double>(limitHeight) / sourceHeight_);
+    rect.width = std::min(limitWidth, std::max(1, static_cast<int>(std::lround(sourceWidth_ * scale))));
+    rect.height = std::min(limitHeight, std::max(1, static_cast<int>(std::lround(sourceHeight_ * scale))));
+    const int horizontal = placement_.fullscreen ? std::clamp(placement_.horizontal, 0, 2) : 1;
+    const int vertical = placement_.fullscreen ? std::clamp(placement_.vertical, 0, 2) : 1;
+    rect.x = (targetWidth - rect.width) * horizontal / 2;
+    rect.y = (targetHeight - rect.height) * vertical / 2;
     return rect;
 }
 
@@ -418,6 +425,15 @@ void VideoRenderer::Convert(Target& target, OutputMode output) {
     if (program.output >= 0) gl.Uniform1i(program.output, output == OutputMode::Pq ? 1 : 0);
     if (program.sdrWhite >= 0) gl.Uniform1f(program.sdrWhite, sdrWhite_);
     if (program.swapRedBlue >= 0) gl.Uniform1i(program.swapRedBlue, sourceBgr_ ? 1 : 0);
+    if (program.chromaOffset >= 0) {
+        float offsetX = 0.0f;
+        float offsetY = 0.0f;
+        if (sourceProgram_ == kP010 && planes_[1].width > 0 && planes_[1].height > 0) {
+            if (p010Siting_ != ChromaSiting::Center) offsetX = 0.25f / static_cast<float>(planes_[1].width);
+            if (p010Siting_ == ChromaSiting::TopLeft) offsetY = 0.25f / static_cast<float>(planes_[1].height);
+        }
+        gl.Uniform2f(program.chromaOffset, offsetX, offsetY);
+    }
     for (int unit = 0; unit < 3; ++unit) {
         gl.ActiveTexture(GL_TEXTURE0 + unit);
         gl.BindTexture(GL_TEXTURE_2D, planes_[unit].id);

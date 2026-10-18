@@ -11,7 +11,9 @@
 
 namespace llcv::input {
 
-enum class Action : size_t { Help, Settings, AudioOsd, PixelPerfect, Fullscreen, Screenshot, Diagnostics, Exit, Count };
+enum class Action : size_t {
+    Help, Settings, AudioOsd, PixelPerfect, Fullscreen, Screenshot, Diagnostics, Exit, Recording, Mute, Count
+};
 
 inline constexpr size_t kActionCount = static_cast<size_t>(Action::Count);
 
@@ -27,10 +29,11 @@ inline constexpr Binding kSuper = 0x80000;
 inline constexpr Bindings kDefaultBindings{
     SDL_SCANCODE_F1,  SDL_SCANCODE_F2,  SDL_SCANCODE_F3,  SDL_SCANCODE_F5,
     SDL_SCANCODE_F11, SDL_SCANCODE_F12, SDL_SCANCODE_TAB, SDL_SCANCODE_ESCAPE,
+    SDL_SCANCODE_F9,  SDL_SCANCODE_M,
 };
 
 inline constexpr const char* kActionNames[kActionCount] = {
-    "Help", "Settings", "AudioOsd", "PixelPerfect", "Fullscreen", "Screenshot", "Diagnostics", "Exit",
+    "Help", "Settings", "AudioOsd", "PixelPerfect", "Fullscreen", "Screenshot", "Diagnostics", "Exit", "Recording", "Mute",
 };
 
 inline Binding BindingFor(const Bindings& bindings, Action action) {
@@ -45,5 +48,6 @@ bool IsValid(const Bindings& bindings);
 std::string Label(Binding binding);
 std::optional<Binding> Parse(std::string_view text);
 std::string ExpandKeyLabels(std::string_view text, const Bindings& bindings);
+void AssignFreeDefault(Bindings& bindings, Action action);
 
 }
