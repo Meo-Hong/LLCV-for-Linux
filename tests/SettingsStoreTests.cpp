@@ -131,6 +131,38 @@ void TestNewUnicodeProfile(const std::wstring& path) {
     }
 }
 
+void TestInvalidNumericSettings(const std::wstring& path) {
+    using namespace llcv::settings;
+    if (!CheckSaved(path, AppSettings{}, "reset profile for numeric validation")) return;
+    const struct { const wchar_t* value; int expectedVolume; } cases[] = {
+        {L"2147483647", 100}, {L"-2147483648", 0},
+        {L"2147483648", 100}, {L"-2147483649", 100},
+        {L"999999999999999999999999", 100},
+        {L"invalid", 100}, {L"0oops", 100}, {L"", 100},
+        {L"0", 0}, {L"73", 75}, {L" 75 ", 75}, {L"+50", 50},
+    };
+    for (const auto& item : cases) {
+        for (const wchar_t* key : {L"Volume", L"LeftVolume", L"RightVolume"})
+            if (!CheckWin32(WritePrivateProfileStringW(L"Audio", key, item.value, path.c_str()),
+                            "write numeric volume test value")) return;
+        const auto loaded = LoadFromIni(path).settings;
+        Check(loaded.volumePercent == item.expectedVolume &&
+              loaded.leftVolumePercent == item.expectedVolume &&
+              loaded.rightVolumePercent == item.expectedVolume,
+              "volume values reject malformed integers and clamp before rounding");
+    }
+    for (const wchar_t* value : {L"invalid", L"0oops", L"999999999999999999999999"}) {
+        if (!CheckWin32(WritePrivateProfileStringW(L"General", L"PreventSleep", value, path.c_str()),
+                        "write malformed boolean value")) return;
+        if (!CheckWin32(WritePrivateProfileStringW(L"Audio", L"BufferMs", value, path.c_str()),
+                        "write malformed buffer value")) return;
+        const auto loaded = LoadFromIni(path).settings;
+        Check(loaded.preventSleep && loaded.wasapiBufferMs == AppSettings{}.wasapiBufferMs,
+              "malformed numeric and boolean settings retain their defaults");
+    }
+    CheckSaved(path, AppSettings{}, "restore profile after numeric validation");
+}
+
 std::wstring CurrentUserSid() {
     HANDLE token = nullptr;
     if (!CheckWin32(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token),
@@ -556,6 +588,7 @@ int main(int argc, char** argv) {
     }
     TestDefaults(path);
     TestNewUnicodeProfile(path);
+    TestInvalidNumericSettings(path);
     TestResolutionRoundTrips(path);
     TestRoundTrip(path);
     for (const wchar_t* version : {L"1", L"0"}) {

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(LowLatencyCaptureViewer VERSION 2.1.3 LANGUAGES CXX)
+project(LowLatencyCaptureViewer VERSION 2.1.4 LANGUAGES CXX)
 
 include(cmake/MsvcDependencies.cmake)
 
@@ -58,6 +58,7 @@ set_property(SOURCE tests/VsrExperimentTests.cpp APPEND PROPERTY OBJECT_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/VsrTimingValidation.inl")
 
 option(LLCV_HDR_FRAME_AUDIT "Build a private F8 single-frame HDR diagnostic (not for release)" OFF)
+option(LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC "Private audio-input watchdog/retry prototype (not for release)" OFF)
 option(LLCV_RECORDING "Enable SDR video and stereo audio recording" ON)
 if(LLCV_RECORDING)
     target_compile_definitions(LowLatencyCaptureViewer PRIVATE LLCV_RECORDING)
@@ -68,6 +69,20 @@ if(LLCV_RECORDING)
 endif()
 option(LLCV_HDR_SCRGB_PROTOTYPE "Private direct P010 shader/scRGB comparison (not for release)" OFF)
 option(LLCV_VSR_EXPERIMENT "Private NVIDIA VSR A/B experiment (not for release)" OFF)
+if(LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC)
+    if(LLCV_HDR_FRAME_AUDIT OR LLCV_HDR_SCRGB_PROTOTYPE OR LLCV_VSR_EXPERIMENT)
+        message(FATAL_ERROR "Build audio-input recovery and HDR/VSR diagnostics separately")
+    endif()
+    target_compile_definitions(LowLatencyCaptureViewer PRIVATE LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC)
+    set_target_properties(LowLatencyCaptureViewer PROPERTIES
+        OUTPUT_NAME "LowLatencyCaptureViewer_AudioRecovery_Diagnostic")
+    # A prior regular EXE may remain in a reused build directory. Packaging must
+    # reject the directory as well as the diagnostic executable's version/name.
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/llcv-audio-recovery-diagnostic.txt"
+        "Private audio-input recovery build; do not package as a regular release.\n")
+else()
+    file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/llcv-audio-recovery-diagnostic.txt")
+endif()
 if(LLCV_RECORDING AND (LLCV_HDR_FRAME_AUDIT OR LLCV_HDR_SCRGB_PROTOTYPE OR LLCV_VSR_EXPERIMENT))
     message(FATAL_ERROR "Disable LLCV_RECORDING when building private HDR/VSR experiments")
 endif()
@@ -206,6 +221,11 @@ if(BUILD_TESTING)
     add_test(NAME RecordingPauseTests COMMAND RecordingTests --pause)
     add_test(NAME RecordingPauseUnalignedTests COMMAND RecordingTests --pause-unaligned)
     set_tests_properties(RecordingPauseUnalignedTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+    add_test(NAME RecordingLargeAudioTests COMMAND RecordingTests --large-audio)
+    add_test(NAME RecordingLargeAudioPauseTests COMMAND RecordingTests --large-audio-pause)
+    add_test(NAME RecordingAudioPacketBoundsTests COMMAND RecordingTests --audio-bounds)
+    set_tests_properties(RecordingLargeAudioTests RecordingLargeAudioPauseTests
+        RecordingAudioPacketBoundsTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
     if(LLCV_RECORDING_FFMPEG_ROOT)
         add_test(NAME RecordingGainSplitTests COMMAND RecordingTests --gain-split)
         set_tests_properties(RecordingGainSplitTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
@@ -588,6 +608,8 @@ if (BUILD_TESTING)
         set_property(SOURCE tests/VsrExperimentTests.cpp APPEND PROPERTY OBJECT_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/src/video/VsrExperiment.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/SettingsControllerRegressionTests.inl"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/ViewerLifecycleTests.inl"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/ExclusiveViewerLifecycleTests.inl"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/ExclusiveRendererRegression.inl"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/VideoClearRegression.inl")
@@ -627,8 +649,29 @@ if (BUILD_TESTING)
         target_compile_options(AudioCallbackTests PRIVATE /W4 /EHsc /permissive- /utf-8)
     endif()
     add_test(NAME AudioCallbackTests COMMAND AudioCallbackTests)
+    add_test(NAME AudioInputRecoveryTests COMMAND AudioCallbackTests --audio-input-recovery)
+    set_tests_properties(AudioInputRecoveryTests PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE)
 
     if(LLCV_RECORDING)
+        # Real viewer/recording close protocol with hidden windows and synthetic
+        # media. Modal answers and render acknowledgements are injected; no GPU.
+        add_executable(RecordingSettingsCancelTests tests/RecordingSettingsCancelTests.cpp
+            ${audio_callback_sources})
+        set_property(SOURCE tests/RecordingSettingsCancelTests.cpp APPEND PROPERTY
+            OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+        target_include_directories(RecordingSettingsCancelTests PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,INCLUDE_DIRECTORIES>)
+        target_compile_definitions(RecordingSettingsCancelTests PRIVATE LLCV_SETTINGS_MODE_TEST
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,COMPILE_DEFINITIONS>)
+        target_link_libraries(RecordingSettingsCancelTests PRIVATE
+            $<TARGET_PROPERTY:LowLatencyCaptureViewer,LINK_LIBRARIES>)
+        set_target_properties(RecordingSettingsCancelTests PROPERTIES WIN32_EXECUTABLE FALSE)
+        if(MSVC)
+            target_compile_options(RecordingSettingsCancelTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+        endif()
+        add_test(NAME RecordingSettingsCancelTests COMMAND RecordingSettingsCancelTests)
+        set_tests_properties(RecordingSettingsCancelTests PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+
         add_executable(MjpegRecordingPlaybackTests tests/MjpegRecordingPlaybackTests.cpp
             ${audio_callback_sources})
         target_include_directories(MjpegRecordingPlaybackTests PRIVATE
@@ -646,6 +689,12 @@ if (BUILD_TESTING)
             TIMEOUT 45 RUN_SERIAL TRUE SKIP_RETURN_CODE 77 LABELS GPU)
         add_test(NAME PlaybackMuteRecordingTests COMMAND AudioCallbackTests --mute-recording)
         set_tests_properties(PlaybackMuteRecordingTests PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
+        set_property(SOURCE tests/AudioCallbackTests.cpp APPEND PROPERTY OBJECT_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/RecordingAudioDeviceSwitchTests.inl")
+        add_test(NAME RecordingAudioDeviceSwitchTests COMMAND AudioCallbackTests --recording-audio-device-switch)
+        add_test(NAME RecordingAudioInputBoundaryTests COMMAND AudioCallbackTests --recording-audio-input-boundaries)
+        set_tests_properties(RecordingAudioDeviceSwitchTests RecordingAudioInputBoundaryTests
+            PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
     endif()
 
     add_executable(HdrPipelineTests tests/HdrPipelineTests.cpp ${audio_callback_sources})
@@ -1127,7 +1176,7 @@ if(BUILD_TESTING)
         add_test(NAME PackageDocsTests COMMAND "${LLCV_POWERSHELL}"
             -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/PackageDocsTests.ps1")
         set_tests_properties(PackageDocsTests PROPERTIES TIMEOUT 60)
-        if(LLCV_RECORDING)
+        if(LLCV_RECORDING AND NOT LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC)
             add_test(NAME ReleasePackageTests COMMAND "${LLCV_POWERSHELL}"
                 -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/ReleasePackageTests.ps1"
                 -BuildRoot "${CMAKE_CURRENT_BINARY_DIR}" -SourceRoot "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -1148,11 +1197,33 @@ if(BUILD_TESTING AND MSVC AND CMAKE_GENERATOR MATCHES "Ninja")
 endif()
 
 if(BUILD_TESTING AND MSVC)
+    # Verify preprocessor exclusion, not merely optimizer removal of idle code.
+    set(llcv_recovery_rsp "/nologo\n/TP\n/std:c++20\n/utf-8\n")
+    string(APPEND llcv_recovery_rsp "/D\"$<JOIN:$<TARGET_PROPERTY:LowLatencyCaptureViewer,COMPILE_DEFINITIONS>,\"\n/D\">\"\n")
+    string(APPEND llcv_recovery_rsp "/I\"$<JOIN:$<TARGET_PROPERTY:LowLatencyCaptureViewer,INCLUDE_DIRECTORIES>,\"\n/I\">\"\n")
+    set(llcv_recovery_system_includes $ENV{INCLUDE} ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+    list(REMOVE_DUPLICATES llcv_recovery_system_includes)
+    foreach(llcv_recovery_include IN LISTS llcv_recovery_system_includes)
+        if(NOT llcv_recovery_include STREQUAL "")
+            file(TO_CMAKE_PATH "${llcv_recovery_include}" llcv_recovery_include)
+            string(APPEND llcv_recovery_rsp "/I\"${llcv_recovery_include}\"\n")
+        endif()
+    endforeach()
+    file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/audio-recovery-boundary/$<CONFIG>/main.rsp"
+        CONTENT "${llcv_recovery_rsp}")
+    add_test(NAME AudioRecoveryBuildBoundaryTests COMMAND "${CMAKE_COMMAND}"
+        "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+        "-DCOMPILER=${CMAKE_CXX_COMPILER}"
+        "-DARGUMENTS_FILE=${CMAKE_CURRENT_BINARY_DIR}/audio-recovery-boundary/$<CONFIG>/main.rsp"
+        "-DTEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/audio-recovery-boundary/$<CONFIG>/results"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/AudioRecoveryBuildBoundaryTests.cmake")
+    set_tests_properties(AudioRecoveryBuildBoundaryTests PROPERTIES TIMEOUT 150 RUN_SERIAL TRUE LABELS Build)
+
     # The private branches live in main.cpp and are invisible to normal tests.
     # Compile that translation unit in each supported mode without linking or
     # opening hardware. Keep the extra objects out of ordinary application builds.
     set(llcv_optional_build_targets)
-    foreach(llcv_optional_mode VSR_EXPERIMENT HDR_FRAME_AUDIT HDR_SCRGB_PROTOTYPE)
+    foreach(llcv_optional_mode VSR_EXPERIMENT HDR_FRAME_AUDIT HDR_SCRGB_PROTOTYPE AUDIO_INPUT_RECOVERY_DIAGNOSTIC)
         set(llcv_optional_target "OptionalBuild_${llcv_optional_mode}")
         add_library(${llcv_optional_target} OBJECT EXCLUDE_FROM_ALL src/main.cpp)
         target_include_directories(${llcv_optional_target} PRIVATE
@@ -1163,7 +1234,7 @@ if(BUILD_TESTING AND MSVC)
             $<TARGET_PROPERTY:LowLatencyCaptureViewer,COMPILE_FEATURES>)
         # An experimental parent build must not leak its mode into other variants.
         target_compile_definitions(${llcv_optional_target} PRIVATE
-            "$<FILTER:$<TARGET_PROPERTY:LowLatencyCaptureViewer,COMPILE_DEFINITIONS>,EXCLUDE,^LLCV_(VSR_EXPERIMENT|HDR_FRAME_AUDIT|HDR_SCRGB_PROTOTYPE)(=.*)?$>"
+            "$<FILTER:$<TARGET_PROPERTY:LowLatencyCaptureViewer,COMPILE_DEFINITIONS>,EXCLUDE,^LLCV_(VSR_EXPERIMENT|HDR_FRAME_AUDIT|HDR_SCRGB_PROTOTYPE|AUDIO_INPUT_RECOVERY_DIAGNOSTIC)(=.*)?$>"
             "LLCV_${llcv_optional_mode}")
         if(llcv_optional_mode STREQUAL "HDR_SCRGB_PROTOTYPE")
             target_compile_definitions(${llcv_optional_target} PRIVATE LLCV_HDR_FRAME_AUDIT)
@@ -1178,6 +1249,9 @@ if(BUILD_TESTING AND MSVC)
         TIMEOUT 180 RUN_SERIAL TRUE LABELS Build)
 endif()
 
+if(LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC)
+    install(CODE "message(FATAL_ERROR \"Audio-input recovery diagnostics cannot be installed as a regular release\")")
+endif()
 install(TARGETS LowLatencyCaptureViewer RUNTIME DESTINATION .)
 if(LLCV_RECORDING)
     if(NOT EXISTS "${LLCV_RECORDING_FFMPEG_ROOT}/licenses/COPYING.LGPLv2.1")

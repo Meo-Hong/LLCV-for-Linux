@@ -22,6 +22,10 @@ HDR, multichannel and audio-only recording are not supported; playback supports 
 2. Start SDR/stereo playback, then press **F9** to record. Press it again to finalize.
 3. Use **Open folder** to check the result. Wait until **Finalizing** completes before opening the file.
 
+**F2** opens general settings, not the Recording tab. While recording or paused, it first asks
+whether to finish the recording; **No** keeps playback and the recording state unchanged.
+To pause/resume without leaving playback, click the corner recording indicator to open its settings.
+
 Opening the Recording tab for the first time checks encoder support. Supported codecs and rate-control modes become selectable when the check completes; you can close settings before it finishes.
 **Encoder check could not finish** means the check failed, not that the codecs are unsupported. Close and reopen settings to retry.
 

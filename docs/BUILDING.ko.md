@@ -43,7 +43,10 @@ build\Release\LowLatencyCaptureViewer.exe
 Release 구성은 정적 MSVC 런타임을 사용하므로 패키지 실행에 별도 Visual C++
 재배포 패키지가 필요하지 않습니다.
 
-2.1.3에는 재생 음소거·녹화 소리 분리, 단축키 이전·복원과 한국어·영어 고배율 UI 회귀 검사를 추가했습니다.
+2.1.4에는 기본 설정 단축키, 열린 녹화 설정창에서의 전환 취소, 녹화 입력 장치 변경·큰 오디오 묶음,
+종료 직전 입력 보존, 잘못된 숫자 설정과 오디오 리샘플링 결과 동일성 회귀 검사를 추가했습니다.
+취소 검사는 숨겨진 창·합성 입력·모의 표시 전환 응답을 사용하며 실제 독점 화면 전환이나 지연을 측정하지 않습니다.
+기존 재생 음소거·녹화 소리 분리, 단축키 이전·복원과 한국어·영어 고배율 UI 검사도 유지합니다.
 기존 검사에는 별도 프로세스의 인코더 확인 취소·실패, 녹화 중 남은 공간 갱신,
 최종 MJPEG 연결 색 정보, 녹화 시작 오디오 겹침 처리, 설정 단축키와 최소화 창 위치
 회귀 검사가 있습니다.
@@ -62,13 +65,20 @@ PATH에 두거나 CMake의 `LLCV_TEST_FFMPEG`·`LLCV_TEST_FFPROBE`로 지정하�
 
 <br>
 
-재생 전용 개발 빌드는 `-DLLCV_RECORDING=OFF`로 FFmpeg 없이 만들 수 있지만 2.1.3 배포본과는 다릅니다.
+재생 전용 개발 빌드는 `-DLLCV_RECORDING=OFF`로 FFmpeg 없이 만들 수 있지만 2.1.4 배포본과는 다릅니다.
 실행 파일 옆의 저장 라이브러리 DLL과 `ffmpeg-licenses` 폴더를 패키지에 유지하세요.
+
+보류한 오디오 입력 자동 복구 시제품은 **기본 꺼짐**입니다. 비공개 진단이 필요할 때만 별도 빌드 폴더에서
+`-DLLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC=ON`을 지정하세요.
+진단용 버전 표시가 붙은 `LowLatencyCaptureViewer_AudioRecovery_Diagnostic.exe`가 생성됩니다.
+일반 빌드에는 입력 감시·재시도 코드가 들어가지 않으며 기존 WASAPI·ASIO 출력 복구는 유지합니다.
+진단 옵션은 HDR·VSR 실험과 함께 켤 수 없고 정식 설치 파일·포터블 패키지로 만들 수 없습니다.
+캡처보드 무음 문제를 해결했다고 확인된 기능은 아닙니다.
 
 ## 설치 프로그램과 포터블 ZIP
 
 Release 빌드 뒤 저장소 루트에서 아래 명령을 실행합니다. 다음은 위에서 만든
-`build\Release` 실행 파일을 v2.1.3로 패키징하는 예시입니다. 릴리스 스크립트의
+`build\Release` 실행 파일을 v2.1.4로 패키징하는 예시입니다. 릴리스 스크립트의
 기본 경로는 버전별 빌드 폴더이므로 아래 빌드 경로 재정의가 필요합니다.
 
 ```powershell
@@ -76,11 +86,11 @@ chcp.com 65001 > $null
 & "C:\Program Files\Inno Setup 7\ISCC.exe" `
   "--define=BuildDir=..\build\Release" ".\installer\LowLatencyCaptureViewer.iss"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-v1.ps1 `
-  -Version 2.1.3 -BuildDir ..\build\Release -OutputDir outputs\v2.1.3
+  -Version 2.1.4 -BuildDir ..\build\Release -OutputDir outputs\v2.1.4
 ```
 
-생성 파일은 `outputs\v2.1.3\LowLatencyCaptureViewer_v2.1.3_Setup.exe`와
-`outputs\v2.1.3\LowLatencyCaptureViewer_v2.1.3_x64.zip`입니다. 다른 버전은
+생성 파일은 `outputs\v2.1.4\LowLatencyCaptureViewer_v2.1.4_Setup.exe`와
+`outputs\v2.1.4\LowLatencyCaptureViewer_v2.1.4_x64.zip`입니다. 다른 버전은
 먼저 릴리스 관련 버전 표기를 맞춰야 합니다. ZIP 이름만 바꿔도 실행 파일 버전이
 바뀌지는 않습니다. 자세한 절차는 [릴리스 체크리스트](RELEASING.ko.md)를 따릅니다.
 

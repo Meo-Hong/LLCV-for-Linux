@@ -42,9 +42,9 @@ static void TestRecordingViewerLifecycle(const wchar_t* windowClass,HINSTANCE in
     Require(!RecordingCloseInteractive(L"LLCV.exe --smoke-test"),
             "explicit diagnostic run disables modal test interaction");
     Require(!RecordingCloseInteractive(),"lifecycle fixture must use --smoke-test");
-    enum class Exit { StartupClose,ActiveClose,CaptureEnded,Eos,Quit,SessionCancelled,SessionCritical };
+    enum class Exit { StartupClose,ActiveClose,SettingsShortcut,CaptureEnded,Eos,Quit,SessionCancelled,SessionCritical };
     unsigned sequence=0;
-    for(const Exit exit:{Exit::StartupClose,Exit::ActiveClose,Exit::CaptureEnded,Exit::Eos,Exit::Quit,
+    for(const Exit exit:{Exit::StartupClose,Exit::ActiveClose,Exit::SettingsShortcut,Exit::CaptureEnded,Exit::Eos,Exit::Quit,
                         Exit::SessionCancelled,Exit::SessionCritical}) {
         recorder.Shutdown();
         ViewerLifecycleFixture fixture;g_viewerLifecycleFixture=&fixture;
@@ -179,10 +179,23 @@ static void TestRecordingViewerLifecycle(const wchar_t* windowClass,HINSTANCE in
             RunViewerMessageLoop(hwnd);
         } else {
             const auto start=GetTickCount64();
-            SendMessageW(hwnd,WM_CLOSE,0,0);
+            if(exit==Exit::SettingsShortcut) {
+                g_requestedSettingsTab=static_cast<int>(SettingsTab::Recording);
+                Require(HandleViewerShortcut(hwnd,VK_F2,0,0) && g_restartToSettings.load() &&
+                    g_requestedSettingsTab==-1 && !g_recordingSettingsWindow,
+                    "F2 during recording requests normal settings, not a live recording dialog");
+                MSG close{};
+                Require(PeekMessageW(&close,hwnd,WM_CLOSE,WM_CLOSE,PM_REMOVE)!=FALSE,
+                    "recording settings shortcut queues the normal close protocol");
+                DispatchMessageW(&close);
+            } else SendMessageW(hwnd,WM_CLOSE,0,0);
             Require(GetTickCount64()-start<1000 && IsWindow(hwnd) && g_running.load(),
                     "close requests finalization without joining the recording worker");
             Require(g_recordingClosePending,"active/startup close retains pending state");
+            if(exit==Exit::SettingsShortcut) {
+                Require(HandleViewerShortcut(hwnd,VK_F2,0,0) && !g_recordingSettingsWindow,
+                    "settings repeats cannot reopen a dialog during file finalization");
+            }
             const auto before=recorder.GetSnapshot().path;
             Require(ToggleRecording()==ToggleResult::Stopping && recorder.GetSnapshot().path==before,
                     "late shortcut cannot start another recording while owner is closing");
@@ -200,6 +213,8 @@ static void TestRecordingViewerLifecycle(const wchar_t* windowClass,HINSTANCE in
         }
         Require(!recorder.Busy() && !IsWindow(hwnd) && fixture.destroyed==1,
                 "every recording shutdown finalizes before destroying the viewer exactly once");
+        if(exit==Exit::SettingsShortcut)Require(g_restartToSettings.load(),
+            "recording file finalization preserves the requested normal-settings restart");
         if(exit!=Exit::StartupClose) {
             const auto saved=recorder.GetSnapshot();
             Require(saved.playable && saved.phase==Phase::Saved,
@@ -214,7 +229,7 @@ static void TestRecordingViewerLifecycle(const wchar_t* windowClass,HINSTANCE in
     SetControlsClosing(false);
     g_suppressSettingsSave=savedSuppress;
     g_viewerLifecycleFixture=nullptr;
-    std::puts("Recording viewer lifecycle: 7 asynchronous shutdown cases passed.");
+    std::puts("Recording viewer lifecycle: 8 asynchronous shutdown cases passed.");
 }
 #endif
 
@@ -273,6 +288,9 @@ static void TestMinimizedWindowPlacement() {
 static void TestViewerLifecycle() {
     const auto savedSettings = g_settings;
     const bool savedSuppress = g_suppressSettingsSave;
+#ifdef LLCV_RECORDING
+    const int savedRequestedTab = g_requestedSettingsTab;
+#endif
     wchar_t directory[MAX_PATH]{}, temporary[MAX_PATH]{};
     Require(GetTempPathW(ARRAYSIZE(directory), directory) != 0 &&
             GetTempFileNameW(directory, L"lvc", 0, temporary) != 0,
@@ -291,10 +309,12 @@ static void TestViewerLifecycle() {
     Require(RegisterClassW(&wc) != 0, "register lifecycle fixture");
     TestMinimizedWindowPlacement();
 
-    enum class Stop { BeforeLoop, DuringMessage, NormalClose, SettingsAction, ExitShortcut, Quit, MissingClose };
+    enum class Stop { BeforeLoop, DuringMessage, NormalClose, SettingsAction, ExplicitSettingsTab,
+                      ExitShortcut, Quit, MissingClose };
     for (bool audioOnly : {false, true}) {
         for (Stop stop : {Stop::BeforeLoop, Stop::DuringMessage, Stop::NormalClose,
-                          Stop::SettingsAction, Stop::ExitShortcut, Stop::Quit, Stop::MissingClose}) {
+                          Stop::SettingsAction, Stop::ExplicitSettingsTab, Stop::ExitShortcut,
+                          Stop::Quit, Stop::MissingClose}) {
             for (bool preventSleep : {false, true}) {
                 ViewerLifecycleFixture fixture;
                 fixture.entered = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -304,7 +324,7 @@ static void TestViewerLifecycle() {
                 g_settings = {};
                 g_settings.audioOnly = audioOnly;
                 g_settings.preventSleep = preventSleep;
-                if (preventSleep) g_settings.shortcuts[static_cast<size_t>(keys::Action::Settings)]=VK_F10;
+                if (preventSleep) g_settings.shortcuts[static_cast<size_t>(keys::Action::Settings)]=keys::Ctrl|VK_F10;
                 if (preventSleep) g_settings.shortcuts[static_cast<size_t>(keys::Action::Exit)]=keys::Ctrl|'Q';
                 Require(keys::Valid(g_settings.shortcuts),"lifecycle fixture uses distinct shortcuts");
                 g_settings.allowVolumeBoost = true;
@@ -316,6 +336,9 @@ static void TestViewerLifecycle() {
                 g_videoHost = nullptr;
                 g_running.store(true);
                 g_restartToSettings.store(false);
+#ifdef LLCV_RECORDING
+                g_requestedSettingsTab = static_cast<int>(SettingsTab::GuideDiagnostics);
+#endif
                 HWND hwnd = CreateWindowW(wc.lpszClassName, L"Hidden lifecycle fixture",
                     WS_POPUP, 80, 90, 400, 240, nullptr, nullptr, wc.hInstance, nullptr);
                 Require(hwnd != nullptr, "create hidden viewer with real lifecycle handlers");
@@ -350,13 +373,11 @@ static void TestViewerLifecycle() {
                     const auto action=stop==Stop::SettingsAction ? keys::Action::Settings : keys::Action::Exit;
                     if (stop==Stop::ExitShortcut && preventSleep)
                         Require(!HandleViewerShortcut(hwnd,VK_ESCAPE,0,0),"old Esc does not close after remapping");
+                    if (stop==Stop::SettingsAction && preventSleep)
+                        Require(!HandleViewerShortcut(hwnd,VK_F2,0,0),"old F2 does not open settings after remapping");
                     UINT message=shortcut?kLifecycleShortcutMessage:WM_CLOSE;
                     WPARAM argument=shortcut?g_settings.shortcuts[static_cast<size_t>(action)]:0;
-#ifdef LLCV_RECORDING
-                    // F2 now opens the live Recording tab. Its other tabs still
-                    // use the existing capture-stop/relaunch route tested here.
-                    if(stop==Stop::SettingsAction && !audioOnly){message=WM_OPEN_SETTINGS;argument=1;}
-#endif
+                    if(stop==Stop::ExplicitSettingsTab){message=WM_OPEN_SETTINGS;argument=1;}
                     Require(PostMessageW(hwnd,message,argument,0) != FALSE,
                             "queue normal viewer shutdown");
                 }
@@ -364,13 +385,18 @@ static void TestViewerLifecycle() {
                 if (capture.joinable()) capture.join();
                 Require(!IsWindow(hwnd) && fixture.destroyed == 1 && !g_running.load(),
                         "each loop exit destroys the viewer exactly once");
-                const bool normal = stop == Stop::NormalClose || stop == Stop::SettingsAction || stop == Stop::ExitShortcut;
+                const bool normal = stop == Stop::NormalClose || stop == Stop::SettingsAction ||
+                    stop == Stop::ExplicitSettingsTab || stop == Stop::ExitShortcut;
                 Require(fixture.closed == (normal ? 1u : 0u),
                         "fallback does not replay an already processed close");
                 Require(!g_suspendResumeNotification.Registered(),
                         "all viewer exits unregister suspend/resume notifications");
-                Require(g_restartToSettings.load() == (stop == Stop::SettingsAction),
+                Require(g_restartToSettings.load() == (stop == Stop::SettingsAction || stop == Stop::ExplicitSettingsTab),
                         "settings restart intent is preserved");
+#ifdef LLCV_RECORDING
+                Require(g_requestedSettingsTab == (stop == Stop::SettingsAction ? -1 : static_cast<int>(SettingsTab::GuideDiagnostics)),
+                        "settings key clears a stale page; explicit tab handoff preserves its target");
+#endif
                 const auto loaded = llcv::settings::LoadFromIni(SettingsPath()).settings;
                 Require(loaded.volumePercent == 135 && loaded.leftVolumePercent == 75 &&
                         loaded.rightVolumePercent == 65,
@@ -400,5 +426,8 @@ static void TestViewerLifecycle() {
     g_testUserDataDirectory.clear();
     g_settings = savedSettings;
     g_suppressSettingsSave = savedSuppress;
-    std::puts("Viewer lifecycle: 28 hidden-window shutdown/persistence cases passed.");
+#ifdef LLCV_RECORDING
+    g_requestedSettingsTab = savedRequestedTab;
+#endif
+    std::puts("Viewer lifecycle: 32 hidden-window shutdown/persistence cases passed.");
 }

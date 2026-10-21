@@ -44,6 +44,9 @@ static void TestExclusiveViewerLifecycle() {
     const MSG savedHelpMessage = g_deferredHelpMessage;
     const unsigned savedHelpModifiers = g_deferredHelpModifiers;
     const bool savedRestart = g_restartToSettings.load();
+#ifdef LLCV_RECORDING
+    const int savedRequestedTab = g_requestedSettingsTab;
+#endif
     const auto savedHost = g_videoHost;
     g_suppressSettingsSave = true;
 
@@ -53,7 +56,8 @@ static void TestExclusiveViewerLifecycle() {
     wc.lpszClassName = L"LLCV_HIDDEN_EXCLUSIVE_LIFECYCLE";
     Require(RegisterClassW(&wc) != 0, "register hidden exclusive lifecycle class");
 
-    for (bool quitMessage : {false, true}) {
+    enum class Exit { Close, Quit, Settings };
+    for (Exit exit : {Exit::Close, Exit::Quit, Exit::Settings}) {
         ExclusiveViewerFixture fixture;
         g_exclusiveViewerFixture = &fixture;
         g_settings = {};
@@ -154,8 +158,12 @@ static void TestExclusiveViewerLifecycle() {
                 "close intent prevents a queued help acknowledgement from reopening UI");
         g_presentationClosing = false;
 
+#ifdef LLCV_RECORDING
+        SendMessageW(hwnd, llcv::recording::kOpenRecordingSettings, 0, 0);
+#else
         Require(DeferPresentationUi(DeferredPresentationUi::RecordingSettings),
                 "settings queue before any new capture sample");
+#endif
         Require(g_presentationUiPending && g_presentationBlocked.load() &&
                 g_deferredPresentationUi.load() == DeferredPresentationUi::RecordingSettings,
                 "settings wait for render completion rather than opening synchronously");
@@ -232,7 +240,9 @@ static void TestExclusiveViewerLifecycle() {
             g_videoOutputThreadActive.store(false, std::memory_order_release);
             PostMessageW(hwnd, WM_CLOSE, 0, 0);
         });
-        if (quitMessage) PostQuitMessage(0);
+        if (exit == Exit::Quit) PostQuitMessage(0);
+        else if (exit == Exit::Settings) Require(HandleViewerShortcut(hwnd,VK_F2,0,0),
+                "exclusive F2 uses the normal settings shortcut");
         else Require(PostMessageW(hwnd, WM_CLOSE, 0, 0) != FALSE, "queue exclusive viewer close");
         RunViewerMessageLoop(hwnd);
         output.join();
@@ -241,6 +251,8 @@ static void TestExclusiveViewerLifecycle() {
         Require(playbackStopped, "audio/capture stop before output teardown without stopping the UI pump");
         Require(!IsWindow(hwnd) && fixture.destroyed == 1 && !g_videoOutputThreadActive.load(),
                 "render-owner completion destroys hidden viewer exactly once");
+        Require(g_restartToSettings.load() == (exit == Exit::Settings),
+                "only F2 preserves settings restart after exclusive output is released");
         Require(!g_presentationUiPending &&
                 g_deferredPresentationUi.load() == DeferredPresentationUi::None && !g_viewerHelp.Handle(),
                 "close cancels a pending modal action and cannot reopen help after teardown");
@@ -267,6 +279,9 @@ static void TestExclusiveViewerLifecycle() {
     g_deferredHelpMessage = savedHelpMessage;
     g_deferredHelpModifiers = savedHelpModifiers;
     g_restartToSettings = savedRestart;
+#ifdef LLCV_RECORDING
+    g_requestedSettingsTab = savedRequestedTab;
+#endif
     g_videoHost = savedHost;
     std::puts("PASS: exclusive focus/minimize, deferred help/settings, no-input acknowledgement/close, WM_QUIT and synchronous owner teardown.");
 }

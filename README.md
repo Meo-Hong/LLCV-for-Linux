@@ -5,7 +5,7 @@
 A low-latency Windows viewer for video and audio from HDMI capture devices.
 Use it to play console games without OBS, or listen in audio-only mode.
 
-**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.1.3.md) · [한국어](README.ko.md)
+**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.1.4.md) · [한국어](README.ko.md)
 
 <br>
 
@@ -17,11 +17,11 @@ Use it to play console games without OBS, or listen in audio-only mode.
 
 <br>
 
-## What's new in 2.1.3
+## What's new in 2.1.4
 
-Mute playback with the speaker button or **M**, without changing your volume levels or recorded audio.
-The shortcut is customizable under **Guide & logs**.
-[Audio guide](docs/AUDIO.md) · [Full release notes](docs/release-notes-v2.1.3.md)
+**F2** opens the default settings page; select the **Recording** tab for recording options.
+Improved handling of large audio input packets, recording finalization and invalid saved settings.
+[Recording guide](docs/RECORDING.md) · [Full release notes](docs/release-notes-v2.1.4.md)
 
 <br>
 

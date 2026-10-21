@@ -123,7 +123,10 @@ static void RingAndResampler() {
         }
         Check(output.front() == 12345 && output[1 + received * 6] == 12345, "pop boundaries");
     }
-    for (double ratio : {0.999, 1.0, 1.001}) {
+    // Three fixed ratios plus a correction target that changes each block.
+    // All channels must preserve the same clock/history in either case.
+    const double ratios[]{0.999, 1.0, 1.001};
+    for (size_t scenario = 0; scenario < 4; ++scenario) {
         audio::PcmRing multi(65536);
         multi.ConfigureChannels(6);
         audio::SincDriftResampler six(multi);
@@ -145,6 +148,7 @@ static void RingAndResampler() {
         for (size_t block = 0; block < 150; ++block) {
             const size_t sizes[]{1, 16, 127, 480, 960};
             const size_t frames = sizes[block % 5];
+            const double ratio = ratios[scenario < 3 ? scenario : block % 3];
             std::vector<int16_t> out(frames * 6 + 1, 12345);
             const size_t got = six.Render(out.data(), frames, ratio);
             Check(out[got * 6] == 12345, "resampler bounds including starvation");
@@ -158,7 +162,7 @@ static void RingAndResampler() {
             }
         }
     }
-    std::puts("Ring: 10000 randomized wraps/overruns; resampler +/-1000 ppm/channel isolation passed.");
+    std::puts("Ring: 10000 randomized wraps/overruns; fixed/changing +/-1000 ppm channel isolation passed.");
 }
 
 static void Gain() {
