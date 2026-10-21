@@ -11,7 +11,7 @@
 %endif
 
 Name:           llcv
-Version:        2.1.3.1
+Version:        2.1.4
 Release:        1
 Summary:        Low-latency viewer for USB HDMI capture devices
 
@@ -121,6 +121,13 @@ cp -p third_party/noto-sans-jp/LICENSE.txt NotoSansJP-LICENSE.txt
 %{_prefix}/lib/udev/rules.d/70-llcv-elgato-hid.rules
 
 %changelog
+* Thu Oct 22 2026 Meohong <busimh001@gmail.com> - 2.1.4-1
+- Follow the Windows LLCV 2.1.4 update.
+- F2 opens the default settings page (Video, or Audio in audio-only mode).
+- Fix possible loss of the last video and audio packets when a recording
+  stops.
+- Invalid numbers in settings.ini fall back to the defaults.
+
 * Mon Oct 19 2026 Meohong <busimh001@gmail.com> - 2.1.3.1-1
 - Version kept in step with the .deb fix release (the .deb packages now
   contain a static FFmpeg). No change to the RPM build.

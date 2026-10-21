@@ -4,7 +4,7 @@
 
 LLCV는 USB(UVC/V4L2) HDMI 캡처 장치의 영상과 소리를 낮은 지연으로 표시하는
 뷰어입니다. 이 폴더는 [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer)의
-Windows용 LLCV 2.1.3을 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
+Windows용 LLCV 2.1.4를 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
 기준 장치는 AVerMedia Live Gamer ULTRA S GC553Pro이고, 기준 데스크톱은
 Ubuntu 26.04(GNOME, Wayland)입니다.
 
@@ -15,20 +15,17 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 > [이 저장소의 이슈](https://github.com/Meo-Hong/LLCV-for-Linux/issues)에
 > 남겨 주세요.
 
-## 2.1.3 새 기능
+## 2.1.4 새 기능
 
-- **녹화 (F9)**: NVENC·VA-API·CPU 인코더로 H.264·HEVC·AV1 MP4를 녹화하고,
-  일시정지·자동 분할·별도 녹화 음량을 지원합니다. [녹화](#녹화) 참고.
-- **재생 음소거 (M)**: 녹화 소리는 그대로 두고 재생 소리만 끕니다.
-  [재생 음소거](#재생-음소거) 참고.
-- 목록에 없는 30fps 요청, 전체화면 영상 크기·위치, 캡처 해상도가 모니터와 같을 때
-  전체화면, 모니터를 옮길 때 상대적인 창 크기 유지.
-- HDR 크로마 위치, 지원하는 AVerMedia·Elgato 장치의 톤매핑 요청, 옮길 수 있는
-  오디오 전용 화면, 설정 화면의 취소 버튼.
+- **F2**는 기본 설정 화면(영상, 오디오 전용 모드에서는 오디오)을 엽니다.
+  녹화 옵션은 그대로 녹화 탭에 있습니다.
+- 녹화를 멈출 때 마지막 영상·오디오 데이터가 빠지지 않습니다.
+- `settings.ini`의 잘못된 숫자값은 기본값으로 읽습니다.
 
-전체 목록: [릴리스 노트](release-notes/v2.1.3.md). **2.1.3.1**은 Ubuntu 24.04·26.04,
-Debian 12·13, Raspberry Pi OS 64비트에 설치되지 않던 2.1.3 `.deb` 패키지를
-고쳤습니다. [2.1.3.1 릴리스 노트](release-notes/v2.1.3.1.md)를 보세요.
+전체 목록: [릴리스 노트](release-notes/v2.1.4.md). 2.1.3에서는 [녹화](#녹화)(F9),
+[재생 음소거](#재생-음소거)(M), 목록에 없는 30fps 요청, 전체화면 영상 크기·위치가
+추가되었습니다. [2.1.3 릴리스 노트](release-notes/v2.1.3.md)와
+[2.1.3.1 릴리스 노트](release-notes/v2.1.3.1.md)를 보세요.
 
 | 항목 | Windows판 | 리눅스판 |
 | --- | --- | --- |
@@ -58,11 +55,11 @@ Debian 12·13, Raspberry Pi OS 64비트에 설치되지 않던 2.1.3 `.deb` 패�
 
 | 파일 | 설치할 OS | 명령 |
 | --- | --- | --- |
-| `llcv_2.1.3.1_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.3.1_amd64.deb` |
-| `llcv_2.1.3.1_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.1.3.1_arm64.deb` |
-| `llcv_2.1.3.1_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.1.3.1_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.1.3.1-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.1.3.1-1.x86_64.rpm` |
-| `llcv-2.1.3.1-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.3.1-1-x86_64.pkg.tar.zst` |
+| `llcv_2.1.4_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.4_amd64.deb` |
+| `llcv_2.1.4_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.1.4_arm64.deb` |
+| `llcv_2.1.4_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.1.4_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.1.4-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.1.4-1.x86_64.rpm` |
+| `llcv-2.1.4-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.4-1-x86_64.pkg.tar.zst` |
 
 - `.deb`를 설치하면 LLCV APT 저장소도 함께 등록되어, 다음 버전부터는
   `apt upgrade`나 소프트웨어 업데이트로 받습니다. `.rpm`과 Arch는 Releases에서
@@ -348,7 +345,8 @@ Windows판의 독점 전체화면 방식은 리눅스판에 없습니다. Waylan
 오디오, 녹화, 도구, 설정, 도움말 메뉴가 있어서 기능 키를 외우지 않아도 됩니다.
 **녹화 → 마지막 녹화 열기**는 가장 최근 파일을 기본 플레이어로 엽니다.
 
-재생 중에 연 설정 화면(F2나 메뉴)에는 **취소** 버튼이 있어서, 변경 사항을 버리고 이전
+재생 중에 연 설정 화면(F2나 메뉴)은 영상 화면(오디오 전용 모드에서는 오디오 화면)부터
+보여 줍니다. **취소** 버튼이 있어서, 변경 사항을 버리고 이전
 설정으로 재생을 다시 시작할 수 있습니다.
 Alt나 종료 키(기본 Esc)를 다시 누르거나 메뉴 밖을 클릭하면 닫힙니다.
 
@@ -360,7 +358,7 @@ Alt나 종료 키(기본 Esc)를 다시 누르거나 메뉴 밖을 클릭하면 
 | --- | --- |
 | Alt | 메뉴 막대 표시 / 숨기기 |
 | F1 | 앱 정보 · 단축키 |
-| F2 | 재생을 멈추고 설정 열기 |
+| F2 | 재생을 멈추고 설정 열기 (영상 화면, 오디오 전용 모드에서는 오디오 화면) |
 | F3 | 오디오 미터 · 음량 |
 | F5 | 원본 1:1 크기로 복원 (캡처 해상도가 모니터와 같으면 전체화면) |
 | F11 / Alt+Enter | 전체화면 |

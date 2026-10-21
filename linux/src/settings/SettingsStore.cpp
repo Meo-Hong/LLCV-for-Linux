@@ -5,8 +5,11 @@
 #include "platform/Strings.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cerrno>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <string>
 #include <system_error>
@@ -97,9 +100,16 @@ const char* EnumText(E value, const EnumName<E> (&names)[N]) {
 int ReadInt(const Values& values, const char* key, int fallback, int minimum, int maximum) {
     const auto it = values.find(key);
     if (it == values.end()) return fallback;
+    const char* text = it->second.c_str();
     char* end = nullptr;
-    const long value = std::strtol(it->second.c_str(), &end, 10);
-    if (end == it->second.c_str()) return fallback;
+    errno = 0;
+    const long value = std::strtol(text, &end, 10);
+    if (end == text || errno == ERANGE || value < std::numeric_limits<int>::min() ||
+        value > std::numeric_limits<int>::max()) {
+        return fallback;
+    }
+    while (*end && std::isspace(static_cast<unsigned char>(*end))) ++end;
+    if (*end) return fallback;
     return static_cast<int>(std::clamp<long>(value, minimum, maximum));
 }
 

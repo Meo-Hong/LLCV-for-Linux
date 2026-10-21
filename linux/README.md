@@ -3,7 +3,7 @@
 > [한국어](README.ko.md)
 
 LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices with low
-latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.1.3 viewer
+latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.1.4 viewer
 by [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer). The
 reference device is the AVerMedia Live Gamer ULTRA S GC553Pro. The reference
 desktop is Ubuntu 26.04 (GNOME, Wayland).
@@ -16,22 +16,17 @@ desktop is Ubuntu 26.04 (GNOME, Wayland).
 > [this repository's issues](https://github.com/Meo-Hong/LLCV-for-Linux/issues),
 > not in the original repository.
 
-## What's new in 2.1.3
+## What's new in 2.1.4
 
-- **Recording (F9)**: MP4 with H.264, HEVC or AV1 on NVENC, VA-API or CPU
-  encoders, with pause, splitting and a separate recording volume. See
-  [Recording](#recording).
-- **Playback mute (M)** that leaves recordings untouched. See
-  [Playback mute](#playback-mute).
-- Unlisted 30 fps requests, fullscreen video size and position, fullscreen
-  when the capture matches the monitor, and relative window size across
-  monitors.
-- HDR chroma placement, hardware tone-mapping requests for supported AVerMedia
-  and Elgato devices, a movable audio-only view, and Cancel in settings.
+- **F2** opens the default settings page (Video, or Audio in audio-only mode);
+  recording options stay on the Recording tab.
+- The last video and audio packets are no longer lost when a recording stops.
+- Invalid numbers in `settings.ini` fall back to the defaults.
 
-Full list: [release notes](release-notes/v2.1.3.md). **2.1.3.1** fixes the
-2.1.3 `.deb` packages, which could not be installed on Ubuntu 24.04 and 26.04,
-Debian 12 and 13 or Raspberry Pi OS 64-bit; see the
+Full list: [release notes](release-notes/v2.1.4.md). 2.1.3 added
+[recording](#recording) (F9), [playback mute](#playback-mute) (M), unlisted
+30 fps requests and fullscreen video size and position; see the
+[2.1.3 notes](release-notes/v2.1.3.md) and the
 [2.1.3.1 notes](release-notes/v2.1.3.1.md).
 
 | Area | Windows build | Linux build |
@@ -63,11 +58,11 @@ Download the file for your system from
 
 | File | Install on | Command |
 | --- | --- | --- |
-| `llcv_2.1.3.1_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.3.1_amd64.deb` |
-| `llcv_2.1.3.1_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.1.3.1_arm64.deb` |
-| `llcv_2.1.3.1_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.1.3.1_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.1.3.1-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.1.3.1-1.x86_64.rpm` |
-| `llcv-2.1.3.1-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.3.1-1-x86_64.pkg.tar.zst` |
+| `llcv_2.1.4_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.4_amd64.deb` |
+| `llcv_2.1.4_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.1.4_arm64.deb` |
+| `llcv_2.1.4_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.1.4_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.1.4-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.1.4-1.x86_64.rpm` |
+| `llcv-2.1.4-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.4-1-x86_64.pkg.tar.zst` |
 
 - Installing a `.deb` also registers the LLCV APT repository, so later
   versions arrive through `apt upgrade` or Software Updater. For `.rpm` and
@@ -374,7 +369,8 @@ View, Audio, Recording, Tools, Settings and Help commands, so you can use them
 without remembering the function keys. **Recording → Open last recording**
 opens the most recent file in the default player.
 
-Settings opened during playback (F2 or the menu) have a **Cancel** button that
+Settings opened during playback (F2 or the menu) start on the Video page, or
+Audio in audio-only mode. They have a **Cancel** button that
 discards the changes and resumes playback with the previous settings. Press Alt or the Exit key (default Esc) again,
 or click outside the menu, to close it.
 
@@ -387,7 +383,7 @@ The keys below are the defaults. They can be changed under
 | --- | --- |
 | Alt | Show or hide the menu bar |
 | F1 | App information and shortcuts |
-| F2 | Stop playback and open settings |
+| F2 | Stop playback and open settings (Video page; Audio in audio-only mode) |
 | F3 | Audio meters and volume |
 | F5 | Restore the 1:1 source size (fullscreen when the capture matches the monitor) |
 | F11 / Alt+Enter | Fullscreen |

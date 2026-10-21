@@ -1,3 +1,17 @@
+llcv (2.1.4) resolute; urgency=medium
+
+  * Follow the Windows LLCV 2.1.4 update.
+  * F2 and Settings in the menu always open the default page: Video, or
+    Audio in audio-only mode. Recording options stay on the Recording tab.
+  * Fix possible loss of the last video and audio packets when capture
+    delivery overlaps the end of a recording.
+  * Invalid numbers in settings.ini (trailing characters or values out of
+    the int range) fall back to the defaults.
+  * The drift-correction resampler sums its normalization once per frame,
+    with unchanged output.
+
+ -- Meohong <busimh001@gmail.com>  Thu, 22 Oct 2026 12:00:00 +0900
+
 llcv (2.1.3.1) resolute; urgency=medium
 
   * Fix the .deb packages of 2.1.3, which could not be installed on Ubuntu

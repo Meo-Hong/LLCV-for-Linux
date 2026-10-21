@@ -93,8 +93,8 @@ cd LLCV-for-Linux/linux
 마지막에 만들어진 파일과 설치 명령이 표시됩니다. 예시:
 
 ```text
-Package: /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3.1_amd64.deb
-Install: sudo apt install /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3.1_amd64.deb
+Package: /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.4_amd64.deb
+Install: sudo apt install /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.4_amd64.deb
 ```
 
 **⑤ 설치**
@@ -159,7 +159,7 @@ SDL3가 없으면 스크립트가 알아서 SDL3 소스를 받고(`tools/fetch-s
 배포판에 설치되며, 빌드 시간이 몇 분 늘어납니다.
 
 **결과물**: `dist/<배포판>-<버전>/llcv_<버전>~<배포판><버전>_<아키텍처>.deb`
-(예: `dist/debian-13/llcv_2.1.3.1_arm64.deb`)
+(예: `dist/debian-13/llcv_2.1.4_arm64.deb`)
 
 **설치** — 폴더 이름은 내 배포판(`ID`-`VERSION_ID`)입니다.
 
@@ -224,7 +224,7 @@ Fedora 빌드는 시스템 FFmpeg(`ffmpeg-free`나 RPM Fusion의 `ffmpeg`)로 �
 ./tools/build-rpm.sh
 ```
 
-**결과물**: `dist/<배포판>-<버전>/llcv-2.1.3.1-1.x86_64.rpm`
+**결과물**: `dist/<배포판>-<버전>/llcv-2.1.4-1.x86_64.rpm`
 (디버그 정보 `llcv-debuginfo`, `llcv-debugsource`와 소스 RPM도 함께 생깁니다.)
 
 **설치** — 폴더 이름은 내 배포판(`ID`-`VERSION_ID`)입니다.
@@ -250,13 +250,13 @@ cd packaging/arch
 makepkg -f
 ```
 
-**결과물**: `packaging/arch/llcv-2.1.3.1-1-x86_64.pkg.tar.zst`
+**결과물**: `packaging/arch/llcv-2.1.4-1-x86_64.pkg.tar.zst`
 (`./tools/build-package.sh`를 쓰면 `dist/arch/`로 복사됩니다.)
 
 **설치**
 
 ```sh
-sudo pacman -U llcv-2.1.3.1-1-*.pkg.tar.zst
+sudo pacman -U llcv-2.1.4-1-*.pkg.tar.zst
 ```
 
 `makepkg -si`를 쓰면 의존성 설치, 빌드, 설치를 한 번에 합니다.

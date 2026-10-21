@@ -1782,6 +1782,7 @@ void App::PerformExit(ExitRequest request) {
     case ExitRequest::Settings:
         StopSession();
         settingsBeforeEdit_ = settings_;
+        settingsScreen_.ShowDefaultPage(settings_.audioOnly);
         EnterSettings();
         break;
     case ExitRequest::None:

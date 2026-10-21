@@ -14,21 +14,21 @@ LLCV는 HDMI 캡처 장치의 영상과 소리를 낮은 지연으로 보여주�
 | 폴더 | 내용 |
 | --- | --- |
 | [`linux/`](linux/README.ko.md) | Meo-hong이 만든 리눅스판: V4L2 캡처, OpenGL, PipeWire 오디오, Wayland HDR10, MP4 녹화. Ubuntu, Debian, Raspberry Pi OS, Fedora, Nobara, RHEL, Arch용 패키지 |
-| [`windows/`](windows/README.ko.md) | seria-aa의 원본 Windows LLCV 2.1.3 (수정 없음): DirectShow 캡처, D3D11 출력, WASAPI·ASIO 오디오 |
+| [`windows/`](windows/README.ko.md) | seria-aa의 원본 Windows LLCV 2.1.4 (수정 없음): DirectShow 캡처, D3D11 출력, WASAPI·ASIO 오디오 |
 
 ## 리눅스
 
-현재 릴리스: **2.1.3.1** ([Releases](https://github.com/Meo-Hong/LLCV-for-Linux/releases/latest)) ·
-새 기능: 녹화(F9), 재생 음소거(M), 목록에 없는 30fps 요청 등
-([릴리스 노트](linux/release-notes/v2.1.3.1.md))
+현재 릴리스: **2.1.4** ([Releases](https://github.com/Meo-Hong/LLCV-for-Linux/releases/latest)) ·
+F2로 기본 설정 화면 열기, 녹화 끝부분 데이터 누락 수정
+([릴리스 노트](linux/release-notes/v2.1.4.md))
 
 | 파일 | 설치할 OS |
 | --- | --- |
-| `llcv_2.1.3.1_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13과 파생 배포판 |
-| `llcv_2.1.3.1_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) |
-| `llcv_2.1.3.1_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) |
-| `llcv-2.1.3.1-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 |
-| `llcv-2.1.3.1-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS |
+| `llcv_2.1.4_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13과 파생 배포판 |
+| `llcv_2.1.4_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) |
+| `llcv_2.1.4_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) |
+| `llcv-2.1.4-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 |
+| `llcv-2.1.4-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS |
 
 - `.deb` 패키지는 APT 저장소 `https://meo-hong.github.io/LLCV-for-Linux/`로
   자동 업데이트됩니다.

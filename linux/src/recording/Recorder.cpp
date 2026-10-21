@@ -177,6 +177,7 @@ struct Recorder::Impl {
     std::deque<std::unique_ptr<VideoBuffer>> readyVideo;
     std::deque<AudioChunk> readyAudio;
     size_t queuedAudioFrames = 0;
+    unsigned producers = 0;
     uint64_t droppedFrames = 0;
     uint64_t overloadSinceNs = 0;
     Status status;
@@ -539,13 +540,13 @@ void Recorder::Impl::Session::Loop() {
         {
             std::unique_lock<std::mutex> lock(shared_.mutex);
             shared_.wake.wait_for(lock, std::chrono::milliseconds(250), [this] {
-                return shared_.stopRequested || shared_.overload || !shared_.readyVideo.empty() ||
-                       !shared_.readyAudio.empty();
+                return (shared_.stopRequested && shared_.producers == 0) || shared_.overload ||
+                       !shared_.readyVideo.empty() || !shared_.readyAudio.empty();
             });
             audioBatch.swap(shared_.readyAudio);
             shared_.queuedAudioFrames = 0;
             videoBatch.swap(shared_.readyVideo);
-            stopping = shared_.stopRequested;
+            stopping = shared_.stopRequested && shared_.producers == 0;
             overloaded = shared_.overload;
         }
         if (overloaded) Fail(Failure::Overload, "encoding or writing could not keep up");
@@ -1113,6 +1114,7 @@ void Recorder::OnRawFrame(const capture::RawFrame& frame) {
         buffer = std::move(d.freeVideo.back());
         d.freeVideo.pop_back();
         offset = d.startNs + d.pausedTotalNs;
+        ++d.producers;
     }
     if (buffer->data.size() < frame.size) buffer->data.resize(frame.size);
     std::memcpy(buffer->data.data(), frame.data, frame.size);
@@ -1124,6 +1126,7 @@ void Recorder::OnRawFrame(const capture::RawFrame& frame) {
     {
         std::lock_guard<std::mutex> lock(d.mutex);
         d.readyVideo.push_back(std::move(buffer));
+        --d.producers;
     }
     d.wake.notify_one();
 }
@@ -1146,6 +1149,7 @@ void Recorder::OnCapturedPcm(const int16_t* samples, size_t frames, uint64_t end
         d.queuedAudioFrames += frames;
         chunk.offsetNs = d.startNs + d.pausedTotalNs;
         chunk.resumeNs = d.resumeNs;
+        ++d.producers;
     }
     const uint64_t durationNs = static_cast<uint64_t>(frames) * 1000000000ull / kSampleRate;
     chunk.samples.assign(samples, samples + frames * 2);
@@ -1153,6 +1157,7 @@ void Recorder::OnCapturedPcm(const int16_t* samples, size_t frames, uint64_t end
     {
         std::lock_guard<std::mutex> lock(d.mutex);
         d.readyAudio.push_back(std::move(chunk));
+        --d.producers;
     }
     d.wake.notify_one();
 }

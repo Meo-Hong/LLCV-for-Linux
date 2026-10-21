@@ -41,6 +41,16 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="2.1.4" date="2026-10-22">
+      <description>
+        <p>Follows the Windows LLCV 2.1.4 update.</p>
+        <ul>
+          <li>F2 opens the default settings page; recording options stay on the Recording tab.</li>
+          <li>The last video and audio packets are no longer lost when a recording stops.</li>
+          <li>Invalid numbers in the settings file fall back to the defaults.</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.1.3.1" date="2026-10-19">
       <description>
         <p>Fixes the 2.1.3 .deb packages, which could not be installed on Ubuntu 24.04 and 26.04, Debian 12 and 13, and Raspberry Pi OS 64-bit. The packages now include their own FFmpeg for recording.</p>

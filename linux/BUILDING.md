@@ -94,8 +94,8 @@ for your password.
 At the end, it prints the package and the install command, for example:
 
 ```text
-Package: /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3.1_amd64.deb
-Install: sudo apt install /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.3.1_amd64.deb
+Package: /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.4_amd64.deb
+Install: sudo apt install /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.1.4_amd64.deb
 ```
 
 **5. Install**
@@ -163,7 +163,7 @@ distribution's static `libx264`. This keeps one `.deb` per architecture
 installable on every release; it adds a few minutes to the build.
 
 **Result**: `dist/<distro>-<version>/llcv_<version>~<distro><version>_<arch>.deb`
-(for example `dist/debian-13/llcv_2.1.3.1_arm64.deb`)
+(for example `dist/debian-13/llcv_2.1.4_arm64.deb`)
 
 **Install.** The folder name is your `ID`-`VERSION_ID`:
 
@@ -231,7 +231,7 @@ no FFmpeg, so that build has no recording.
 ./tools/build-rpm.sh
 ```
 
-**Result**: `dist/<distro>-<version>/llcv-2.1.3.1-1.x86_64.rpm`
+**Result**: `dist/<distro>-<version>/llcv-2.1.4-1.x86_64.rpm`
 (debug packages `llcv-debuginfo` and `llcv-debugsource`, and a source RPM, are
 created too)
 
@@ -258,13 +258,13 @@ cd packaging/arch
 makepkg -f
 ```
 
-**Result**: `packaging/arch/llcv-2.1.3.1-1-x86_64.pkg.tar.zst`
+**Result**: `packaging/arch/llcv-2.1.4-1-x86_64.pkg.tar.zst`
 (`./tools/build-package.sh` also copies it to `dist/arch/`)
 
 **Install**
 
 ```sh
-sudo pacman -U llcv-2.1.3.1-1-*.pkg.tar.zst
+sudo pacman -U llcv-2.1.4-1-*.pkg.tar.zst
 ```
 
 `makepkg -si` installs the dependencies, builds and installs in one step.

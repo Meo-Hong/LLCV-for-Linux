@@ -69,6 +69,7 @@ public:
     void CancelShortcutCapture();
     bool TakeRecordingPageOpened();
     void ResetRecordingPage() { recordingShown_ = false; }
+    void ShowDefaultPage(bool audioOnly) { page_ = audioOnly ? Page::Audio : Page::Video; }
 
 private:
     enum class Page { Video, Audio, Window, Recording, Guide, App };
