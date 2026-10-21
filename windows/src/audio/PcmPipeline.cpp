@@ -193,20 +193,23 @@ size_t SincDriftResampler::Render(int16_t* output, size_t outputFrames,
         }
         const double fraction = samplePosition - static_cast<double>(center);
         double weights[kHalfTaps * 2];
+        double normalization = 0.0;
         for (int tap = -kHalfTaps + 1; tap <= kHalfTaps; ++tap) {
-            weights[tap + kHalfTaps - 1] =
+            const double weight =
                 WindowedSinc(static_cast<double>(tap) - fraction);
+            weights[tap + kHalfTaps - 1] = weight;
+            normalization += weight;
         }
+        // Every channel uses the same filter and normalization. Sum its weights
+        // once, in the original tap order, retaining bit-identical PCM output.
         for (size_t channel = 0; channel < channels_; ++channel) {
             double sum = 0.0;
-            double normalization = 0.0;
             for (int tap = -kHalfTaps + 1; tap <= kHalfTaps; ++tap) {
                 const double weight = weights[tap + kHalfTaps - 1];
                 const size_t index =
                     (center + static_cast<size_t>(tap + kHalfTaps - 1) -
                      static_cast<size_t>(kHalfTaps - 1)) * channels_ + channel;
                 sum += static_cast<double>(source_[index]) * weight;
-                normalization += weight;
             }
             if (std::abs(normalization) > 1.0e-12) sum /= normalization;
             const long sample = std::lround(std::clamp(

@@ -97,6 +97,12 @@ int Logger::PrintVLocked(FILE* stream, const wchar_t* format, va_list args) {
             va_end(copyForFile);
             return result;
         }
+        // An empty record is valid. WideCharToMultiByte rejects a zero-length
+        // input, but that must not disable diagnostics for the whole session.
+        if (characterCount == 0) {
+            va_end(copyForFile);
+            return result;
+        }
         std::vector<wchar_t> text(static_cast<size_t>(characterCount) + 1);
         va_list render;
         va_copy(render, copyForFile);

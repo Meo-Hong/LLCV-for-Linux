@@ -20,11 +20,13 @@
 #include <cstdio>
 #include <stdexcept>
 #include <memory>
+#include <limits>
 
 namespace llcv::recording {
 using Microsoft::WRL::ComPtr;
 Recorder recorder;
 namespace {
+constexpr DWORD kAudioBufferBytes=19200; // 100 ms of 48 kHz PCM16 stereo.
 void Check(HRESULT hr) { if (FAILED(hr)) throw hr; }
 ComPtr<IMFMediaType> Type() {
     ComPtr<IMFMediaType> t; Check(MFCreateMediaType(&t)); return t;
@@ -129,6 +131,46 @@ void Recorder::Shutdown() {
     if (worker_.joinable()) worker_.join();
     video_={};
 }
+void Recorder::PushAudioChunks(const BYTE* data, long length, LONGLONG start, uint64_t pauseGeneration) {
+    if(length%4){Fail(E_INVALIDARG,Operation::Input);return;}
+    const LONGLONG duration=static_cast<LONGLONG>(length/4)*10000000/48000;
+    if(start>(std::numeric_limits<LONGLONG>::max)()-duration){Fail(E_INVALIDARG,Operation::Input);return;}
+    const size_t count=(static_cast<size_t>(length)+kAudioBufferBytes-1)/kAudioBufferBytes;
+    auto& queue=audioQueue_;
+    const size_t write=queue.write.load(std::memory_order_relaxed);
+    const size_t used=write-queue.read.load(std::memory_order_acquire);
+    if(used>queue.packets.size() || count>queue.packets.size()-used){
+        fwprintf(stderr,L"[recording] audio delivery queue cannot fit %zu packet chunks\n",count);
+        Fail(HRESULT_FROM_WIN32(ERROR_BUFFER_OVERFLOW),Operation::Queue);return;
+    }
+    // Reserve every lease before copying. Slots stay invisible to the worker
+    // until one release-store publishes the entire input packet; failures must
+    // never record an apparently successful prefix and silently drop its tail.
+    struct Unpublished {
+        Ring& queue;size_t write,count=0;bool published=false;
+        ~Unpublished(){if(!published)for(size_t i=0;i<count;++i)queue.packets[(write+i)%queue.packets.size()].buffer.Reset();}
+    } pending{queue,write};
+    for(size_t i=0;i<count;++i){
+        auto buffer=audioBuffers_.Acquire();
+        if(!buffer){Fail(HRESULT_FROM_WIN32(ERROR_BUFFER_OVERFLOW),Operation::Queue);return;}
+        queue.packets[(write+i)%queue.packets.size()].buffer=std::move(buffer);
+        ++pending.count;
+    }
+    size_t offset=0;
+    for(size_t i=0;i<count;++i){
+        auto& packet=queue.packets[(write+i)%queue.packets.size()];
+        const DWORD bytes=static_cast<DWORD>((std::min)(static_cast<size_t>(length)-offset,static_cast<size_t>(kAudioBufferBytes)));
+        BYTE* target=nullptr;Check(packet.buffer->Lock(&target,nullptr,nullptr));
+        std::memcpy(target,data+offset,bytes);
+        Check(packet.buffer->Unlock());Check(packet.buffer->SetCurrentLength(bytes));
+        packet.time=start+static_cast<LONGLONG>(offset/4)*10000000/48000;
+        packet.duration=static_cast<LONGLONG>(bytes/4)*10000000/48000;
+        packet.pauseGeneration=pauseGeneration;packet.video=false;
+        offset+=bytes;
+    }
+    pending.published=true;
+    queue.write.store(write+count,std::memory_order_release);SetEvent(wake_);
+}
 void Recorder::Push(bool video, IMediaSample* sample) noexcept {
     const auto session=session_.load(std::memory_order_acquire);
     if (!Recording()) return;
@@ -171,6 +213,11 @@ void Recorder::Push(bool video, IMediaSample* sample) noexcept {
     if (length<=0 || length>sample->GetSize()) { Fail(E_INVALIDARG,Operation::Input); return; }
     if(video && !videoLimiter_.Accept(start))return;
     try {
+        // Some capture endpoints deliver >100 ms at once. Split only that
+        // uncommon case; normal callback storage and publication stay unchanged.
+        if(!video && length>static_cast<long>(kAudioBufferBytes)){
+            PushAudioChunks(data,length,start,pauseGeneration);return;
+        }
         // Each DirectShow pin has one serialized producer. The worker alone
         // consumes these independent SPSC rings; audio/video never lock each other.
         auto& queue=video?videoQueue_:audioQueue_;
@@ -202,7 +249,7 @@ void Recorder::Push(bool video, IMediaSample* sample) noexcept {
             p.duration=videoLimiter_.fps?10000000LL/videoLimiter_.fps:
                 (end>start?end-start:10000000LL/video_.fps);
         } else {
-            if (length>19200 || length%4) { Fail(E_INVALIDARG,Operation::Input); return; }
+            if (length%4) { Fail(E_INVALIDARG,Operation::Input); return; }
             packedBytes=static_cast<size_t>(length);
             p.duration=static_cast<LONGLONG>(length/4)*10000000/48000;
         }
@@ -264,7 +311,7 @@ void Recorder::Run(std::wstring path) {
         videoBuffers_.Allocate(mjpeg?8:16,mjpeg
             ? (video_.bytes?video_.bytes:static_cast<DWORD>(video_.width*video_.height*3))
             : static_cast<DWORD>(frameBytes));
-        audioBuffers_.Allocate(64,19200);
+        audioBuffers_.Allocate(64,kAudioBufferBytes);
         const auto dimensions=OutputSize(options_,video_.width,video_.height);
         const bool scaling=dimensions.width!=video_.width || dimensions.height!=video_.height;
         auto recordingColor=color_;
@@ -353,7 +400,7 @@ void Recorder::Run(std::wstring path) {
             const bool hasVideo=vr!=videoQueue_.write.load(std::memory_order_acquire);
             const bool hasAudio=ar!=audioQueue_.write.load(std::memory_order_acquire);
             if (!hasVideo && !hasAudio) {
-                if (stop_ && producers_.load()==0) break;
+                if (ReadyToFinalizeRecording(stop_,phase_,producers_,vr,videoQueue_.write,ar,audioQueue_.write)) break;
                 const DWORD wait=WaitForSingleObject(wake_,1000);
                 if(wait==WAIT_FAILED)Check(HRESULT_FROM_WIN32(GetLastError()));
                 continue;

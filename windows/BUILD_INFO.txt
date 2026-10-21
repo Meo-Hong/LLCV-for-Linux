@@ -1,4 +1,17 @@
-LLCV v2.1.3 x64 (continued from the v0.14.2 rework)
+LLCV v2.1.4 x64 (continued from the v0.14.2 rework)
+
+v2.1.4 Settings access and recording reliability
+-----------------------------------------------
+- Opens the default settings page with F2; recording options remain on the Recording tab.
+- Keeps ongoing playback and recording when a settings-transition confirmation is declined.
+- Accepts larger PCM input packets using bounded preallocated recording buffers.
+- Rechecks pending input before finalizing a recording to preserve the queue tail.
+- Handles malformed numeric settings safely and preserves logging after an empty record.
+- Reuses the audio filter normalization sum without changing its PCM output.
+- Adds recording/settings cancellation, input-boundary and device-switch regression coverage.
+- Retains existing settings, installation paths and 1080p/60fps recording defaults.
+- The held audio-input recovery prototype is excluded by default; opt-in diagnostic builds use a distinct filename/version and cannot be packaged as regular releases.
+- See tests/RELEASE_V2_1_4_AUDIT.md for verification scope and outstanding release gates.
 
 v2.1.3 Playback mute
 -------------------

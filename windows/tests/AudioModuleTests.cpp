@@ -18,11 +18,93 @@ bool Check(bool condition, const char* message) {
     std::fprintf(stderr, "FAILED: %s\n", message);
     return false;
 }
+
+bool ConvertedRingMatchesReference() {
+    using namespace llcv;
+    bool ok = true;
+    // Each converter is already tested independently below. Here a scalar FIFO
+    // checks its placement in the ring across both contiguous spans, for every
+    // supported input width/channel layout, including non-finite float samples.
+    for (const uint16_t inputChannels : {uint16_t{1}, uint16_t{2}, uint16_t{6}, uint16_t{8}}) {
+        for (const unsigned encoding : {16u, 24u, 32u, 33u}) {
+            capture_audio::Format format{};
+            format.encoding = encoding == 33 ? capture_audio::Encoding::FloatPcm
+                                             : capture_audio::Encoding::IntegerPcm;
+            format.containerBits = encoding == 33 ? 32 : static_cast<uint16_t>(encoding);
+            format.validBits = format.containerBits;
+            format.channels = inputChannels;
+            format.blockAlign = static_cast<uint16_t>(inputChannels * (format.containerBits / 8));
+            const size_t channels = inputChannels > 2 ? 6 : 2;
+            format.path = channels == 6 ? capture_audio::Path::ConvertToSurround51
+                                       : capture_audio::Path::ConvertTo16BitStereo;
+            format.channelMask = inputChannels == 8 ? 0x63f : (channels == 6 ? 0x60f : 0);
+            for (const size_t capacity : {size_t{1}, size_t{3}, size_t{31}, size_t{480}}) {
+                size_t observedDrops = 0;
+                std::atomic<UINT32> depth{0};
+                audio::PcmRing tested(capacity, &depth,
+                    [](void* context, size_t dropped) {
+                        *static_cast<size_t*>(context) += dropped;
+                        return true;
+                    }, &observedDrops);
+                tested.ConfigureChannels(channels);
+                std::deque<int16_t> reference;
+                size_t expectedDrops = 0;
+                uint64_t expectedOverruns = 0;
+                uint32_t random = 398573;
+                const auto next = [&]() { random = random * 1664525u + 1013904223u; return random; };
+                for (size_t step = 0; step < 1000; ++step) {
+                    const unsigned operation = next() % 10;
+                    const size_t frames = next() % (capacity * 2 + 1);
+                    if (operation < 5) {
+                        std::vector<BYTE> bytes(frames * format.blockAlign);
+                        for (auto& value : bytes) value = static_cast<BYTE>(next() >> 24);
+                        tested.PushConverted(bytes.data(), frames, format);
+                        for (size_t f = 0; f < frames; ++f) {
+                            int16_t converted[6]{};
+                            const BYTE* source = bytes.data() + f * format.blockAlign;
+                            if (channels == 6)
+                                capture_audio::ConvertSurroundFrame(source, format, converted);
+                            else
+                                capture_audio::ConvertFrame(source, format, converted[0], converted[1]);
+                            for (size_t c = 0; c < channels; ++c) reference.push_back(converted[c]);
+                        }
+                        if (reference.size() > capacity * channels) {
+                            expectedDrops += reference.size() / channels - capacity;
+                            ++expectedOverruns;
+                        }
+                        while (reference.size() > capacity * channels) reference.pop_front();
+                    } else if (operation < 9) {
+                        std::vector<int16_t> output(frames * channels + 2, int16_t{12345});
+                        const size_t expected = (std::min)(frames, reference.size() / channels);
+                        const size_t got = tested.Pop(output.data() + 1, frames);
+                        ok &= Check(got == expected, "converted ring read count equals reference");
+                        for (size_t i = 0; i < expected * channels; ++i) {
+                            ok &= Check(output[i + 1] == reference.front(), "converted ring preserves every PCM value");
+                            reference.pop_front();
+                        }
+                        ok &= Check(output.front() == 12345 && output[expected * channels + 1] == 12345,
+                                    "converted ring never overwrites output guards");
+                    } else {
+                        tested.Clear();
+                        reference.clear();
+                    }
+                    ok &= Check(tested.AvailableFrames() == reference.size() / channels &&
+                                depth.load() == reference.size() / channels,
+                                "converted ring preserves occupancy through wrap and reset");
+                    ok &= Check(observedDrops == expectedDrops && tested.Overruns() == expectedOverruns,
+                                "converted ring preserves overflow accounting for oversized input");
+                }
+            }
+        }
+    }
+    return ok;
+}
 }
 
 int main() {
     using namespace llcv;
     bool ok = true;
+    ok &= ConvertedRingMatchesReference();
 
     // Compare every PCM value against a simple FIFO through wrap, overflow,
     // oversized writes, zero-sized operations and resets, for stereo and 5.1.

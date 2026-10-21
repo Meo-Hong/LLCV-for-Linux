@@ -9,6 +9,7 @@
 #include <d3d11sdklayers.h>
 #include <set>
 #include "audio/SharedDeadlineMonitor.h"
+#include "capture/AudioInputRecovery.h" // Algorithm-only tests; no opt-in in the included application.
 #include "FakeVideoPin.h"
 
 void TestStartupWaitBoundary() {
@@ -923,6 +924,8 @@ int TestPresentationDebug() {
 #include "VideoTransitionStress.inl"
 #include "PlaybackMuteTests.inl"
 #include "PlaybackMuteRecordingTests.inl"
+#include "RecordingAudioDeviceSwitchTests.inl"
+#include "AudioInputRecoveryTests.inl"
 
 static void TestSurroundWasapiFill() {
     const auto settings = g_settings;
@@ -969,8 +972,11 @@ static void TestSurroundWasapiFill() {
 }
 
 int main(int argc, char** argv) {
+    if (argc == 2 && std::string(argv[1]) == "--audio-input-recovery") return TestAudioInputRecovery();
 #ifdef LLCV_RECORDING
     if(argc==2 && std::string(argv[1])=="--mute-recording") return TestPlaybackMuteRecording();
+    if(argc==2 && std::string(argv[1])=="--recording-audio-device-switch") return recording_audio_switch_test::Run(false);
+    if(argc==2 && std::string(argv[1])=="--recording-audio-input-boundaries") return recording_audio_switch_test::Run(true);
 #endif
     TestInvalidHdrOutputStartup();
     if (argc == 2 && std::string(argv[1]) == "--transition-stress") return RunTransitionStress(false);

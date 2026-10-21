@@ -157,6 +157,11 @@ int main() {
             "content sink must open");
     Require(contentLogger.Print(contentSink, L"format-marker=%d\n", 42) >= 0,
             "logger must write a regular record");
+    Require(contentLogger.Print(contentSink, L"") == 0 &&
+                contentLogger.Print(contentSink, L"%s", L"") == 0,
+            "empty log records remain successful no-ops");
+    Require(contentLogger.Print(contentSink, L"after-empty-marker\n") >= 0,
+            "logger continues after an empty record");
     moduleLogger = &contentLogger;
     moduleConsole = contentSink;
     LogMessage(ModuleMessage, L"module-buffer=%u\n", 960u);
@@ -164,11 +169,14 @@ int main() {
     std::fclose(contentSink);
     bool markerFound = false;
     bool moduleFound = false;
+    bool afterEmptyFound = false;
     for (const auto& file : ManagedFiles(temporary.path())) {
         markerFound = markerFound || ContainsAscii(file, "format-marker=42");
         moduleFound = moduleFound || ContainsAscii(file, "module-buffer=960");
+        afterEmptyFound = afterEmptyFound || ContainsAscii(file, "after-empty-marker");
     }
     Require(markerFound, "saved UTF-8 log must retain the original message text");
     Require(moduleFound, "module diagnostics must reach the saved UTF-8 file");
+    Require(afterEmptyFound, "empty records must not disable saved diagnostics");
     return 0;
 }
