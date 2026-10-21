@@ -1,5 +1,105 @@
 // Included by VsrExperimentTests: hidden HWNDs and injected workers only.
+#ifdef LLCV_RECORDING
+static void TestOrdinarySettingsRecordingNavigation() {
+    const auto saved = g_settings;
+    const bool savedSuppress = g_suppressSettingsSave;
+    const int savedRequestedTab = g_requestedSettingsTab;
+    const auto savedRecordingOptions = llcv::recording::sessionOptions;
+    const bool savedRestart = g_restartToSettings.load();
+    g_suppressSettingsSave = true;
+    g_requestedSettingsTab = -1;
+    WNDCLASSW wc{};
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpfnWndProc = SettingsControllerTestProc;
+    wc.lpszClassName = L"LLCV_SETTINGS_RECORDING_NAVIGATION_TEST";
+    Require(RegisterClassW(&wc) != 0, "register recording navigation fixture");
+    wchar_t temporary[MAX_PATH]{};
+    Require(GetTempPathW(ARRAYSIZE(temporary), temporary) != 0, "recording fixture storage path");
+    for (const bool audioOnly : {false, true}) {
+        g_settings = {};
+        g_settings.audioOnly = audioOnly;
+        g_settings.shortcuts[static_cast<size_t>(keys::Action::Settings)] = keys::Ctrl | 'K';
+        const auto originalTab = audioOnly ? SettingsTab::Audio : SettingsTab::VideoWindow;
+        SettingsDialogState state;
+        state.activeTab = originalTab;
+        // Supply completed capabilities: navigation must not launch a real encoder probe.
+        state.recordingProbePending = false;
+        state.recordingCapabilities[0] = {true, true, {{L"Fixture", L"test"}}, {true, true}, {true, true}};
+        state.recordingOptions.folder = temporary;
+        state.recordingOptions.maxHeight = 720;
+        state.recordingOptions.maxFps = 30;
+        HWND hwnd = CreateWindowW(wc.lpszClassName, L"Hidden recording navigation fixture", WS_POPUP,
+            -32000, -32000, 1000, 650, nullptr, nullptr, wc.hInstance, &state);
+        Require(hwnd != nullptr && !IsWindowVisible(hwnd), "ordinary settings fixture remains hidden");
+        const llcv::settings_ui::SettingsControlInitialValues initial{
+            g_settings, false, false, kAppVersionLabel, VideoPreset::R1920x1080,
+            {}, {}, kVideoPresets, kPcmQueueOptionsMs, {}};
+        const llcv::settings_ui::SettingsControlPopulation population{
+            &state, [](void*) {}, [](void*) {}, [](void*) {}};
+        llcv::settings_ui::CreateSettingsDialogControls(&state, hwnd, wc.hInstance, initial, population);
+        llcv::settings_ui::CreateRecordingSettings(&state, hwnd);
+        // Unaccepted edits on both the ordinary pages and the shortcut page
+        // must survive opening Recording without saving or recreating the HWND.
+        SendMessageW(state.videoCombo, CB_SETCURSEL, 2, 0);
+        SendMessageW(state.pcmQueueCombo, CB_SETCURSEL, 1, 0);
+        SendMessageW(state.pixelCheck, BM_SETCHECK, BST_UNCHECKED, 0);
+        state.shortcutBindings[static_cast<size_t>(keys::Action::Settings)] = keys::Ctrl | 'J';
+        llcv::settings_ui::RefreshShortcutCaptions(&state);
+        const auto editedBindings = state.shortcutBindings;
+        auto expectedOptions = state.recordingOptions;
+        const auto selectTab = [&](SettingsTab tab) {
+            SendMessageW(state.tabControl, LB_SETCURSEL,
+                llcv::settings_ui::SettingsNavigationIndex(tab), 0);
+            SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(IDC_SETTINGS_TAB, LBN_SELCHANGE),
+                reinterpret_cast<LPARAM>(state.tabControl));
+            Require(IsWindow(hwnd) && !IsWindowVisible(hwnd) && state.activeTab == tab && !state.recordingLive,
+                "ordinary settings navigate in the same hidden non-live dialog");
+            Require(state.recordingOptions == expectedOptions && state.shortcutBindings == editedBindings &&
+                    SendMessageW(state.videoCombo, CB_GETCURSEL, 0, 0) == 2 &&
+                    SendMessageW(state.pcmQueueCombo, CB_GETCURSEL, 0, 0) == 1 &&
+                    SendMessageW(state.pixelCheck, BM_GETCHECK, 0, 0) == BST_UNCHECKED,
+                "recording navigation preserves all pending recording/playback/shortcut edits");
+            Require(g_requestedSettingsTab == -1 && g_restartToSettings.load() == savedRestart,
+                "ordinary tab selection does not request a process restart");
+        };
+        selectTab(SettingsTab::Recording);
+        Require(IsWindowEnabled(state.recVolume) && !llcv::settings_ui::CanToggleRecordingSettings(&state),
+            "ordinary recording tab permits options without becoming live recording controls");
+        // Exercise the real recording control command, not just the state model.
+        SendMessageW(state.recVolume, CB_SETCURSEL, 6, 0);
+        SendMessageW(hwnd, WM_COMMAND,
+            MAKEWPARAM(llcv::settings_ui::kRecordingVolume, CBN_SELCHANGE),
+            reinterpret_cast<LPARAM>(state.recVolume));
+        expectedOptions.audioVolumePercent = 60;
+        Require(state.recordingOptions == expectedOptions, "recording option is editable through the settings tab");
+        selectTab(originalTab);
+        selectTab(SettingsTab::Recording);
+        Require(SendMessageW(state.recVolume, CB_GETCURSEL, 0, 0) == 6,
+            "recording volume selection survives leaving and reopening its tab");
+        selectTab(originalTab);
+        wchar_t shortcutCaption[64]{};
+        GetWindowTextW(state.guideKeys[static_cast<size_t>(keys::Action::Settings)], shortcutCaption, ARRAYSIZE(shortcutCaption));
+        Require(std::wstring(shortcutCaption) == L"Ctrl+J" &&
+                g_settings.shortcuts[static_cast<size_t>(keys::Action::Settings)] == (keys::Ctrl | 'K') &&
+                llcv::recording::sessionOptions == savedRecordingOptions,
+            "tab navigation retains the edited shortcut caption without committing settings");
+        Require(!state.recordingProbe && !state.videoModeCache && !state.captureAudioProbeCache &&
+                !state.sharedProbeCache && !state.inventoryCache && !state.exclusiveScanRunning,
+            "fixture tab navigation uses supplied capabilities and never opens hardware");
+        DestroyWindow(hwnd);
+    }
+    UnregisterClassW(wc.lpszClassName, wc.hInstance);
+    g_settings = saved;
+    g_suppressSettingsSave = savedSuppress;
+    g_requestedSettingsTab = savedRequestedTab;
+    std::puts("Settings navigation: Video/Audio to Recording round trips preserve pending options and shortcuts without a live viewer.");
+}
+#endif
+
 static void TestSettingsShortcutStatusRefresh() {
+#ifdef LLCV_RECORDING
+    TestOrdinarySettingsRecordingNavigation();
+#endif
     const auto saved=g_settings;
     const bool savedSuppress=g_suppressSettingsSave;
     g_suppressSettingsSave=true;

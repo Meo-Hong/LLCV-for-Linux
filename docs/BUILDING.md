@@ -43,8 +43,13 @@ build\Release\LowLatencyCaptureViewer.exe
 The release configuration uses the static MSVC runtime, so the packaged
 executable does not require a separate Visual C++ Redistributable installation.
 
-The 2.1.3 suite adds playback mute/recorded-audio isolation, shortcut migration/reset
-and Korean/English high-DPI UI regressions.
+The 2.1.4 suite adds default-settings shortcut routing, recording cancellation with a live
+settings window, recording input-device changes and large audio packets, final queue draining,
+invalid numeric settings and bit-identical audio resampling regressions.
+The cancellation test uses hidden windows, synthetic media and simulated presentation
+acknowledgements; it does not measure physical exclusive-display transitions or latency.
+Existing tests cover playback mute/recorded-audio isolation, shortcut migration/reset
+and Korean/English high-DPI UI layout.
 Existing checks cover isolated encoder-probe cancellation/failure, recording
 free-space updates, connected MJPEG color metadata, initial audio-overlap trimming,
 settings shortcut routing and minimized-window placement regressions.
@@ -64,13 +69,21 @@ report that as complete coverage. These programs are never included in packages.
 
 <br>
 
-A playback-only developer build can use `-DLLCV_RECORDING=OFF` without FFmpeg; it is not the 2.1.3 release package.
+A playback-only developer build can use `-DLLCV_RECORDING=OFF` without FFmpeg; it is not the 2.1.4 release package.
 The mux runtime and `ffmpeg-licenses` folder must remain beside the executable.
+
+The held audio-input recovery prototype is **off by default**. For private diagnosis only,
+use a separate build directory with `-DLLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC=ON`.
+This produces `LowLatencyCaptureViewer_AudioRecovery_Diagnostic.exe` with a diagnostic
+version label. Regular builds do not compile its watchdog or retries; existing WASAPI/ASIO
+output recovery is unchanged. The diagnostic option cannot be combined with HDR/VSR
+experiments or used to create a regular installer/portable package.
+It is not a confirmed fix for capture-device silence.
 
 ## Installer and portable ZIP
 
 After the Release build, run these commands from the repository root. These
-examples package v2.1.3 using the `build\Release` output above; the build-directory
+examples package v2.1.4 using the `build\Release` output above; the build-directory
 override is required because the release scripts normally use a versioned
 build directory.
 
@@ -79,11 +92,11 @@ chcp.com 65001 > $null
 & "C:\Program Files\Inno Setup 7\ISCC.exe" `
   "--define=BuildDir=..\build\Release" ".\installer\LowLatencyCaptureViewer.iss"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-v1.ps1 `
-  -Version 2.1.3 -BuildDir ..\build\Release -OutputDir outputs\v2.1.3
+  -Version 2.1.4 -BuildDir ..\build\Release -OutputDir outputs\v2.1.4
 ```
 
-The outputs are `outputs\v2.1.3\LowLatencyCaptureViewer_v2.1.3_Setup.exe`
-and `outputs\v2.1.3\LowLatencyCaptureViewer_v2.1.3_x64.zip`. When preparing
+The outputs are `outputs\v2.1.4\LowLatencyCaptureViewer_v2.1.4_Setup.exe`
+and `outputs\v2.1.4\LowLatencyCaptureViewer_v2.1.4_x64.zip`. When preparing
 another version, update the versioned release files first; changing a ZIP name
 does not update the executable. See the [release checklist](RELEASING.md).
 

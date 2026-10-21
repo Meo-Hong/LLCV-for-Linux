@@ -31,8 +31,10 @@ public:
     bool Recording() const { return phase_.load(std::memory_order_acquire)==Phase::Recording; }
     HRESULT Result() const { return result_.load(); }
 private:
+    friend struct RecorderTestAccess; // Regression-only access; no runtime hooks.
     struct Packet { Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer; LONGLONG time=0, duration=0; uint64_t pauseGeneration=0; bool video=false; };
     void Run(std::wstring path);
+    void PushAudioChunks(const BYTE* data, long length, LONGLONG start, uint64_t pauseGeneration);
     void Fail(HRESULT, Operation operation=Operation::Encoder) noexcept;
     void UpdateStorage(const std::wstring& folder);
     std::mutex lifecycle_;

@@ -1,6 +1,7 @@
 #include "recording/Recorder.h"
 #include "recording/RecordingArchive.h"
 #include "recording/EncoderSupport.h"
+#include "recording/RecordingPauseTimeline.h"
 #include "video/MjpegDecoder.h"
 #include <mfapi.h>
 #include <mfidl.h>
@@ -17,6 +18,51 @@ using Microsoft::WRL::ComPtr;
 static int failures=0;
 static void Expect(bool value,const char* message) { if(!value){++failures;printf("FAIL: %s\n",message);} }
 static void Check(HRESULT hr) { if(FAILED(hr)) throw hr; }
+namespace llcv::recording {
+struct RecorderTestAccess {
+    static void AudioChunkAtomicity() {
+        constexpr long length=48004; // 250 ms plus one PCM stereo frame.
+        std::vector<BYTE> source(length);
+        for(size_t i=0;i<source.size();++i)source[i]=static_cast<BYTE>(i*31+7);
+        for(size_t leases=0;leases<3;++leases){
+            Recorder subject;
+            subject.audioQueue_.packets.resize(4);subject.audioQueue_.read=7;subject.audioQueue_.write=7;
+            subject.audioBuffers_.Allocate(leases,19200);
+            subject.PushAudioChunks(source.data(),length,2500000,2);
+            Expect(FAILED(subject.Result()),"mid-reservation lease exhaustion fails explicitly");
+            Expect(subject.audioQueue_.write==7,"lease exhaustion never publishes a partial audio packet");
+            for(const auto& packet:subject.audioQueue_.packets)Expect(!packet.buffer,"unpublished packet leases rolled back");
+            std::array<ComPtr<IMFMediaBuffer>,3> returned;
+            for(size_t i=0;i<leases;++i){returned[i]=subject.audioBuffers_.Acquire();Expect(bool(returned[i]),"every reserved lease returns after failure");}
+            Expect(!subject.audioBuffers_.Acquire(),"rollback neither leaks nor creates extra leases");
+        }
+        Recorder subject;
+        subject.audioQueue_.packets.resize(4);subject.audioQueue_.read=7;subject.audioQueue_.write=7;
+        subject.audioBuffers_.Allocate(3,19200);
+        subject.PushAudioChunks(source.data(),length,2500000,2);
+        Expect(SUCCEEDED(subject.Result()) && subject.audioQueue_.write==10,"complete audio packet publishes all three wrapped slots");
+        RecordingPauseTimeline timeline;
+        timeline.Map(true,0,0,1000000);timeline.Map(false,0,0,1000000);
+        const auto resumed=timeline.Map(true,2,3250000,200000);
+        Expect(resumed.time==1000000,"resumed video defines a cut inside the original large callback");
+        size_t offset=0;uint64_t keptFrames=0;
+        for(size_t i=0;i<3;++i){
+            const auto& packet=subject.audioQueue_.packets[(7+i)%4];
+            BYTE* data=nullptr;DWORD bytes=0;Check(packet.buffer->Lock(&data,nullptr,&bytes));
+            Expect(bytes==(std::min)(size_t(19200),source.size()-offset),"split chunks preserve exact PCM frame boundaries");
+            Expect(std::memcmp(data,source.data()+offset,bytes)==0,"split chunks preserve every source byte in order");
+            Check(packet.buffer->Unlock());
+            Expect(packet.time==2500000+static_cast<LONGLONG>(offset/4)*10000000/48000 && packet.pauseGeneration==2,
+                "split chunks retain source timestamps and one pause generation");
+            const auto mapped=timeline.Map(false,packet.pauseGeneration,packet.time,packet.duration);
+            Expect(mapped.keep && std::abs(mapped.time-(1000000+static_cast<LONGLONG>(keptFrames)*10000000/48000))<=1,
+                "large callback spanning the resume cut maps without a gap or overlap");
+            keptFrames+=bytes/4-mapped.skipAudioFrames;offset+=bytes;
+        }
+        Expect(offset==source.size() && keptFrames==8401,"resume trims only pre-cut PCM and retains every suffix frame");
+    }
+};
+}
 static std::vector<BYTE> JpegFrame(unsigned width,unsigned height,bool bright,bool textured=false,bool colored=false) {
     ComPtr<IWICImagingFactory> factory;
     Check(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&factory)));
@@ -272,6 +318,42 @@ static void Inspect(const wchar_t* path,bool video) {
         video?"video":"audio",count,first/1e7,end/1e7,maxGap/10000.0,nonzero);
     Expect(count>0,"file contains decoded stream");
 }
+static void VerifyContinuousAudio(const wchar_t* path,double seconds) {
+    ComPtr<IMFSourceReader> reader;Check(MFCreateSourceReaderFromURL(path,nullptr,&reader));
+    Check(reader->SetStreamSelection(static_cast<DWORD>(MF_SOURCE_READER_ALL_STREAMS),FALSE));
+    const DWORD stream=static_cast<DWORD>(MF_SOURCE_READER_FIRST_AUDIO_STREAM);
+    Check(reader->SetStreamSelection(stream,TRUE));
+    ComPtr<IMFMediaType> type;Check(MFCreateMediaType(&type));
+    Check(type->SetGUID(MF_MT_MAJOR_TYPE,MFMediaType_Audio));Check(type->SetGUID(MF_MT_SUBTYPE,MFAudioFormat_PCM));
+    Check(type->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE,16));Check(type->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS,2));
+    Check(type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND,48000));Check(reader->SetCurrentMediaType(stream,nullptr,type.Get()));
+    LONGLONG first=-1,end=0,maxGap=0;uint64_t frames=0,quietWindows=0;unsigned window=0;double energy=0;
+    for(;;){
+        DWORD flags=0;LONGLONG time=0;ComPtr<IMFSample> sample;
+        Check(reader->ReadSample(stream,0,nullptr,&flags,&time,&sample));
+        if(flags&MF_SOURCE_READERF_ENDOFSTREAM)break;if(!sample)continue;
+        if(first<0)first=time;else maxGap=(std::max)(maxGap,std::abs(time-end));
+        ComPtr<IMFMediaBuffer> buffer;Check(sample->ConvertToContiguousBuffer(&buffer));
+        BYTE* data=nullptr;DWORD length=0;Check(buffer->Lock(&data,nullptr,&length));
+        const auto* pcm=reinterpret_cast<const short*>(data);
+        for(DWORD frame=0;frame<length/4;++frame){
+            energy+=double(pcm[frame*2])*pcm[frame*2];++window;++frames;
+            if(window==480){
+                const double elapsed=frames/48000.0;
+                if(elapsed>0.05 && elapsed<seconds-0.05 && energy/window<100.0*100.0)++quietWindows;
+                window=0;energy=0;
+            }
+        }
+        Check(buffer->Unlock());end=time+static_cast<LONGLONG>(length/4)*10000000/48000;
+    }
+    printf("large audio decoded=%llu frames end=%.6fs max timestamp discontinuity=%.3fms quiet windows=%llu\n",
+        frames,end/1e7,maxGap/10000.0,quietWindows);
+    Expect(first==0 && maxGap<=1000,"split audio keeps contiguous decoded timestamps");
+    Expect(frames>=static_cast<uint64_t>(seconds*48000) && frames<=static_cast<uint64_t>(seconds*48000)+4096,
+        "split audio retains sample count within AAC framing padding");
+    Expect(std::abs(end/1e7-seconds)<0.1,"split audio retains expected duration");
+    Expect(quietWindows==0,"split audio has no silent holes across packet boundaries");
+}
 static void Lifecycle(llcv::recording::Recorder& recorder,
                       const llcv::video::VideoSampleFormat& video,
                       const llcv::capture_audio::Format& audio) {
@@ -321,6 +403,34 @@ static void Lifecycle(llcv::recording::Recorder& recorder,
         Expect(std::chrono::steady_clock::now()-start<std::chrono::seconds(5),"shutdown wakes idle worker promptly");
     }
 }
+static void AudioPacketBounds(llcv::recording::Recorder& recorder,
+                              const llcv::video::VideoSampleFormat& video,
+                              const llcv::capture_audio::Format& audio) {
+    llcv::recording::RecorderTestAccess::AudioChunkAtomicity();
+    llcv::recording::Options options;options.encoder=L"cpu";
+    ComPtr<IMemAllocator> allocator;Check(CoCreateInstance(CLSID_MemoryAllocator,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&allocator)));
+    ALLOCATOR_PROPERTIES requested{2,19200*32+4,1,0},actual{};
+    Check(allocator->SetProperties(&requested,&actual));Check(allocator->Commit());
+    // The oversized callback must be accepted as a whole or rejected before
+    // publication, never silently truncated to one 100 ms buffer.
+    for(const long length:{19201L,19200L*32+4}){
+        const auto path=std::filesystem::temp_directory_path()/(L"LLCV-audio-bounds-"+
+            std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(length)+L"-"+std::to_wstring(GetTickCount64())+L".mp4");
+        recorder.Configure(video,audio,{},false,options);Expect(recorder.Start(path.wstring()),"audio bounds start/restart");
+        for(int i=0;i<1000 && recorder.Busy()&&!recorder.Recording();++i)Sleep(10);
+        Expect(recorder.Recording(),"audio bounds encoder ready");
+        auto sample=Sample(allocator.Get(),length,0,static_cast<LONGLONG>(length/4)*10000000/48000);
+        BYTE* data=nullptr;Check(sample->GetPointer(&data));std::memset(data,0,length);
+        recorder.Push(false,sample.Get());
+        Expect(!recorder.Recording(),"invalid/over-capacity audio closes admission synchronously");
+        recorder.Shutdown();
+        const auto status=recorder.GetSnapshot();
+        Expect(FAILED(recorder.Result()) && !status.playable,"rejected audio packet publishes no playable prefix");
+        Expect(status.failure==(length%4?llcv::recording::Failure::InvalidInput:llcv::recording::Failure::EncoderOverload),
+            "audio alignment and bounded queue overload are distinguished");
+    }
+    Check(allocator->Decommit());
+}
 int wmain(int argc, wchar_t** argv) {
     setvbuf(stdout,nullptr,_IONBF,0);
     Check(CoInitializeEx(nullptr,COINIT_MULTITHREADED)); Check(MFStartup(MF_VERSION));
@@ -340,6 +450,9 @@ int wmain(int argc, wchar_t** argv) {
         llcv::capture_audio::Format a{};a.channels=2;a.containerBits=a.validBits=16;a.blockAlign=4;a.path=llcv::capture_audio::Path::Direct16BitStereo;
         if(argc>1&&std::wstring(argv[1])==L"--lifecycle"){
             Lifecycle(recorder,v,a);MFShutdown();CoUninitialize();return failures?1:0;
+        }
+        if(argc>1&&std::wstring(argv[1])==L"--audio-bounds"){
+            AudioPacketBounds(recorder,v,a);MFShutdown();CoUninitialize();return failures?1:0;
         }
         const std::wstring mode=argc>1?argv[1]:L"";
         if(mode==L"--mjpeg-color" || mode==L"--mjpeg-color-scale"){
@@ -361,7 +474,8 @@ int wmain(int argc, wchar_t** argv) {
         const bool gain=argc>1 && (std::wstring(argv[1])==L"--gain"||std::wstring(argv[1])==L"--gain-split");
         const bool mute=argc>1 && std::wstring(argv[1])==L"--mute";
         const bool unaligned=argc>1 && std::wstring(argv[1])==L"--pause-unaligned";
-        const bool pause=mode==L"--pause" || mode==L"--mjpeg-pause" || split || unaligned;
+        const bool largeAudio=mode==L"--large-audio" || mode==L"--large-audio-pause";
+        const bool pause=mode==L"--pause" || mode==L"--mjpeg-pause" || mode==L"--large-audio-pause" || split || unaligned;
         const bool scale=mode==L"--scale" || mode==L"--mjpeg-scale";
         const bool hevc=mode==L"--hevc" || mode==L"--hevc-arrival" || mode==L"--mjpeg-hevc";
         const bool quality=argc>1 && (std::wstring(argv[1])==L"--quality"||std::wstring(argv[1])==L"--quality-yuy2");
@@ -426,9 +540,11 @@ int wmain(int argc, wchar_t** argv) {
                 "malformed MJPEG stops only recording with an input failure");
             Check(allocator->Decommit());goto finished;
         }
-        auto start=std::chrono::steady_clock::now();double maxPushUs=0,totalPushUs=0;unsigned pushes=0;
+        auto start=std::chrono::steady_clock::now();double maxPushUs=0,totalPushUs=0,maxAudioPushUs=0,totalAudioPushUs=0;unsigned pushes=0;
         std::vector<double> flashWall;
         double audioWall=0;
+        int audioFrame=0;unsigned audioPacket=0;
+        constexpr int audioPacketFrames[]={4800,4801,12000,5904,9600,7201};
         auto wall=[] { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); };
         for(int tick=0;tick<600 && recorder.Recording();++tick){
             std::this_thread::sleep_until(start+std::chrono::milliseconds(tick*10));
@@ -466,19 +582,36 @@ int wmain(int argc, wchar_t** argv) {
                     maxPushUs=(std::max)(maxPushUs,us);totalPushUs+=us;++pushes;
                 }
             }
-            auto s=Sample(allocator.Get(),1920,tick*100000LL,100000);BYTE* d=nullptr;s->GetPointer(&d);auto* pcm=reinterpret_cast<short*>(d);
-            if(arrival) s->SetTime(nullptr,nullptr);
-            const bool pulse=(tick>=100&&tick<110)||(tick>=300&&tick<310)||(tick>=500&&tick<510);
-            for(int i=0;i<480;++i) pcm[i*2]=pcm[i*2+1]=pulse?static_cast<short>(12000*sin(i*6.28318530718*1000/48000)):0;
-            if(tick==0)audioWall=wall();
-            recorder.Push(false,s.Get());
-            if(gain||mute)for(int i=0;i<480;++i){
-                const short expected=pulse?static_cast<short>(12000*sin(i*6.28318530718*1000/48000)):0;
-                Expect(pcm[i*2]==expected&&pcm[i*2+1]==expected,"recording gain leaves source playback samples untouched");
+            while(audioFrame<600*480 && (audioFrame<=tick*480 || tick==599)){
+                int frames=largeAudio?audioPacketFrames[audioPacket%std::size(audioPacketFrames)]:480;
+                frames=(std::min)(frames,600*480-audioFrame);
+                if(largeAudio && pause)for(const int cut:{180*480,250*480})
+                    if(audioFrame<cut)frames=(std::min)(frames,cut-audioFrame);
+                auto s=Sample(allocator.Get(),frames*4,static_cast<LONGLONG>(audioFrame)*10000000/48000,
+                    static_cast<LONGLONG>(frames)*10000000/48000);
+                BYTE* d=nullptr;Check(s->GetPointer(&d));auto* pcm=reinterpret_cast<short*>(d);
+                if(arrival)s->SetTime(nullptr,nullptr);
+                auto expectedAudio=[&](int i){
+                    const int frame=audioFrame+i;
+                    const bool pulse=(frame>=48000&&frame<52800)||(frame>=144000&&frame<148800)||(frame>=240000&&frame<244800);
+                    return static_cast<short>((pulse?12000:largeAudio?1000:0)*sin(i*6.28318530718*1000/48000));
+                };
+                for(int i=0;i<frames;++i)pcm[i*2]=pcm[i*2+1]=expectedAudio(i);
+                if(tick==0)audioWall=wall();
+                const auto audioPushStart=std::chrono::steady_clock::now();
+                recorder.Push(false,s.Get());
+                const double audioPushUs=std::chrono::duration<double,std::micro>(std::chrono::steady_clock::now()-audioPushStart).count();
+                totalAudioPushUs+=audioPushUs;maxAudioPushUs=(std::max)(maxAudioPushUs,audioPushUs);
+                if(gain||mute||largeAudio)for(int i=0;i<frames;++i){
+                    const short expected=expectedAudio(i);
+                    Expect(pcm[i*2]==expected&&pcm[i*2+1]==expected,"recording leaves source playback samples untouched");
+                }
+                audioFrame+=frames;++audioPacket;
             }
         }
         recorder.Stop();recorder.Shutdown();
         printf("record result=0x%08lX, video enqueue mean=%.2fus max=%.2fus\n",static_cast<unsigned long>(recorder.Result()),totalPushUs/(std::max)(1u,pushes),maxPushUs);
+        printf("audio enqueue packets=%u mean=%.2fus max=%.2fus\n",audioPacket,totalAudioPushUs/(std::max)(1u,audioPacket),maxAudioPushUs);
         Expect(SUCCEEDED(recorder.Result()),"record/finalize");
         if(split){
             unsigned frames=0,parts=0,events=0;
@@ -499,7 +632,8 @@ int wmain(int argc, wchar_t** argv) {
             goto finished;
         }
         if(SUCCEEDED(recorder.Result())){
-            if(pause||scale||mjpeg){
+            if(largeAudio)VerifyContinuousAudio(path.c_str(),pause?5.3:6.0);
+            if(pause||scale||mjpeg||largeAudio){
                 ComPtr<IMFSourceReader> reader;Check(MFCreateSourceReaderFromURL(path.c_str(),nullptr,&reader));
                 ComPtr<IMFMediaType> media;Check(reader->GetNativeMediaType(static_cast<DWORD>(MF_SOURCE_READER_FIRST_VIDEO_STREAM),0,&media));
                 UINT32 width=0,height=0;Check(MFGetAttributeSize(media.Get(),MF_MT_FRAME_SIZE,&width,&height));

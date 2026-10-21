@@ -49,6 +49,9 @@
 #include "audio/WasapiOutput.h"
 #include "capture/DirectShowDevices.h"
 #include "capture/AudioSampleGrabber.h"
+#ifdef LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC
+#include "capture/AudioInputRecovery.h"
+#endif
 #include "capture/DirectShowGraphResources.h"
 #include "capture/LatestVideoSample.h"
 #ifdef LLCV_RECORDING
@@ -148,10 +151,12 @@ constexpr wchar_t kVideoPinName[] = L"Video";
 constexpr int kSampleRate = 48000;
 constexpr int kChannels = 2;
 constexpr int kBitsPerSample = 16;
-#ifdef LLCV_VSR_EXPERIMENT
-constexpr wchar_t kAppVersionLabel[] = L"v2.1.3-vsr-test";
+#if defined(LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC)
+constexpr wchar_t kAppVersionLabel[] = L"v2.1.4-audio-recovery-diagnostic";
+#elif defined(LLCV_VSR_EXPERIMENT)
+constexpr wchar_t kAppVersionLabel[] = L"v2.1.4-vsr-test";
 #else
-constexpr wchar_t kAppVersionLabel[] = L"v2.1.3";
+constexpr wchar_t kAppVersionLabel[] = L"v2.1.4";
 #endif
 
 constexpr int kRecommendedCaptureBufferMs = 20;
@@ -257,6 +262,11 @@ static UINT_PTR g_presentationUiSerial = 0;
 static bool g_presentationUiPending = false; // UI owner only
 static MSG g_deferredHelpMessage{};
 static unsigned g_deferredHelpModifiers = 0;
+#ifdef LLCV_RECORDING
+// UI-thread-owned; the window remains a blocker even after a nested prompt
+// consumes the pending presentation request. Cleared at final HWND teardown.
+static HWND g_recordingSettingsWindow = nullptr;
+#endif
 static bool ExclusiveOutputSelected() {
     return !g_settings.audioOnly && llcv::presentation::IsExclusive(g_settings.presentationMode);
 }
@@ -296,7 +306,11 @@ static DeferredPresentationUi TakeDeferredPresentationUi(UINT_PTR& serial) {
 
 static void RefreshPresentationUiBlock() {
     if (!ExclusiveOutputSelected()) return;
-    const bool blocked = g_presentationUiPending || g_viewerHelp.Handle() != nullptr;
+    const bool blocked = g_presentationUiPending || g_viewerHelp.Handle() != nullptr
+#ifdef LLCV_RECORDING
+        || g_recordingSettingsWindow != nullptr
+#endif
+        ;
     if (g_presentationBlocked.exchange(blocked, std::memory_order_acq_rel) != blocked)
         NotifyPresentationChange();
 }
@@ -412,7 +426,6 @@ static bool g_recordingClosePrompt=false;
 static bool g_recordingShutdownBlocked=false;
 static uint64_t g_recordingCloseWarningAt=0;
 static constexpr UINT WM_RECORDING_CAPTURE_ENDED=WM_APP+94;
-static HWND g_recordingSettingsWindow=nullptr;
 static std::optional<llcv::recording::Capabilities> g_recordingCapabilities;
 static int g_requestedSettingsTab=-1;
 static void UpdateViewerRecordingIndicator(const llcv::recording::Snapshot& snapshot) {
@@ -1046,6 +1059,9 @@ static PcmRing g_ring{kRingFrames, &g_audioRingFrames,
                       OnPcmRingOverrun, nullptr};
 static bool Surround51Active() { return g_ring.Channels() == 6; }
 static std::atomic<bool> g_captureAudioRejected{false};
+#ifdef LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC
+static std::atomic<bool> g_audioInputRecoveryExhausted{false};
+#endif
 static std::atomic<uint64_t> g_underruns{0};
 
 // -----------------------------------------------------------------------------
@@ -3840,8 +3856,15 @@ struct DirectD3D11Renderer {
 // Audio-only mode deliberately builds a graph with no video pin, renderer,
 // swapchain, or Media Foundation decoder. It reuses the same exact PCM/float
 // negotiation and callback path as the normal single graph.
+#ifdef LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC
+static llcv::capture::AudioInputAttempt AudioOnlyCaptureAttempt() {
+#else
 static bool AudioOnlyCaptureLoop() {
+#endif
     g_captureFailureHr.store(S_OK, std::memory_order_release);
+#ifdef LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC
+    g_captureAudioRejected.store(false, std::memory_order_release);
+#endif
     g_captureGraphStopped.store(false, std::memory_order_release);
     g_captureGraphCompleted.store(false, std::memory_order_release);
     g_captureAudioAvailable.store(false, std::memory_order_release);
@@ -3850,7 +3873,11 @@ static bool AudioOnlyCaptureLoop() {
     if (FAILED(hr)) {
         LogHr(L"CoInitializeEx(audio-only capture)", hr);
         g_captureFailureHr.store(hr, std::memory_order_release);
+#ifdef LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC
+        return llcv::capture::AudioInputAttempt::Failed;
+#else
         return false;
+#endif
     }
 
     DWORD taskIndex = 0;
@@ -3874,6 +3901,9 @@ static bool AudioOnlyCaptureLoop() {
     auto*& selectedAudioType = resources.selectedAudioType;
     llcv::capture_audio::Format selectedAudioFormat{};
     bool initialized = false;
+#ifdef LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC
+    bool inputTimedOut = false;
+#endif
     const wchar_t* initializationStage = L"create audio-only DirectShow graph";
 
     do {
@@ -3987,6 +4017,13 @@ static bool AudioOnlyCaptureLoop() {
         initializationStage = L"start audio-only capture graph";
         hr = resources.events.Initialize(graph);
         if (FAILED(hr)) break;
+#ifdef LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC
+        if (!g_running.load(std::memory_order_acquire)) { initialized = true; break; }
+        // Previous attempt has released its graph/callback before we get here.
+        // Reset BEFORE Run: a driver may publish its first packet inside Run.
+        g_audioLastCaptureCallbackMs.store(0, std::memory_order_release);
+        const llcv::capture::AudioInputWatchdog inputWatchdog(GetTickCount64());
+#endif
         hr = control->Run();
         if (FAILED(hr)) break;
         initialized = true;
@@ -4022,11 +4059,31 @@ static bool AudioOnlyCaptureLoop() {
                 if (g_playbackPowerEvents.ApplyPending(powerRequest, powerRevision) && powerRequest.Error())
                     LogHr(L"Playback power request after power broadcast", HRESULT_FROM_WIN32(powerRequest.Error()));
             }
+#ifdef LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC
+            if (!g_running.load(std::memory_order_acquire)) break;
+            const auto timeout = inputWatchdog.Check(GetTickCount64(),
+                g_audioLastCaptureCallbackMs.load(std::memory_order_acquire));
+            if (timeout != llcv::capture::AudioInputWatchdog::Timeout::None) {
+                fwprintf(stderr, L"[audio-input] %s; rebuilding audio-only capture path.\n",
+                    timeout == llcv::capture::AudioInputWatchdog::Timeout::Startup
+                        ? L"no valid input packet within 10 seconds"
+                        : L"no valid input packet for 5 seconds");
+                inputTimedOut = true;
+                initialized = false;
+                hr = HRESULT_FROM_WIN32(ERROR_TIMEOUT);
+                break;
+            }
+#endif
         }
         powerRequest.Reset();
         control->Stop();
     } while (false);
 
+#ifdef LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC
+    if (inputTimedOut) {
+        g_captureFailureHr.store(HRESULT_FROM_WIN32(ERROR_TIMEOUT), std::memory_order_release);
+    } else
+#endif
     if (!initialized) {
         const HRESULT failure = FAILED(hr) ? hr : E_FAIL;
         g_captureFailureHr.store(failure, std::memory_order_release);
@@ -4040,10 +4097,46 @@ static bool AudioOnlyCaptureLoop() {
         }
     }
     resources.Reset();
+#ifdef LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC
+    g_captureAudioAvailable.store(false, std::memory_order_release);
+#endif
     if (mmcss) AvRevertMmThreadCharacteristics(mmcss);
     CoUninitialize();
+#ifdef LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC
+    return inputTimedOut ? llcv::capture::AudioInputAttempt::InputTimeout
+        : initialized ? llcv::capture::AudioInputAttempt::Complete
+                      : llcv::capture::AudioInputAttempt::Failed;
+#else
     return initialized;
+#endif
 }
+
+#ifdef LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC
+static bool AudioOnlyCaptureLoop() {
+    g_audioInputRecoveryExhausted.store(false, std::memory_order_release);
+    const auto result = llcv::capture::RunAudioInputRecovery(
+        AudioOnlyCaptureAttempt,
+        [] { return g_running.load(std::memory_order_acquire); },
+        [](unsigned delayMs) {
+            // Leave output-device ownership, volume, mute and recording alone.
+            // Short cancellable backoff; never sleep through viewer shutdown.
+            for (unsigned waited = 0; waited < delayMs; waited += 25) {
+                if (!g_running.load(std::memory_order_acquire)) return false;
+                Sleep(25);
+            }
+            return g_running.load(std::memory_order_acquire);
+        },
+        [](unsigned retry) {
+            fwprintf(stderr, L"[audio-input] capture restart %u/%u (output device kept open).\n",
+                retry, llcv::capture::AudioInputRetryLimit);
+        });
+    if (result == llcv::capture::AudioInputAttempt::InputTimeout) {
+        g_audioInputRecoveryExhausted.store(true, std::memory_order_release);
+        fwprintf(stderr, L"[audio-input] restart limit reached; returning to settings.\n");
+    }
+    return result == llcv::capture::AudioInputAttempt::Complete;
+}
+#endif
 
 // Input arrival is independent of successful presentation (e.g. an occluded window).
 static bool StartupInputWaitExpired(
@@ -6590,7 +6683,12 @@ static LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg,
     case WM_DESTROY:
         KillTimer(hwnd,2071);
         if(state)state->recordingProbeStop.store(true);
-        if(g_recordingSettingsWindow==hwnd)g_recordingSettingsWindow=nullptr;
+        break;
+    case WM_NCDESTROY:
+        if(g_recordingSettingsWindow==hwnd){
+            g_recordingSettingsWindow=nullptr;
+            RefreshPresentationUiBlock();
+        }
         break;
     case WM_RECORD_ENCODERS_READY:
         if(state&&state->recordingProbe){
@@ -9225,20 +9323,26 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
 #ifdef LLCV_RECORDING
     case llcv::recording::kOpenRecordingSettings:
-#endif
-    case WM_OPEN_SETTINGS:
-#ifdef LLCV_RECORDING
         if (g_recordingClosePending || g_recordingDrainPending) return 0;
-        if(!g_settings.audioOnly && !wParam){
+        if(!g_settings.audioOnly){
             if(g_recordingSettingsWindow){SetForegroundWindow(g_recordingSettingsWindow);return 0;}
             if (DeferPresentationUi(DeferredPresentationUi::RecordingSettings)) return 0;
             g_presentationBlocked.store(true, std::memory_order_release);
             NotifyPresentationChange();
             ShowSettingsDialog(GetModuleHandleW(nullptr),true,hwnd);
-            g_presentationBlocked.store(false, std::memory_order_release);
-            NotifyPresentationChange();
+            if (ExclusiveOutputSelected()) RefreshPresentationUiBlock();
+            else g_presentationBlocked.store(false, std::memory_order_release);
             return 0;
         }
+        return 0;
+#endif
+
+    case WM_OPEN_SETTINGS:
+#ifdef LLCV_RECORDING
+        if (g_recordingClosePending || g_recordingDrainPending) return 0;
+        // A settings shortcut always opens the normal default page. Only an
+        // explicit handoff from a live recording tab preserves its target.
+        if (!wParam) g_requestedSettingsTab = -1;
 #endif
         // The capture graph and WASAPI renderer are rebuilt only after this
         // window has closed and their threads have joined.
@@ -9265,7 +9369,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 PostMessageW(hwnd, WM_CLOSE, 0, 0);
 #endif
         }
-        g_presentationUiPending = false;
+        // A nested modal loop may have published a newer request while this
+        // acknowledgement was on the stack. Only retire our own ticket.
+        if (static_cast<UINT_PTR>(lParam) ==
+                g_deferredPresentationSerial.load(std::memory_order_acquire))
+            g_presentationUiPending = false;
         RefreshPresentationUiBlock();
         return 0;
     }
@@ -9958,6 +10066,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR commandLine, int show) {
                         g_captureFailureHr.load(std::memory_order_acquire);
                     wchar_t message[512]{};
                     swprintf_s(message,
+#ifdef LLCV_AUDIO_INPUT_RECOVERY_DIAGNOSTIC
+                               g_audioInputRecoveryExhausted.load(std::memory_order_acquire)
+                                   ? (IsEnglishUi()
+                                       ? L"No audio input packets were received. Capture was restarted up to 3 times without lasting recovery.\n\nError: 0x%08X  %s\n\nCheck the HDMI signal and capture audio device, close other capture apps, then start again. If this repeats, attach the diagnostic log."
+                                       : L"오디오 입력 데이터가 수신되지 않습니다. 캡처 경로를 최대 3회 다시 시작했지만 입력 끊김이 계속됩니다.\n\n오류: 0x%08X  %s\n\nHDMI 신호와 캡처 오디오 장치를 확인하고 다른 캡처 앱을 종료한 뒤 다시 시작해 주세요. 반복되면 진단 로그를 첨부해 주세요.")
+                                   :
+#endif
                                IsEnglishUi()
                                    ? L"Audio-only capture initialization failed.\n\nError: 0x%08X  %s\n\nSelect a compatible capture audio device or close other capture applications."
                                    : L"오디오 only 캡처 초기화에 실패했습니다.\n\n오류: 0x%08X  %s\n\n호환되는 캡처 오디오 장치를 선택하거나 다른 캡처 프로그램을 종료해 주세요.",

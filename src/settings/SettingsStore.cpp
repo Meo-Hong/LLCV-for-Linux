@@ -5,7 +5,10 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cerrno>
 #include <cwchar>
+#include <cwctype>
+#include <limits>
 #include <vector>
 
 namespace llcv::settings {
@@ -35,7 +38,16 @@ int ReadInt(
     wchar_t defaultText[32]{};
     swprintf_s(defaultText, L"%d", defaultValue);
     const std::wstring value = ReadString(path, section, key, defaultText);
-    return static_cast<int>(wcstol(value.c_str(), nullptr, 10));
+    wchar_t* end = nullptr;
+    errno = 0;
+    const long parsed = wcstol(value.c_str(), &end, 10);
+    if (end == value.c_str() || errno == ERANGE ||
+        parsed < (std::numeric_limits<int>::min)() ||
+        parsed > (std::numeric_limits<int>::max)()) return defaultValue;
+    while (*end && std::iswspace(*end)) ++end;
+    // A damaged or manually edited value must not silently become zero (for
+    // example muting a channel), nor accept a truncated numeric prefix.
+    return *end ? defaultValue : static_cast<int>(parsed);
 }
 
 bool ReadBool(
@@ -227,12 +239,14 @@ LoadResult LoadFromIni(const std::wstring& path) {
         ReadInt(path, L"Audio", L"Volume", 100), 0, maximumVolume);
     settings.volumePercent = std::clamp(
         ((loadedVolume + 2) / 5) * 5, 0, maximumVolume);
-    settings.leftVolumePercent = std::clamp(
-        ((ReadInt(path, L"Audio", L"LeftVolume", 100) + 2) / 5) * 5,
-        0, 100);
-    settings.rightVolumePercent = std::clamp(
-        ((ReadInt(path, L"Audio", L"RightVolume", 100) + 2) / 5) * 5,
-        0, 100);
+    // Clamp before rounding, as for master volume: even a valid INT_MAX in a
+    // profile must not overflow when adding the rounding bias.
+    const int loadedLeftVolume = std::clamp(
+        ReadInt(path, L"Audio", L"LeftVolume", 100), 0, 100);
+    const int loadedRightVolume = std::clamp(
+        ReadInt(path, L"Audio", L"RightVolume", 100), 0, 100);
+    settings.leftVolumePercent = ((loadedLeftVolume + 2) / 5) * 5;
+    settings.rightVolumePercent = ((loadedRightVolume + 2) / 5) * 5;
     const std::wstring hudPosition =
         ReadString(path, L"Audio", L"VolumeHudPosition", L"TopLeft");
     if (_wcsicmp(hudPosition.c_str(), L"TopRight") == 0) {

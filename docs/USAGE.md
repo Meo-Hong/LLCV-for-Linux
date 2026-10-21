@@ -16,10 +16,9 @@ Get one of the files from the [latest release](https://github.com/seria-aa/LowLa
   shortcut is created automatically; the desktop shortcut is optional.
 - **x64.zip — portable:** extract it, then run `LowLatencyCaptureViewer.exe`.
 
-**Updating to 2.1.3:** existing installation paths and settings are retained.
-Mute playback with the speaker button or customizable **M** shortcut without changing
-your volume levels or recorded audio.
-[Audio guide](AUDIO.md) · [2.1.3 release notes](release-notes-v2.1.3.md)
+**Updating to 2.1.4:** F2 opens the default settings page; recording options remain on the Recording tab.
+Existing installation paths, settings and custom shortcuts are retained.
+[Recording guide](RECORDING.md) · [2.1.4 release notes](release-notes-v2.1.4.md)
 **40 fps capture**, added in [2.0.4](release-notes-v2.0.4.md),
 remains off by default; enable it under **Video** only when needed.
 Sleep prevention and earlier settings improvements are covered in the
@@ -51,6 +50,11 @@ automatically,” no separate selection is needed.
 <br>
 
 ## Finding your settings
+
+Press **F2** in the viewer to return to **Video & window**, or **Audio** in audio-only mode.
+Choose the **Recording** tab for recording options. While recording or paused, F2 asks
+whether to finish the recording before returning to general settings: **Yes** saves and
+returns to settings; **No** keeps playback and the current recording state.
 
 *The following settings examples are rendered directly from the 2.1.3 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
 
@@ -238,7 +242,7 @@ with or without Ctrl/Alt/Shift. All valid assigned keys continue to work in the 
 
 | Default key / control | Action |
 | --- | --- |
-| `F2` | Reopen settings |
+| `F2` | Open the default settings page (finish-recording confirmation when recording) |
 | `Tab` | Show/hide live diagnostics |
 | `F3` | Show/hide the audio meter over video (audio-only has its own view) |
 | `F5` | Restore source-resolution 1:1 size (video mode) |

@@ -1,7 +1,7 @@
 ﻿param(
-    [string]$Version = "2.1.3",
-    [string]$BuildDir = "..\build-v2130-release",
-    [string]$OutputDir = "outputs\v2.1.3"
+    [string]$Version = "2.1.4",
+    [string]$BuildDir = "..\build-v2140-release",
+    [string]$OutputDir = "outputs\v2.1.4"
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +12,9 @@ $portable = Join-Path $output "LowLatencyCaptureViewer_v$Version`_x64"
 $zip = Join-Path $output "LowLatencyCaptureViewer_v$Version`_x64.zip"
 $exe = Join-Path $build "LowLatencyCaptureViewer.exe"
 
+if (Test-Path -LiteralPath (Join-Path $build 'llcv-audio-recovery-diagnostic.txt')) {
+    throw "Audio-input recovery diagnostic builds cannot be packaged as a regular release."
+}
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
     throw "Release executable not found: $exe"
 }

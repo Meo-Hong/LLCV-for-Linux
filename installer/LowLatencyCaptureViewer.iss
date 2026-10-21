@@ -1,13 +1,16 @@
-; LLCV v2.1.3
+; LLCV v2.1.4
 ; Build this script with Inno Setup 7 from the installer directory.
 
 #define MyAppName "LLCV"
-#define MyAppVersion "2.1.3"
+#define MyAppVersion "2.1.4"
 #define MyAppPublisher "seria-aa"
 #define MyAppURL "https://github.com/seria-aa/LowLatencyCaptureViewer"
 #define MyAppExeName "LowLatencyCaptureViewer.exe"
 #ifndef BuildDir
-#define BuildDir "..\build-v2130-release"
+#define BuildDir "..\build-v2140-release"
+#endif
+#if FileExists(BuildDir + "\llcv-audio-recovery-diagnostic.txt")
+  #error Audio-input recovery diagnostic builds cannot be packaged as a regular release.
 #endif
 
 [Setup]
@@ -25,9 +28,9 @@ DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
-OutputDir=..\outputs\v2.1.3
-OutputBaseFilename=LowLatencyCaptureViewer_v2.1.3_Setup
-OutputManifestFile=LowLatencyCaptureViewer_v2.1.3_Setup-manifest.txt
+OutputDir=..\outputs\v2.1.4
+OutputBaseFilename=LowLatencyCaptureViewer_v2.1.4_Setup
+OutputManifestFile=LowLatencyCaptureViewer_v2.1.4_Setup-manifest.txt
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -35,7 +38,7 @@ CloseApplications=yes
 SetupIconFile=..\assets\LowLatencyCaptureViewer.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Uninstallable=yes
-VersionInfoVersion=2.1.3.0
+VersionInfoVersion=2.1.4.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName}
 VersionInfoCopyright=Copyright (C) 2026 seria-aa
