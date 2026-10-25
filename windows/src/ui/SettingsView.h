@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include "ViewerShortcuts.h"
+#include "video/VideoColor.h"
 #ifdef LLCV_RECORDING
 #include "recording/EncoderSupport.h"
 #include "recording/RecordingStatus.h"
@@ -40,6 +41,12 @@ int SettingsNavigationIndex(SettingsTab tab);
 // deletes uiFonts after its children have been destroyed. Hardware discovery,
 // asynchronous workers and persistent settings deliberately do not belong here.
 struct SettingsControls {
+    // Transient UI only: never persisted, and never read by capture/recording.
+    bool frameOptionsOpen = false;
+    HWND frameOptionsButton = nullptr;
+    HWND frameOptionsTitle = nullptr;
+    HWND frameOptionsClose = nullptr;
+    HWND frameOptionsHint = nullptr;
     bool english = false;
     // Supplied once by the controller; view refresh never probes hardware.
     bool vsrGpuUnavailable = false;
@@ -103,7 +110,10 @@ struct SettingsControls {
     HWND screenshotTitle = nullptr;
     HWND screenshotHelp = nullptr;
     HWND screenshotFolderButton = nullptr;
-    HWND vsrCheck = nullptr;
+    HWND upscalerLabel = nullptr;
+    HWND upscalerCombo = nullptr;
+    HWND nisSharpnessLabel = nullptr;
+    HWND nisSharpnessCombo = nullptr;
     HWND vsrGuideButton = nullptr;
     HWND vsrStatus = nullptr;
     HWND displayResolutionLabel = nullptr;
@@ -164,6 +174,11 @@ struct SettingsControls {
     HWND mjpegColorLabel = nullptr;
     HWND mjpegColorCombo = nullptr;
     HWND mjpegColorHelp = nullptr;
+    HWND sdrRangeLabel = nullptr;
+    HWND sdrRangeCombo = nullptr;
+    HWND sdrRangeHelp = nullptr;
+    video_color::RangeOverride sdrRangeOverride = video_color::RangeOverride::Auto;
+    video_color::RangeOverride legacyMjpegRangeOverride = video_color::RangeOverride::Auto;
     HWND driftCombo = nullptr;
     HWND pcmQueueCombo = nullptr;
     HWND audioStatus = nullptr;
@@ -209,6 +224,7 @@ enum class SettingsHelpTopic {
     ForceHdr10,
     HdrChroma,
     MjpegColor,
+    SdrRange,
 };
 
 int SettingsPixels(int dips, UINT dpi);
@@ -260,8 +276,15 @@ bool ProcessShortcutEdit(SettingsControls* state, const MSG& message,
                          unsigned modifiers=shortcuts::Modifiers());
 void SetSettingsControlVisible(HWND control, bool visible, bool enabled = true);
 void SetSettingsText(HWND control, const wchar_t* text);
+// Display-only item data; keep the existing fixed-resolution row indices and
+// the capture-preset enum unchanged. Distinct from CB_ERR (-1).
+inline constexpr LPARAM kDisplayMatchCaptureItem = -2;
+bool DisplayResolutionMatchesCapture(HWND combo);
 void UpdateScalingControlVisibility(SettingsControls* state);
 void UpdateWindowBehaviorVisibility(SettingsControls* state);
+// Call only for a deliberate range selection, not tab/format reflow. Choosing
+// Auto explicitly also retires the older MJPEG-only range correction.
+void ApplySdrRangeSelection(SettingsControls* state);
 struct SettingsAvailability {
     bool start = true;
     bool formats = true;
@@ -272,6 +295,9 @@ struct SettingsAvailability {
 void UpdateAdvancedControlVisibility(SettingsControls* state, bool exclusive,
                                      settings::VideoPixelFormat selectedFormat,
                                      SettingsAvailability availability = {});
+RECT SettingsFrameOptionsBounds(const SettingsControls* state, HWND owner);
+bool HandleFrameOptionsMessage(SettingsControls* state, HWND owner, UINT message,
+                               WPARAM wParam, LPARAM lParam);
 void TrackSettingsTooltip(HWND target, HWND tooltip, bool active);
 void AddSettingsTooltip(SettingsControls* state, HWND owner, HWND target, const wchar_t* text);
 bool IsSettingsHelpControl(const SettingsControls* state, HWND target);

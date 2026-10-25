@@ -10,6 +10,8 @@
 
 namespace llcv::settings {
 
+enum class UpscalingMethod { NvidiaVsr = 0, CmaaNis = 1 };
+
 enum class AudioMode {
     WasapiShared,
     WasapiExclusive,
@@ -115,6 +117,8 @@ struct AppSettings {
         FullscreenCursorMode::AutoHide;
     VideoPreset videoPreset = VideoPreset::R1920x1080; // Display size, independent of VSR.
     VideoPreset capturePreset = VideoPreset::R1920x1080;
+    // New profiles follow capture; retain a fixed selection for manual switching.
+    bool displayMatchesCapture = true;
     FullscreenVideoPosition fullscreenVideoPosition = FullscreenVideoPosition::Center;
     VideoPixelFormat pixelFormat = VideoPixelFormat::Auto;
     int videoFrameRate = 0;
@@ -135,6 +139,9 @@ struct AppSettings {
     bool saveLog = false;
     bool screenshotClipboard = false;
     bool vsrEnabled = false;
+    bool cmaaNisEnabled = false;
+    UpscalingMethod preferredUpscaler = UpscalingMethod::CmaaNis;
+    int nisSharpnessPercent = 15; // 0..100; default 0.15. Display processing only.
     bool showDiagnosticConsole = false;
     bool skipStartupSettings = false;
     bool checkForUpdates = true;
@@ -145,7 +152,11 @@ struct AppSettings {
     int audioOnlyHeight = 230;
     bool forceHdr10 = false;
     hdr::ChromaLocation hdrChromaLocation = hdr::ChromaLocation::Auto;
-    video_color::Override mjpegColorOverride = video_color::Override::Auto;
+    video_color::MatrixOverride mjpegMatrixOverride = video_color::MatrixOverride::Auto;
+    video_color::RangeOverride sdrRangeOverride = video_color::RangeOverride::Auto;
+    // Older MJPEG profiles stored matrix and range together. Preserve their
+    // correction without changing raw SDR until the common range is edited.
+    video_color::RangeOverride legacyMjpegRangeOverride = video_color::RangeOverride::Auto;
     bool pixelPerfect = true;
     bool relativeWindowSize = false;
     int relativeWindowScalePpm = 0;
@@ -159,5 +170,20 @@ struct AppSettings {
     // Explicit startup display; empty preserves the last-window-position policy.
     std::wstring preferredDisplayMonitor;
 };
+
+// Enabled legacy preferences take priority; OFF remembers the last selection.
+inline UpscalingMethod SelectedUpscaler(const AppSettings& settings) {
+    return settings.cmaaNisEnabled ? UpscalingMethod::CmaaNis
+        : settings.vsrEnabled ? UpscalingMethod::NvidiaVsr : settings.preferredUpscaler;
+}
+
+inline VideoPreset EffectiveDisplayPreset(const AppSettings& settings) {
+    return settings.displayMatchesCapture ? settings.capturePreset : settings.videoPreset;
+}
+
+inline video_color::RangeOverride EffectiveSdrRange(const AppSettings& settings, bool mjpeg) {
+    return settings.sdrRangeOverride != video_color::RangeOverride::Auto || !mjpeg
+        ? settings.sdrRangeOverride : settings.legacyMjpegRangeOverride;
+}
 
 }  // namespace llcv::settings

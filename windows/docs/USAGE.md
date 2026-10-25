@@ -4,7 +4,7 @@
 
 [README](../README.md) · [Documentation](INDEX.md) · [한국어](USAGE.ko.md)
 
-[Download](#download) · [First use](#first-use) · [Finding your settings](#finding-your-settings) · [What should I choose?](#what-should-i-choose) · [Changing shortcuts](#changing-shortcuts) · [Everyday controls](#everyday-controls) · [NVIDIA VSR (experimental)](#nvidia-vsr-experimental) · [Screenshots](#screenshots) · [Troubleshooting](#troubleshooting) · [Compatibility and feature requirements](#compatibility-and-feature-requirements)
+[Download](#download) · [First use](#first-use) · [Finding your settings](#finding-your-settings) · [What should I choose?](#what-should-i-choose) · [Changing shortcuts](#changing-shortcuts) · [Everyday controls](#everyday-controls) · [CMAA2 → NIS](#cmaa2--nis-upscaling) · [NVIDIA VSR (experimental)](#nvidia-vsr-experimental) · [Screenshots](#screenshots) · [Troubleshooting](#troubleshooting) · [Compatibility and feature requirements](#compatibility-and-feature-requirements)
 
 <br>
 
@@ -16,11 +16,11 @@ Get one of the files from the [latest release](https://github.com/seria-aa/LowLa
   shortcut is created automatically; the desktop shortcut is optional.
 - **x64.zip — portable:** extract it, then run `LowLatencyCaptureViewer.exe`.
 
-**Updating to 2.1.4:** F2 opens the default settings page; recording options remain on the Recording tab.
-Existing installation paths, settings and custom shortcuts are retained.
-[Recording guide](RECORDING.md) · [2.1.4 release notes](release-notes-v2.1.4.md)
+**Updating to 2.1.7:** F6 toggles the selected upscaling method without changing it.
+Settings are shown once after each update, even when Start directly is enabled.
+[Recording guide](RECORDING.md) · [2.1.7 release notes](release-notes-v2.1.7.md)
 **40 fps capture**, added in [2.0.4](release-notes-v2.0.4.md),
-remains off by default; enable it under **Video** only when needed.
+remains off by default; enable it under **Video → More beside Frame rate** only when needed.
 Sleep prevention and earlier settings improvements are covered in the
 [2.0.3 release notes](release-notes-v2.0.3.md).
 The earlier installer-only refresh is recorded in the [2.0.2 release notes](release-notes-v2.0.2.md).
@@ -56,7 +56,7 @@ Choose the **Recording** tab for recording options. While recording or paused, F
 whether to finish the recording before returning to general settings: **Yes** saves and
 returns to settings; **No** keeps playback and the current recording state.
 
-*The following settings examples are rendered directly from the 2.1.3 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
+*The following settings examples are rendered directly from the 2.1.6 UI code. Selections are illustrative; devices and supported formats/frame rates vary by setup.*
 
 | <a id="video-settings"></a>Video settings | <a id="audio-settings"></a>Audio settings |
 | --- | --- |
@@ -73,7 +73,8 @@ returns to settings; **No** keeps playback and the current recording state.
 
 The sidebar separates **Video**, **Audio**, **Recording**, **Window**, **Guide & logs**, and **App**.
 [Recording](RECORDING.md) contains codec, quality, size/rate limits, AAC, recording volume, splitting and storage settings.
-Video contains capture/display settings, VSR, unlisted FPS requests, 40 fps capture and screenshot options.
+Video contains capture/display settings, upscaling and screenshot options. **More** next
+to Frame rate contains unlisted FPS requests and 40 fps capture.
 Audio contains output devices, buffers, volume options, audio-only mode, and LPCM 5.1.
 Window controls placement, resizing, borders, and cursor behavior.
 Guide & logs groups shortcut editing and reset, 40 fps capture guidance, and diagnostic logging; App contains language,
@@ -113,7 +114,7 @@ change Windows power settings or disable screen savers or security locks.
 | Setting | Good starting choice |
 | --- | --- |
 | Capture resolution | Start with **1920 × 1080**; this is the input size. |
-| Display resolution | Select independently of VSR. Fullscreen retains this video size with black margins. |
+| Display resolution | **Same as capture (new-profile default)** or a fixed size, independently of VSR. Fullscreen retains this size with black margins. Equal legacy capture/display sizes migrate to matching; different sizes remain fixed. |
 | Pixel format | **Auto (NV12 preferred)** |
 | Frame rate | **Auto**, or the source's actual output rate |
 | 40 fps capture | **Off (default)**. Enable to request 40 fps instead of the normal frame-rate selection; support is checked at startup |
@@ -246,7 +247,7 @@ with or without Ctrl/Alt/Shift. All valid assigned keys continue to work in the 
 | `Tab` | Show/hide live diagnostics |
 | `F3` | Show/hide the audio meter over video (audio-only has its own view) |
 | `F5` | Restore source-resolution 1:1 size (video mode) |
-| `F6` | Toggle NVIDIA VSR request (video mode) |
+| `F6` | Toggle selected upscaling (video mode) |
 | `F1` | App information and shortcuts (Help/Exit keys close only the help window while it is active) |
 | `F12` | Save a source-resolution screenshot (video mode) |
 | `F9` | Start / stop SDR/stereo recording during video playback |
@@ -262,7 +263,7 @@ with or without Ctrl/Alt/Shift. All valid assigned keys continue to work in the 
 resolutions gives 1:1 pixels; turn this off to resize the window while retaining aspect ratio.
 Borderless and exclusive fullscreen retain the selected display size with black margins.
 Choose **Fullscreen video position** under **Window** for center/edge positioning. Oversized video
-is fitted without cropping. F5 restores input size, while F6 changes only the VSR effect.
+is fitted without cropping. F5 restores input size, while F6 toggles only the selected upscaling method.
 
 **Hide title bar** removes windowed-mode borders and is separate from `F11`
 fullscreen. **Keep relative window size when moving monitors** maintains similar
@@ -303,11 +304,36 @@ page if you prefer a visible cursor.
 
 Enable **Start directly next time** to skip the settings window. Hold `Shift`
 while launching, or press `F2` from the viewer, to open it again.
+After an update, settings are shown once on the first launch. Your immediate-start
+preference is retained and applies again on the next launch after closing settings.
+Cancel also counts as the one-time display. If the acknowledgement cannot be saved, settings are shown again on the next launch.
 
 Use **Language** on the **App** page to follow the Windows language or explicitly choose
 Korean or English. The same page offers automatic update checks after startup
 (enabled by default) and manual checks. It does not install updates
 automatically; accepting the prompt opens the installer link in your browser.
+
+<br>
+
+## CMAA2 → NIS upscaling
+
+Under **Video → Upscaling**, below **Display resolution**, select **Off / CMAA2 → NIS / NVIDIA VSR**.
+CMAA2 smooths edges at source size before NIS enlargement. Sharpness defaults to **0.15**
+and is adjustable from 0.00 to 1.00. Existing VSR preferences are preserved; the new filter is opt-in.
+
+- SDR NV12/YUY2/decoded MJPEG only; enlargement up to 2× on each axis.
+- P010 HDR10 bypasses this filter and retains the original output. The SDR filter selection and sharpness are retained and apply again when returning to SDR.
+- Native size, downscaling and enlargement beyond 2× use the original path. Increase display size if it currently matches capture.
+- Display only: OSD is drawn afterward; recordings and screenshots retain the capture source.
+- Mutually exclusive with VSR. F6 toggles the selected method without switching it. NIS sharpness is retained when toggling off and on.
+- Selecting Off in settings also remembers the last method. With no selection history, F6 enables CMAA2 → NIS (default sharpness 0.15). Startup still defaults to Off.
+- Older profiles with VSR enabled retain VSR selection. Older profiles saved with upscaling already off have no last-method record and are treated as having no selection history.
+- Additional GPU work is required. Select Off for the lowest processing cost.
+
+For example, with **1920 × 1080** capture, choose **2560 × 1440** display resolution and
+**CMAA2 → NIS**. **NIS sharpness** appears below only when this method is selected.
+0.00 minimizes sharpening; it does not disable the filter.
+The adjacent **?** button explains the requirements of both upscaling methods.
 
 <br>
 
@@ -321,8 +347,8 @@ resolution choices remain available; F6 cannot enable it. Identification failure
 message. This vendor check does not certify RTX support or actual enhancement,
 does not change GPU selection, and is not repeated on tab changes or per frame.
 
-The **Video** page has an opt-in NVIDIA VSR checkbox and a **Setup guide**
-button. VSR defaults to OFF; the checkbox and F6 preference are saved on normal
+Select **NVIDIA VSR** under **Video → Upscaling**; the adjacent **?** button opens the setup guide.
+The default is Off. The remembered method and enable state changed with F6 are saved on normal
 exit. Supported viewer routes are NV12/YUY2 SDR, MJPEG decoded to NV12, and P010 HDR10
 displayed at the source size or larger. Same-size output can request native-resolution
 de-artifacting. **Capture resolution** selects the input, while **Display resolution** independently
@@ -364,8 +390,8 @@ remain source images without VSR.
 ## Screenshots
 
 Press **F12** during video playback to save a PNG in **Pictures / LowLatencyCaptureViewer**.
-The bottom of the **Video** page has **Open screenshot folder** and an opt-in
-**Also copy screenshots to clipboard** setting (off by default).
+The bottom-right screenshot section of **Video** has **Open folder** and
+**Also copy to clipboard** (off by default).
 
 **F1** opens a modeless guide with the app version, keyboard shortcuts, mouse controls,
 and screenshot information without stopping playback.
@@ -380,7 +406,7 @@ dismiss it. The Exit key here closes only the help window, not the viewer.
   max-RGB levels through 100 nits retain their linear brightness; a smooth shoulder
   compresses brighter levels instead of dimming the entire range. This fixed export
   curve is not scene-adaptive or an exact reproduction of OBS's tone mapping.
-- Captures exclude OSD, window borders, scaling, and the Sharp display filter.
+- Captures exclude OSD, window borders, scaling and Sharp/CMAA2 → NIS/VSR display processing.
 - One request is processed at a time. Source data is copied once into owned memory;
   conversion, clipboard publication, and PNG encoding run on a lower-priority worker.
   Clipboard publication precedes file encoding, but conversion still takes time.
@@ -420,11 +446,11 @@ capture devices are supported, but driver differences mean that every model
 cannot be guaranteed.
 
 - Standard support: compatible 48 kHz mono/stereo PCM or 32-bit float input, and progressive NV12/YUY2 video
+- **SDR color range**: Auto / Limited / Full, shared by playback, screenshots and recording; not applied to P010/HDR.
 - Compatibility mode: MJPEG, always listed for manual selection when the device
   exposes it, with automatic decoder-metadata-based range and BT.601/709 handling.
-  When colors still differ from another application, **MJPEG color
-  interpretation** appears for an explicit MJPEG selection and permits a manual
-  matrix/range override.
+  If needed, select BT.709/BT.601 under **MJPEG matrix** and the range under the
+  common **SDR color range** control.
 - HDR10 requires supported P010 input and an HDR-capable display/output path; ASIO requires a compatible installed driver.
 - Console LPCM 5.1 requires 48 kHz multichannel PCM capture and WASAPI Shared output.
 - Experimental: NVIDIA VSR

@@ -5,7 +5,7 @@
 HDMI 캡처보드로 들어오는 영상과 소리를 재생하는 Windows용 저지연 뷰어입니다.
 OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리만 들을 수 있습니다.
 
-**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.1.4.md) · [English](README.md)
+**[다운로드](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [사용 가이드](docs/USAGE.ko.md) · [변경 내역](docs/release-notes-v2.1.7.md) · [English](README.md)
 
 <br>
 
@@ -13,15 +13,16 @@ OBS 없이 콘솔 게임 화면을 보거나, 오디오 전용 모드로 소리�
 | --- | --- |
 | [![영상 설정](docs/images/settings-video.png)](docs/images/settings-video.png) | [![오디오 설정](docs/images/settings-audio.png)](docs/images/settings-audio.png) |
 
-<sub>2.1.3 UI 코드로 렌더링한 설정 예시입니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
+<sub>2.1.6 UI 예시입니다. 장치 목록과 지원 형식은 환경에 따라 다릅니다. 이미지를 누르면 원본 크기로 볼 수 있습니다.</sub>
 
 <br>
 
-## 2.1.4 업데이트
+## 2.1.7 업데이트
 
-**F2**로 기본 설정 화면을 열고, 녹화 옵션은 **녹화** 탭에서 선택합니다.
-큰 오디오 입력 묶음 처리, 녹화 종료 시 데이터 보존과 잘못된 설정값 처리를 보완했습니다.
-[녹화 사용 방법](docs/RECORDING.ko.md) · [전체 변경 내역](docs/release-notes-v2.1.4.md)
+**F6**은 선택한 업스케일링 방식과 선명도를 유지하면서 켜고 끕니다.
+기존에 VSR이 켜져 있던 설정은 유지하며, 선택 이력이 없으면 F6으로 **CMAA2 → NIS(0.15)**를 켭니다.
+업데이트 후 첫 실행에는 설정 창을 한 번 보여주고, 이후에는 기존 **바로 시작** 선택을 따릅니다.
+[업스케일링 사용 방법](docs/USAGE.ko.md#cmaa2--nis-업스케일링) · [전체 변경 내역](docs/release-notes-v2.1.7.md)
 
 <br>
 
@@ -38,7 +39,7 @@ Windows 10/11 x64와 캡처보드 드라이버가 필요합니다.
 2. LLCV에서 **캡처 장치**를 확인하고 **시작**을 누릅니다.
 3. 소리가 나오지 않으면 **캡처 오디오 장치**를 확인하세요.
 
-<kbd>F1</kbd> 도움말 · <kbd>F2</kbd> 설정 · <kbd>F6</kbd> VSR · <kbd>F9</kbd> 녹화 · <kbd>F11</kbd> 전체화면 · <kbd>F12</kbd> 스크린샷 · <kbd>Tab</kbd> 진단
+<kbd>F1</kbd> 도움말 · <kbd>F2</kbd> 설정 · <kbd>F6</kbd> 업스케일링 · <kbd>F9</kbd> 녹화 · <kbd>F11</kbd> 전체화면 · <kbd>F12</kbd> 스크린샷 · <kbd>Tab</kbd> 진단
 
 위 키는 기본값이며, **도움말·진단**에서 변경할 수 있습니다.
 
@@ -49,7 +50,9 @@ Windows 10/11 x64와 캡처보드 드라이버가 필요합니다.
 - 최신 프레임 우선 표시, 저지연 출력(일반·독점 전체화면)과 VSync
 - NV12/YUY2, MJPEG, P010 HDR10 입력
 - 선택적 40fps 캡처 및 목록에 없는 30fps 직접 요청 — 드라이버 수락 필요
-- NVIDIA VSR (실험적), 캡처·표시 해상도 개별 설정
+- SDR 색 범위 자동/Limited/Full — 재생·스크린샷·녹화에 공통 적용
+- NVIDIA VSR (실험적), 캡처·표시 해상도 개별 설정 또는 연동
+- CMAA2 → NIS 업스케일링: SDR 전용 확대, HDR은 기존 출력 유지, 끄기/VSR 선택, 선명도 기본 0.15
 - WASAPI Shared·Exclusive, ASIO, 콘솔 LPCM 5.1, 오디오 전용 모드
 - NV12/YUY2/MJPEG SDR·스테레오 MP4 녹화 — 코덱·품질·음량, 일시정지, 자동 분할
 - 입력 해상도 PNG 스크린샷과 클립보드 복사
@@ -68,7 +71,7 @@ VSR 동작은 GPU·드라이버에 따라 다르며 지연이 늘 수 있습니�
 
 [전체 문서 목록](docs/INDEX.ko.md)에서 릴리스 노트와 개발·검증 기록도 확인할 수 있습니다.
 
-- [사용 가이드](docs/USAGE.ko.md) — 설정, 절전 방지, 단축키, VSR, 스크린샷
+- [사용 가이드](docs/USAGE.ko.md) — 설정, 단축키, 업스케일링·VSR, 스크린샷, 절전 방지
 - [녹화](docs/RECORDING.ko.md) — 지원 조건, 품질·용량, 분할·파일 보호
 - [영상·HDR](docs/VIDEO.ko.md) / [오디오·5.1](docs/AUDIO.ko.md)
 - [문제 해결](docs/TROUBLESHOOTING.ko.md) / [진단·로그](docs/DIAGNOSTICS.ko.md) / [소스 빌드](docs/BUILDING.ko.md)

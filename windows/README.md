@@ -5,7 +5,7 @@
 A low-latency Windows viewer for video and audio from HDMI capture devices.
 Use it to play console games without OBS, or listen in audio-only mode.
 
-**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.1.4.md) · [한국어](README.ko.md)
+**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.1.7.md) · [한국어](README.ko.md)
 
 <br>
 
@@ -13,15 +13,16 @@ Use it to play console games without OBS, or listen in audio-only mode.
 | --- | --- |
 | [![Video settings](docs/images/settings-video-en.png)](docs/images/settings-video-en.png) | [![Audio settings](docs/images/settings-audio-en.png)](docs/images/settings-audio-en.png) |
 
-<sub>Settings examples rendered from the 2.1.3 UI code. Click an image to view it at full resolution.</sub>
+<sub>2.1.6 UI examples. Device lists and supported formats vary by system. Click an image to view it at full resolution.</sub>
 
 <br>
 
-## What's new in 2.1.4
+## What's new in 2.1.7
 
-**F2** opens the default settings page; select the **Recording** tab for recording options.
-Improved handling of large audio input packets, recording finalization and invalid saved settings.
-[Recording guide](docs/RECORDING.md) · [Full release notes](docs/release-notes-v2.1.4.md)
+**F6** toggles the selected upscaling method without changing it or its sharpness.
+Previously enabled VSR settings are retained. With no selection history, F6 enables **CMAA2 → NIS (0.15)**.
+After an update, settings are shown once on the first launch; subsequent launches follow your existing **Start directly** preference.
+[Upscaling guide](docs/USAGE.md#cmaa2--nis-upscaling) · [Full release notes](docs/release-notes-v2.1.7.md)
 
 <br>
 
@@ -38,7 +39,7 @@ For the portable version, extract **x64.zip** and run `LowLatencyCaptureViewer.e
 2. Check **Capture device** in LLCV and select **Start**.
 3. If audio is missing, check **Capture audio device**.
 
-<kbd>F1</kbd> Help · <kbd>F2</kbd> Settings · <kbd>F6</kbd> VSR · <kbd>F9</kbd> Record · <kbd>F11</kbd> Fullscreen · <kbd>F12</kbd> Screenshot · <kbd>Tab</kbd> Diagnostics
+<kbd>F1</kbd> Help · <kbd>F2</kbd> Settings · <kbd>F6</kbd> Upscaling · <kbd>F9</kbd> Record · <kbd>F11</kbd> Fullscreen · <kbd>F12</kbd> Screenshot · <kbd>Tab</kbd> Diagnostics
 
 These are the default keys; change them under **Guide & logs**.
 
@@ -49,7 +50,9 @@ These are the default keys; change them under **Guide & logs**.
 - Latest-frame-first presentation with low latency (standard or exclusive fullscreen) and VSync
 - NV12/YUY2, MJPEG, and P010 HDR10 input
 - Optional 40 fps capture and unlisted 30 fps requests, subject to driver acceptance
-- NVIDIA VSR (experimental), with separate capture and display resolutions
+- SDR range Auto/Limited/Full, shared by playback, screenshots and recording
+- NVIDIA VSR (experimental), with separate or capture-matched display resolutions
+- CMAA2 → NIS upscaling for SDR enlargement; HDR retains the original output. Select Off/VSR, default sharpness 0.15
 - WASAPI Shared/Exclusive, ASIO, console LPCM 5.1, and audio-only mode
 - NV12/YUY2/MJPEG SDR/stereo MP4 recording — codec, quality, volume, pause and splitting
 - Source-resolution PNG screenshots with optional clipboard copy
@@ -68,7 +71,7 @@ See the [feature requirements](docs/USAGE.md#compatibility-and-feature-requireme
 
 The [documentation index](docs/INDEX.md) also lists release notes and development/validation records.
 
-- [User guide](docs/USAGE.md) — settings, sleep prevention, shortcuts, VSR, and screenshots
+- [User guide](docs/USAGE.md) — settings, shortcuts, upscaling/VSR, screenshots and sleep prevention
 - [Recording](docs/RECORDING.md) — requirements, quality, splitting and file protection
 - [Video and HDR](docs/VIDEO.md) / [Audio and 5.1](docs/AUDIO.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md) / [Diagnostics and logs](docs/DIAGNOSTICS.md) / [Build from source](docs/BUILDING.md)

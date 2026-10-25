@@ -7,12 +7,13 @@
 Records NV12/YUY2/MJPEG SDR video with 16-bit PCM stereo input to MP4.
 MJPEG input is decoded on the recording worker and saved with the selected H.264, HEVC or AV1 encoder.
 MJPEG recording adds decoding work and can increase CPU usage.
-Recordings retain the input color range/matrix; MJPEG also follows the override selected under **Video → MJPEG color interpretation**.
+Recordings use the same color interpretation as playback and screenshots. **Video → SDR color range**
+applies to all SDR inputs; **MJPEG matrix** applies only to MJPEG. Both default to Auto.
 HDR, multichannel and audio-only recording are not supported; playback supports more formats.
 
 ![Recording settings example](images/settings-recording-en.png)
 
-<sub>Example rendered from the 2.1.3 UI code. Encoder support varies by system.</sub>
+<sub>Example rendered from the 2.1.6 UI code. Encoder support varies by system.</sub>
 
 <br>
 
@@ -51,7 +52,7 @@ Defaults: **H.264 · automatic hardware · quality (CQP) · balanced (QP 23)**, 
 | Automatic splitting | Off, duration (15/30/60/120 minutes), or size (1/2/4/8/16 GiB). A segment waits for an independently decodable boundary and may exceed the threshold. |
 
 Set **Recording volume**, next to **Audio (AAC)** in the **Recording** tab, to 0–100% before recording. The default is 100%; 0% mutes the recording. This setting is saved separately from playback volume.
-VSR, display scaling/placement, OSD, screenshot processing, playback volume changes and playback mute do not affect recordings.
+CMAA2 → NIS, VSR, display scaling/placement, OSD, screenshot processing, playback volume changes and playback mute do not affect recordings.
 Unsupported combinations report an error instead of silently changing codec or switching to CPU encoding.
 If encoding affects playback or cannot keep up, lower the recording resolution/frame-rate limit first.
 
@@ -61,6 +62,8 @@ If encoding affects playback or cannot keep up, lower the recording resolution/f
 
 The default folder is **Videos → LLCV**. Choose another folder in settings.
 Remaining space updates during recording. If it cannot be checked for the displayed folder, the app shows it as unavailable, not as zero.
+Space queries run asynchronously on the existing storage worker, so encoding does not wait for them. Updates can lag; the finalization reserve and detection of actual write failures remain in place.
+Long storage stalls can still exhaust bounded queues or delay finalization.
 Low space, write failures and overload stop recording with a notice while playback continues.
 Closing during recording asks for confirmation, then finishes saving. If saving stalls, follow the prompt; forcing an exit may lose the final section.
 

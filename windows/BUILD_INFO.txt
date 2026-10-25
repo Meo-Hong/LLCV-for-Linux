@@ -1,4 +1,39 @@
-LLCV v2.1.4 x64 (continued from the v0.14.2 rework)
+LLCV v2.1.7 x64 (continued from the v0.14.2 rework)
+
+v2.1.7 Selected upscaling toggle and first launch after updates
+------------------------------------------------------------
+- F6 toggles the selected upscaler without switching methods or resetting NIS sharpness.
+- Preserves enabled legacy VSR preferences and the existing custom shortcut binding.
+- With no selection history, F6 enables CMAA2 -> NIS at default sharpness 0.15; startup stays OFF.
+- Shortcut help and OSD follow the selected method, including HDR/scale bypass states.
+- Shows settings once after each version update without clearing the immediate-start preference.
+- Writes only the startup acknowledgement marker after settings are displayed, including Cancel.
+- See tests/RELEASE_V2_1_7_AUDIT.md for preparation status and validation evidence.
+
+v2.1.6 SDR upscaling and settings layout
+---------------------------------------
+- Adds opt-in CMAA2 before NIS for SDR enlargement, with default sharpness 0.15.
+- Adds an Off/CMAA2 -> NIS/NVIDIA VSR selector and sharpness controls.
+- Bypasses the new filter for HDR, native size, downscaling and enlargement beyond 2x per axis.
+- Keeps recordings/screenshots on the capture-source path and draws OSD after display filtering.
+- Aligns settings tabs, inline controls and footer margins without adding scrolling.
+- Reduces temporary UI allocations and redundant control-class queries during layout.
+- Excludes manual preview/benchmark targets from the default build.
+- Separates test/private-preview profiles from real settings.
+- See tests/RELEASE_V2_1_6_AUDIT.md for preparation status and validation evidence.
+
+v2.1.5 Capture settings and recording reliability
+-------------------------------------------------
+- Validates explicit FPS requests without silent rate substitution; Auto selection is retained.
+- Preserves unavailable selections and warns about sustained excess actual capture FPS.
+- Adds Auto/Limited/Full SDR range shared by playback, screenshots and recording; HDR is unaffected.
+- Groups optional FPS requests under More and adds capture-matched display sizing.
+- New profiles and equal legacy capture/display sizes follow capture; differing sizes stay fixed and explicit modes win.
+- Moves periodic free-space queries to the existing storage worker and reuses the existing video-buffer budget.
+- Verifies total stored frames, storage delays, low-space finalization and independent full-file decoding.
+- Retains settings, shortcuts, installation paths and 1080p/60fps recording defaults.
+- No physical HDMI latency or universal device-compatibility guarantee is claimed.
+- See tests/RELEASE_V2_1_5_AUDIT.md for preparation status and verification limits.
 
 v2.1.4 Settings access and recording reliability
 -----------------------------------------------

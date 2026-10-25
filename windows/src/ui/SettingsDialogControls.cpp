@@ -24,8 +24,12 @@ void ApplyResolutionSelections(const SettingsControls& state,
     if (capture >= 0 && static_cast<size_t>(capture) < presets.size()) {
         settings.capturePreset = presets[capture].preset;
     }
-    if (display >= 0 && static_cast<size_t>(display) < presets.size())
+    if (DisplayResolutionMatchesCapture(state.displayResolutionCombo)) {
+        settings.displayMatchesCapture = true;
+    } else if (display >= 0 && static_cast<size_t>(display) < presets.size()) {
+        settings.displayMatchesCapture = false;
         settings.videoPreset = presets[display].preset;
+    }
     if (state.fullscreenPositionCombo) {
         const LRESULT position = SendMessageW(state.fullscreenPositionCombo, CB_GETCURSEL, 0, 0);
         settings.fullscreenVideoPosition = settings::FullscreenPositionFromIndex(static_cast<int>(position));
@@ -60,6 +64,8 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     };
 
     state->english = initial.english;
+    state->sdrRangeOverride = initial.settings.sdrRangeOverride;
+    state->legacyMjpegRangeOverride = initial.settings.legacyMjpegRangeOverride;
     state->brandLabel = makeLabel(L"LLCV", 12, 28);
     state->pageTitle = makeLabel(L"", 184, 24);
     state->pageSubtitle = makeLabel(L"", 184, 60);
@@ -424,6 +430,18 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
         0, 0, 24, 24, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_CAPTURE_40_HELP)), instance, nullptr);
+    state->frameOptionsButton = CreateWindowExW(0, L"BUTTON",
+        initial.english ? L"More ▾" : L"추가 설정 ▾",
+        WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON, 0, 0, 96, 28, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_FRAME_OPTIONS)), instance, nullptr);
+    state->frameOptionsTitle = makeLabel(initial.english ? L"Frame options" : L"프레임 추가 설정", 0, 0);
+    state->frameOptionsClose = CreateWindowExW(0, L"BUTTON", L"×",
+        WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON, 0, 0, 28, 28, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_FRAME_OPTIONS_CLOSE)), instance, nullptr);
+    state->frameOptionsHint = CreateWindowExW(0, L"STATIC",
+        initial.english ? L"Unlisted FPS adds a 30 fps request.\n40 fps overrides the frame selection.\nDevice support is required."
+                        : L"목록에 없는 30fps를 직접 요청합니다.\n40fps는 프레임 선택보다 우선합니다.\n장치 지원이 필요합니다.",
+        WS_CHILD | SS_LEFT, 0, 0, 312, 56, hwnd, nullptr, instance, nullptr);
     state->guideLsButton = CreateWindowExW(0, L"BUTTON",
         initial.english ? L"40 fps capture guide" : L"40fps 캡처 안내",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
@@ -434,15 +452,27 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
         468, 104, 84, 28, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_VIDEO_REFRESH)), instance, nullptr);
-    state->vsrCheck = CreateWindowExW(0, L"BUTTON",
-        L"NVIDIA VSR (F6)",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
-        34, 444, 295, 26, hwnd,
-        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_VSR)), instance, nullptr);
-    SendMessageW(state->vsrCheck, BM_SETCHECK,
-        initial.settings.vsrEnabled && !state->vsrGpuUnavailable ? BST_CHECKED : BST_UNCHECKED, 0);
+    state->upscalerLabel = makeLabel(initial.english ? L"Upscaling" : L"업스케일링", 600, 412);
+    state->upscalerCombo = CreateWindowExW(0, L"COMBOBOX", nullptr, kSettingsDropdownStyle,
+        724, 412, 252, 150, hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_UPSCALER)), instance, nullptr);
+    for (const auto* label : {initial.english ? L"Off" : L"끄기", L"CMAA2 → NIS", L"NVIDIA VSR"}) {
+        SendMessageW(state->upscalerCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
+    }
+    SendMessageW(state->upscalerCombo, CB_SETCURSEL,
+        initial.settings.cmaaNisEnabled ? 1 : initial.settings.vsrEnabled && !state->vsrGpuUnavailable ? 2 : 0, 0);
+    state->nisSharpnessLabel = makeLabel(initial.english ? L"NIS sharpness" : L"NIS 선명도", 600, 448);
+    state->nisSharpnessCombo = CreateWindowExW(0, L"COMBOBOX", nullptr, kSettingsDropdownStyle,
+        724, 448, 136, 180, hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_NIS_SHARPNESS)), instance, nullptr);
+    // Exact hundredths allow saved values to round-trip without quantization.
+    for (int sharpness=0; sharpness<=100; ++sharpness) {
+        wchar_t label[16]{};
+        swprintf_s(label,L"%.2f",double(sharpness)/100.0);
+        SendMessageW(state->nisSharpnessCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
+    }
+    SendMessageW(state->nisSharpnessCombo,CB_SETCURSEL,
+        std::clamp(initial.settings.nisSharpnessPercent,0,100),0);
     state->vsrGuideButton = CreateWindowExW(0, L"BUTTON",
-        initial.english ? L"Setup guide" : L"설정 안내",
+        L"?",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
         340, 444, 120, 26, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_VSR_GUIDE)), instance, nullptr);
@@ -457,6 +487,13 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         if (preset.preset == initial.initialVideoPreset)
             SendMessageW(state->displayResolutionCombo, CB_SETCURSEL, index, 0);
     }
+    const LRESULT matchCapture = SendMessageW(state->displayResolutionCombo, CB_ADDSTRING, 0,
+        reinterpret_cast<LPARAM>(initial.english ? L"Same as capture" : L"캡처 해상도와 동일"));
+    if (matchCapture >= 0) {
+        SendMessageW(state->displayResolutionCombo, CB_SETITEMDATA, matchCapture, kDisplayMatchCaptureItem);
+        if (initial.settings.displayMatchesCapture)
+            SendMessageW(state->displayResolutionCombo, CB_SETCURSEL, matchCapture, 0);
+    }
     state->vsrStatus = makeLabel(initial.english
         ? L"SDR / HDR10 · Toggle with F6"
         : L"SDR / HDR10 · F6으로 전환", 34, 474);
@@ -469,7 +506,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     SendMessageW(state->screenshotClipboardCheck, BM_SETCHECK,
         initial.settings.screenshotClipboard ? BST_CHECKED : BST_UNCHECKED, 0);
     state->screenshotHelp = CreateWindowExW(
-        0, L"STATIC", initial.english ? L"Source-size PNG\r\nHDR to SDR" : L"입력 해상도 PNG\r\nHDR은 SDR로 저장",
+        0, L"STATIC", initial.english ? L"Source-size PNG · HDR saved as SDR" : L"입력 해상도 PNG · HDR은 SDR로 저장",
         WS_CHILD | WS_VISIBLE | SS_LEFT, 705, 530, 200, 36,
         hwnd, nullptr, instance, nullptr);
     state->screenshotFolderButton = CreateWindowExW(
@@ -770,8 +807,27 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     AddSettingsTooltip(state, hwnd, state->hdrChromaHelp,
         SettingsHelpText(SettingsHelpTopic::HdrChroma, initial.english));
 
+    state->sdrRangeLabel = makeLabel(initial.english ? L"SDR color range" : L"SDR 색 범위", 24, 376);
+    state->sdrRangeCombo = CreateWindowExW(0, L"COMBOBOX", nullptr,
+        kSettingsDropdownStyle, 190, 372, 240, 150, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SDR_RANGE)), instance, nullptr);
+    const wchar_t* rangeChoices[] = {initial.english ? L"Auto" : L"자동", L"Limited", L"Full"};
+    for (int i = 0; i < 3; ++i) {
+        const LRESULT row = SendMessageW(state->sdrRangeCombo, CB_ADDSTRING, 0,
+            reinterpret_cast<LPARAM>(rangeChoices[i]));
+        SendMessageW(state->sdrRangeCombo, CB_SETITEMDATA, row, i);
+    }
+    SendMessageW(state->sdrRangeCombo, CB_SETCURSEL,
+        static_cast<WPARAM>(settings::EffectiveSdrRange(initial.settings,
+            initial.settings.pixelFormat == settings::VideoPixelFormat::Mjpeg)), 0);
+    state->sdrRangeHelp = CreateWindowExW(0, L"BUTTON", L"?",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 438, 372, 24, 24, hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SDR_RANGE_HELP)), instance, nullptr);
+    AddSettingsTooltip(state, hwnd, state->sdrRangeHelp,
+        SettingsHelpText(SettingsHelpTopic::SdrRange, initial.english));
+
     state->mjpegColorLabel = makeLabel(
-        text(L"MJPEG 색상 해석"), 24, 376);
+        initial.english ? L"MJPEG matrix" : L"MJPEG 색 공간", 24, 376);
     state->mjpegColorCombo = CreateWindowExW(
         0, L"COMBOBOX", nullptr,
         kSettingsDropdownStyle,
@@ -781,13 +837,11 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         instance, nullptr);
     const struct {
         const wchar_t* label;
-        llcv::video_color::Override value;
+        llcv::video_color::MatrixOverride value;
     } mjpegColorChoices[] = {
-        {text(L"자동 (권장)"), llcv::video_color::Override::Auto},
-        {L"BT.709 · Full range", llcv::video_color::Override::Bt709Full},
-        {L"BT.709 · Limited range", llcv::video_color::Override::Bt709Limited},
-        {L"BT.601 · Full range", llcv::video_color::Override::Bt601Full},
-        {L"BT.601 · Limited range", llcv::video_color::Override::Bt601Limited},
+        {initial.english ? L"Auto" : L"자동", llcv::video_color::MatrixOverride::Auto},
+        {L"BT.709", llcv::video_color::MatrixOverride::Bt709},
+        {L"BT.601", llcv::video_color::MatrixOverride::Bt601},
     };
     LRESULT selectedMjpegColor = 0;
     for (const auto& choice : mjpegColorChoices) {
@@ -797,7 +851,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         SendMessageW(state->mjpegColorCombo, CB_SETITEMDATA,
                      static_cast<WPARAM>(index),
                      static_cast<LPARAM>(choice.value));
-        if (choice.value == initial.settings.mjpegColorOverride) {
+        if (choice.value == initial.settings.mjpegMatrixOverride) {
             selectedMjpegColor = index;
         }
     }
@@ -935,16 +989,21 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         state->captureDeviceLabel, state->captureDeviceCombo,
         state->captureAudioDeviceLabel, state->captureAudioDeviceCombo, state->captureAudioStatus,
         state->videoLabel, state->videoCombo, state->frameRateLabel, state->frameRateCombo,
+        state->frameOptionsButton, state->frameOptionsTitle,
+        state->unlistedFpsCheck, state->capture40Check, state->capture40Help,
+        state->frameOptionsHint, state->frameOptionsClose,
         state->pixelFormatLabel, state->pixelFormatCombo, state->videoCapabilityStatus,
         state->forceHdr10Check, state->forceHdr10Help,
         state->hdrChromaLabel, state->hdrChromaCombo, state->hdrChromaHelp,
+        state->sdrRangeLabel, state->sdrRangeCombo, state->sdrRangeHelp,
         state->mjpegColorLabel, state->mjpegColorCombo, state->mjpegColorHelp,
-        state->unlistedFpsCheck, state->unlistedFpsStatus, state->capture40Check, state->capture40Help,
+        state->unlistedFpsStatus,
         state->videoDisplaySection,
         state->presentationLabel, state->presentationCombo, state->presentationHelp,
         state->displayMonitorLabel, state->displayMonitorCombo, state->pixelCheck,
         state->scalingLabel, state->scalingCombo,
-        state->displayResolutionLabel, state->displayResolutionCombo, state->vsrCheck, state->vsrGuideButton, state->vsrStatus,
+        state->displayResolutionLabel, state->displayResolutionCombo, state->upscalerLabel, state->upscalerCombo,
+        state->nisSharpnessLabel, state->nisSharpnessCombo, state->vsrGuideButton, state->vsrStatus,
         state->screenshotTitle, state->screenshotClipboardCheck,
         state->screenshotFolderButton, state->screenshotHelp,
 
@@ -992,7 +1051,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
             }
         }
     }
-    for (HWND control : {state->screenshotTitle,state->vsrCheck,state->skipStartupHint,state->fullscreenCursorHint}) {
+    for (HWND control : {state->screenshotTitle,state->skipStartupHint,state->fullscreenCursorHint}) {
         wchar_t caption[512]{}; GetWindowTextW(control,caption,512);
         state->shortcutCaptionTemplates.emplace_back(control,caption);
     }

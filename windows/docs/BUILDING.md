@@ -12,7 +12,7 @@
 
 - Windows 10 or 11 x64
 - Visual Studio 2022 with **Desktop development with C++**
-- Windows SDK and CMake tools for Windows
+- Windows SDK (including fxc for shader compilation) and CMake tools for Windows
 - Git for Windows (Git Bash), curl and tar to build the FFmpeg mux dependency
 - Inno Setup 7 only when building the installer
 
@@ -43,7 +43,23 @@ build\Release\LowLatencyCaptureViewer.exe
 The release configuration uses the static MSVC runtime, so the packaged
 executable does not require a separate Visual C++ Redistributable installation.
 
-The 2.1.4 suite adds default-settings shortcut routing, recording cancellation with a live
+The 2.1.7 suite adds F6 method/sharpness retention, legacy VSR migration,
+first-launch update review, marker save failures and real-profile access denial.
+See tests/RELEASE_V2_1_7_AUDIT.md for validation scope.
+
+NIS/CMAA2 shaders are compiled into the executable at build time. Runtime shader compilation
+and source files are not required. Sources, modifications and licenses are in third_party/upscaling.
+Per-shader dependencies prevent an NIS-only change from rebuilding CMAA2 shaders.
+
+SettingsPreview, RecordingIndicatorPreview and RecordingQualityBenchmark are manual tools
+excluded from the default build. Request them explicitly with cmake --build and --target.
+Automated regression tests remain part of the default build.
+
+Tests and private previews use a fresh temporary profile per process and do not load or save
+actual app settings. The regular application still uses its normal user profile.
+Use newly built test tools for manual validation; see tests/PROFILE_ISOLATION.md.
+
+Existing tests cover default-settings shortcut routing, recording cancellation with a live
 settings window, recording input-device changes and large audio packets, final queue draining,
 invalid numeric settings and bit-identical audio resampling regressions.
 The cancellation test uses hidden windows, synthetic media and simulated presentation
@@ -69,7 +85,7 @@ report that as complete coverage. These programs are never included in packages.
 
 <br>
 
-A playback-only developer build can use `-DLLCV_RECORDING=OFF` without FFmpeg; it is not the 2.1.4 release package.
+A playback-only developer build can use `-DLLCV_RECORDING=OFF` without FFmpeg; it is not the 2.1.7 release package.
 The mux runtime and `ffmpeg-licenses` folder must remain beside the executable.
 
 The held audio-input recovery prototype is **off by default**. For private diagnosis only,
@@ -83,7 +99,7 @@ It is not a confirmed fix for capture-device silence.
 ## Installer and portable ZIP
 
 After the Release build, run these commands from the repository root. These
-examples package v2.1.4 using the `build\Release` output above; the build-directory
+examples package v2.1.7 using the `build\Release` output above; the build-directory
 override is required because the release scripts normally use a versioned
 build directory.
 
@@ -92,16 +108,17 @@ chcp.com 65001 > $null
 & "C:\Program Files\Inno Setup 7\ISCC.exe" `
   "--define=BuildDir=..\build\Release" ".\installer\LowLatencyCaptureViewer.iss"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-v1.ps1 `
-  -Version 2.1.4 -BuildDir ..\build\Release -OutputDir outputs\v2.1.4
+  -Version 2.1.7 -BuildDir ..\build\Release -OutputDir outputs\v2.1.7
 ```
 
-The outputs are `outputs\v2.1.4\LowLatencyCaptureViewer_v2.1.4_Setup.exe`
-and `outputs\v2.1.4\LowLatencyCaptureViewer_v2.1.4_x64.zip`. When preparing
+The outputs are `outputs\v2.1.7\LowLatencyCaptureViewer_v2.1.7_Setup.exe`
+and `outputs\v2.1.7\LowLatencyCaptureViewer_v2.1.7_x64.zip`. When preparing
 another version, update the versioned release files first; changing a ZIP name
 does not update the executable. See the [release checklist](RELEASING.md).
 
 Both packages must include `LICENSE`, `ASIO-SDK-LICENSE.txt`,
-`ASIO-HOST-LICENSE.txt`, and `PRETENDARD-LICENSE.txt`. They must not contain machine-specific `settings.ini`
+`ASIO-HOST-LICENSE.txt`, `PRETENDARD-LICENSE.txt`, `NIS-LICENSE.txt`,
+`CMAA2-LICENSE.txt`, and `UPSCALING-NOTICE.txt`. They must not contain machine-specific `settings.ini`
 files, diagnostic logs, test executables, PDB files, or build directories.
 Automated tests do not replace real-device or long-duration playback checks;
 record separately which hardware checks were actually performed.

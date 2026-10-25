@@ -4,6 +4,7 @@
 #undef fwprintf
 #include "../src/audio/AsioOutput.cpp"
 #include <limits>
+#include <fstream>
 
 #ifndef LLCV_VSR_EXPERIMENT
 template<class Renderer>
@@ -23,6 +24,7 @@ static void TestPolicy() {
     Require(Eligible(0x10de, DXGI_FORMAT_NV12, false, 1280,720,1920,1080), "720p to 1080p eligible");
     const auto savedSettings = g_settings;
     const UINT savedVendor = g_vsrGpuVendor.load();
+    g_settings.preferredUpscaler=llcv::settings::UpscalingMethod::NvidiaVsr;
     for (UINT vendor : {0u, 0x8086u, 0x1002u, 0x1414u}) {
         g_vsrGpuVendor = vendor;
         g_settings.audioOnly = false;
@@ -42,14 +44,17 @@ static void TestPolicy() {
     g_settings.videoFrameRate = 120;
     Require(RequestedVideoFrameRate() == 120, "720p explicit FPS retained");
     g_settings.videoPreset = static_cast<VideoPreset>(-1);
+    g_settings.displayMatchesCapture = false; // Validate a fixed preset, not the new follow-capture default.
     Require(CurrentVideoPreset().preset == VideoPreset::R1920x1080,
             "invalid preset fallback remains 1080p");
     // Resolve the capture/display plan once, before a graph starts. F6 must
     // never turn a 720p graph into a 4K graph or change window dimensions.
-    for (bool enabled : {false, true})
+    for (bool matchCapture : {false, true}) for (bool enabled : {false, true})
     for (const auto& display : kVideoPresets) for (const auto& capture : kVideoPresets) {
         g_settings.videoPreset = display.preset;
         g_settings.capturePreset = capture.preset;
+        g_settings.displayMatchesCapture = matchCapture;
+        const auto& expectedDisplay = matchCapture ? capture : display;
         g_settings.vsrEnabled = enabled;
         g_settings.audioOnly = false;
         g_settings.pixelPerfect = true;
@@ -57,14 +62,16 @@ static void TestPolicy() {
         LatchVideoResolutionPlan();
         Require(CurrentCapturePreset().preset == capture.preset, "capture selection independent of VSR");
         const SIZE initial = InitialClientPixelsForMonitor(nullptr);
-        Require(initial.cx == display.width && initial.cy == display.height, "display selection independent of VSR");
+        Require(initial.cx == expectedDisplay.width && initial.cy == expectedDisplay.height,
+            "fixed and same-as-capture display selections are independent of VSR");
         Require(RequestedVideoFrameRate() == capture.framerate, "FPS default follows capture");
-        Require(SourcePixelPerfect() == (display.preset == capture.preset), "split display never letterboxes as 1:1");
+        Require(SourcePixelPerfect() == (expectedDisplay.preset == capture.preset), "split display never letterboxes as 1:1");
         g_vsrMode.store(Mode::On);
         for (int toggle = 0; toggle < 20; ++toggle) {
             HandleVsrTestKey(VK_F6, 0, 0);
             Require(CurrentCapturePreset().preset == capture.preset &&
-                InitialClientPixelsForMonitor(nullptr).cx == display.width,
+                InitialClientPixelsForMonitor(nullptr).cx == expectedDisplay.width &&
+                g_settings.videoPreset == display.preset,
                 "F6 preserves latched capture and display across repeated toggles");
         }
     }
@@ -275,11 +282,12 @@ static void TestConnectedMjpegColor() {
         auto changedType=type;changedType.pbFormat=reinterpret_cast<BYTE*>(&changed);
         Require(!MatchesVideoSampleFormat(&changedType,format),
             "real MJPEG range change is still rejected by the dynamic-type guard");
-        for(auto overrideMode:{Override::Auto,Override::Bt709Full,Override::Bt601Limited}) {
+        for(auto overrideMode:{MatrixOverride::Auto,MatrixOverride::Bt709,MatrixOverride::Bt601})
+        for(auto rangeOverride:{RangeOverride::Auto,RangeOverride::Limited,RangeOverride::Full}) {
             MjpegDecoder playback, recording;
-            Check(playback.initialize(640,480,60,&type,&effective,overrideMode,nullptr),
+            Check(playback.initialize(640,480,60,&type,&effective,overrideMode,nullptr,rangeOverride),
                 "playback MJPEG decoder uses effective connected color");
-            Check(recording.initialize(640,480,60,&type,&format.color,overrideMode,nullptr),
+            Check(recording.initialize(640,480,60,&type,&format.color,overrideMode,nullptr,rangeOverride),
                 "recording MJPEG decoder uses the same connected color");
             Require(playback.colorConfiguration()==recording.colorConfiguration(),
                 "automatic and manually overridden MJPEG playback/recording colors agree");
@@ -353,10 +361,14 @@ static void TestSettingsController() {
     g_suppressSettingsSave = true;
     g_settings.captureDeviceId = L"controller-test-sentinel";
     g_settings.videoPreset = VideoPreset::R2560x1440;
+    g_settings.displayMatchesCapture = true;
     g_settings.audioOnly = false;
     g_settings.vsrEnabled = true;
     g_settings.volumePercent = 73;
     g_settings.pcmQueueTargetMs = 25;
+    g_settings.sdrRangeOverride = llcv::video_color::RangeOverride::Auto;
+    g_settings.legacyMjpegRangeOverride = llcv::video_color::RangeOverride::Full;
+    g_settings.mjpegMatrixOverride = llcv::video_color::MatrixOverride::Bt601;
     g_settings.shortcuts=keys::Defaults;
 #ifdef LLCV_RECORDING
     {
@@ -389,9 +401,12 @@ static void TestSettingsController() {
     g_settings.shortcuts[0]=VK_F10;
     auto unchanged = [&] {
         Require(g_settings.captureDeviceId == L"controller-test-sentinel" &&
-            g_settings.videoPreset == VideoPreset::R2560x1440 && !g_settings.audioOnly &&
+            g_settings.videoPreset == VideoPreset::R2560x1440 && g_settings.displayMatchesCapture && !g_settings.audioOnly &&
             g_settings.vsrEnabled && g_settings.volumePercent == 73 && g_settings.pcmQueueTargetMs == 25 &&
-            g_settings.shortcuts[0]==VK_F10,
+            g_settings.shortcuts[0]==VK_F10 &&
+            g_settings.sdrRangeOverride == llcv::video_color::RangeOverride::Auto &&
+            g_settings.legacyMjpegRangeOverride == llcv::video_color::RangeOverride::Full &&
+            g_settings.mjpegMatrixOverride == llcv::video_color::MatrixOverride::Bt601,
             "blocked/cancelled controller action preserves settings");
     };
     WNDCLASSW wc{};
@@ -461,6 +476,18 @@ static void TestSettingsController() {
         const auto nv12 = SendMessageW(state.pixelFormatCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"NV12"));
         SendMessageW(state.pixelFormatCombo,CB_SETITEMDATA,nv12,static_cast<LPARAM>(VideoPixelFormat::Nv12));
         SendMessageW(state.pixelFormatCombo,CB_SETCURSEL,nv12,0);
+        state.sdrRangeOverride = g_settings.sdrRangeOverride;
+        state.legacyMjpegRangeOverride = g_settings.legacyMjpegRangeOverride;
+        state.sdrRangeCombo = child(L"COMBOBOX",L"",CBS_DROPDOWNLIST,IDC_SETTINGS_SDR_RANGE);
+        state.mjpegColorCombo = child(L"COMBOBOX",L"",CBS_DROPDOWNLIST,IDC_SETTINGS_MJPEG_COLOR);
+        for (HWND combo : {state.sdrRangeCombo, state.mjpegColorCombo}) {
+            for (int value = 0; value < 3; ++value) {
+                const auto row = SendMessageW(combo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Color choice"));
+                SendMessageW(combo,CB_SETITEMDATA,row,value);
+            }
+        }
+        SendMessageW(state.mjpegColorCombo,CB_SETCURSEL,
+            static_cast<WPARAM>(g_settings.mjpegMatrixOverride),0);
         state.frameRateCombo = child(L"COMBOBOX",L"",CBS_DROPDOWNLIST,IDC_SETTINGS_FRAME_RATE);
         SendMessageW(state.frameRateCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"60 fps"));
         state.startButton = child(L"BUTTON",L"Start",BS_DEFPUSHBUTTON,IDC_SETTINGS_START);
@@ -489,6 +516,12 @@ static void TestSettingsController() {
         state.shortcutBindings[0]=keys::Ctrl|'H';
         state.pixelFormats.push_back({VideoPixelFormat::Nv12,60});
         UpdateAdvancedControlVisibility(&state);
+        SendMessageW(state.sdrRangeCombo,CB_SETCURSEL,1,0);
+        SendMessageW(hwnd,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_SDR_RANGE,CBN_SELCHANGE),
+            reinterpret_cast<LPARAM>(state.sdrRangeCombo));
+        Require(state.sdrRangeOverride == llcv::video_color::RangeOverride::Limited &&
+            state.legacyMjpegRangeOverride == llcv::video_color::RangeOverride::Auto,
+            "explicit SDR range edits replace only pending legacy MJPEG preferences");
         Require(SettingsCanStart(&state), "valid mocked capture mode can start");
         EnableWindow(state.startButton,FALSE);
         SendMessageW(hwnd,WM_COMMAND,MAKEWPARAM(IDOK,BN_CLICKED),0);
@@ -549,9 +582,17 @@ static void TestSettingsController() {
         state.shortcutBindings[0]=keys::Ctrl|'H';
         state.pixelFormats.push_back({VideoPixelFormat::Nv12,60});
         UpdateAdvancedControlVisibility(&state);
+        SendMessageW(state.sdrRangeCombo,CB_SETCURSEL,2,0);
+        SendMessageW(hwnd,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_SDR_RANGE,CBN_SELCHANGE),
+            reinterpret_cast<LPARAM>(state.sdrRangeCombo));
+        SendMessageW(state.mjpegColorCombo,CB_SETCURSEL,1,0);
         FinishSettingsDialog(hwnd,&state,true);
         Require(!IsWindow(hwnd) && state.accepted &&
-            g_settings.shortcuts==state.shortcutBindings,"Start commits the edited shortcut snapshot");
+            g_settings.shortcuts==state.shortcutBindings &&
+            g_settings.sdrRangeOverride == llcv::video_color::RangeOverride::Full &&
+            g_settings.legacyMjpegRangeOverride == llcv::video_color::RangeOverride::Auto &&
+            g_settings.mjpegMatrixOverride == llcv::video_color::MatrixOverride::Bt709,
+            "Start commits the edited shortcut, common SDR range and separate MJPEG matrix snapshot");
     }
     UnregisterClassW(wc.lpszClassName,wc.hInstance);
     if (IsWindow(previousForeground)) SetForegroundWindow(previousForeground);
@@ -757,6 +798,8 @@ static std::vector<BYTE> OutputPixels(DirectD3D11Renderer& renderer) {
 static std::atomic<int> modeQueryCalls{0};
 static void TestSettingsModeFlow() {
     const auto saved = g_settings;
+    const bool savedSuppress = g_suppressSettingsSave;
+    g_suppressSettingsSave = true;
     g_testVideoCapabilityProbe = [](const std::wstring&, int width, int, HRESULT* status) {
         ++modeQueryCalls;
         std::this_thread::sleep_for(std::chrono::milliseconds(80)); // slow-driver simulation
@@ -785,8 +828,9 @@ static void TestSettingsModeFlow() {
         0,0,376,76,window,nullptr,wc.hInstance,nullptr);
     state.unlistedFpsStatus = CreateWindowW(L"STATIC",L"",WS_CHILD,
         0,0,376,16,window,nullptr,wc.hInstance,nullptr);
-    state.vsrCheck = CreateWindowW(L"BUTTON",L"",WS_CHILD | BS_AUTOCHECKBOX,
-        0,0,200,30,window,nullptr,wc.hInstance,nullptr);
+    state.upscalerCombo = combo(IDC_SETTINGS_UPSCALER);
+    for(const auto* name:{L"Off",L"CMAA2 → NIS",L"NVIDIA VSR"})
+        SendMessageW(state.upscalerCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(name));
     state.startButton = CreateWindowW(L"BUTTON",L"Start",WS_CHILD,
         0,0,100,30,window,nullptr,wc.hInstance,nullptr);
     // Manual Refresh also discovers device inventory. Keep this regression
@@ -802,7 +846,7 @@ static void TestSettingsModeFlow() {
         SendMessageW(state.videoCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(preset.label));
         SendMessageW(state.displayResolutionCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(preset.label));
     }
-    SendMessageW(state.vsrCheck,BM_SETCHECK,BST_CHECKED,0);
+    SendMessageW(state.upscalerCombo,CB_SETCURSEL,2,0);
     SendMessageW(state.displayResolutionCombo,CB_SETCURSEL,2,0);
     SendMessageW(state.videoCombo,CB_SETCURSEL,0,0);
     auto complete = [&] {
@@ -847,11 +891,10 @@ static void TestSettingsModeFlow() {
     g_settings.capture40Fps=false;
     SendMessageW(state.unlistedFpsCheck,BM_SETCHECK,BST_UNCHECKED,0);
     SendMessageW(window,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_UNLISTED_FPS,BN_CLICKED),0);
-    Require(rateRows(30)==0 && SendMessageW(state.frameRateCombo,CB_GETITEMDATA,
-        SendMessageW(state.frameRateCombo,CB_GETCURSEL,0,0),0)==0,
-        "disabling unlisted rates returns an unlisted 30fps selection to Auto");
-    Require(GetWindowTextLengthW(state.unlistedFpsStatus)==0,
-        "disabling unlisted rates clears the direct request hint");
+    Require(rateRows(30)==1 && SelectedCaptureFrameRate(&state)==30 && !SettingsCanStart(&state),
+        "disabling unlisted rates preserves 30fps visibly but blocks unsupported Start");
+    Require(GetWindowTextLengthW(state.unlistedFpsStatus)>0,
+        "disabling unlisted rates explains the unavailable selection");
     g_settings.videoFrameRate=0;
     Require(!RequestsExactCaptureRate(),"automatic frame rate does not enable direct-request policy");
     state.pixelFormats.push_back({VideoPixelFormat::Nv12,30});
@@ -867,16 +910,17 @@ static void TestSettingsModeFlow() {
         "driver-listed 30fps never appears as a synthetic request");
     SendMessageW(state.unlistedFpsCheck,BM_SETCHECK,BST_UNCHECKED,0);
     state.pixelFormats.pop_back();
+    SendMessageW(state.frameRateCombo,CB_SETCURSEL,0,0); // Deliberately return to Auto for sizing tests.
     for (int i = 0; i < 50; ++i) {
         SendMessageW(state.displayResolutionCombo,CB_SETCURSEL,1 + i % 3,0);
         SendMessageW(window,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_DISPLAY_RESOLUTION,CBN_SELCHANGE),0);
     }
     Require(modeQueryCalls == 1 && !state.videoModesPending, "display changes never rescan or clear FPS");
-    SendMessageW(state.vsrCheck,BM_SETCHECK,BST_UNCHECKED,0);
-    SendMessageW(window,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_VSR,BN_CLICKED),0);
+    SendMessageW(state.upscalerCombo,CB_SETCURSEL,0,0);
+    SendMessageW(window,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_UPSCALER,CBN_SELCHANGE),0);
     complete();
-    SendMessageW(state.vsrCheck,BM_SETCHECK,BST_CHECKED,0);
-    SendMessageW(window,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_VSR,BN_CLICKED),0);
+    SendMessageW(state.upscalerCombo,CB_SETCURSEL,2,0);
+    SendMessageW(window,WM_COMMAND,MAKEWPARAM(IDC_SETTINGS_UPSCALER,CBN_SELCHANGE),0);
     Require(modeQueryCalls == 1 && !state.videoModesPending &&
         state.pixelFormats.front().selectedFps == 144,
         "VSR on/off preserves capture selection and never rescans capabilities");
@@ -894,11 +938,11 @@ static void TestSettingsModeFlow() {
     Require(modeQueryCalls == 3 && inventoryQueries == 1, "only explicit refresh repeats the same query and enumerates inventory");
     state.vsrGpuUnavailable = true;
     // GPU capability gates only the effect, never capture or display sizing.
-    SendMessageW(state.vsrCheck, BM_SETCHECK, BST_CHECKED, 0);
-    SendMessageW(window, WM_COMMAND, MAKEWPARAM(IDC_SETTINGS_VSR, BN_CLICKED), 0);
+    SendMessageW(state.upscalerCombo, CB_SETCURSEL, 2, 0);
+    SendMessageW(window, WM_COMMAND, MAKEWPARAM(IDC_SETTINGS_UPSCALER, CBN_SELCHANGE), 0);
     Require(modeQueryCalls == 3 && !state.videoModesPending &&
-        SendMessageW(state.vsrCheck, BM_GETCHECK, 0, 0) == BST_UNCHECKED &&
-        !IsWindowEnabled(state.vsrCheck), "blocked VSR notification cannot rescan or enable");
+        SendMessageW(state.upscalerCombo, CB_GETCURSEL, 0, 0) == BST_UNCHECKED &&
+        IsWindowEnabled(state.upscalerCombo), "blocked VSR notification cannot rescan or enable");
     SendMessageW(state.displayResolutionCombo, CB_SETCURSEL, 2, 0);
     SendMessageW(window, WM_COMMAND, MAKEWPARAM(IDC_SETTINGS_DISPLAY_RESOLUTION, CBN_SELCHANGE), 0);
     auto applied = g_settings;
@@ -906,7 +950,21 @@ static void TestSettingsModeFlow() {
     Require(IsWindowEnabled(state.displayResolutionCombo) && modeQueryCalls == 3 &&
         applied.capturePreset == kVideoPresets[0].preset && applied.videoPreset == kVideoPresets[2].preset,
         "non-NVIDIA display selection remains editable and saves independently without rescanning");
-    SendMessageW(state.vsrCheck, BM_SETCHECK, BST_CHECKED, 0);
+    const auto matchRow = SendMessageW(state.displayResolutionCombo, CB_ADDSTRING, 0,
+        reinterpret_cast<LPARAM>(L"Same as capture"));
+    SendMessageW(state.displayResolutionCombo, CB_SETITEMDATA, matchRow, llcv::settings_ui::kDisplayMatchCaptureItem);
+    const auto oldFrameRate = SelectedCaptureFrameRate(&state);
+    for (int repeat = 0; repeat < 20; ++repeat) {
+        SendMessageW(state.displayResolutionCombo, CB_SETCURSEL, repeat % 2 ? 2 : matchRow, 0);
+        SendMessageW(window, WM_COMMAND, MAKEWPARAM(IDC_SETTINGS_DISPLAY_RESOLUTION, CBN_SELCHANGE), 0);
+        llcv::settings_ui::ApplyResolutionSelections(state, kVideoPresets, applied);
+        Require(applied.displayMatchesCapture == (repeat % 2 == 0) &&
+                llcv::settings::EffectiveDisplayPreset(applied) == kVideoPresets[repeat % 2 ? 2 : 0].preset &&
+                applied.videoPreset == kVideoPresets[2].preset && modeQueryCalls == 3 &&
+                SelectedCaptureFrameRate(&state) == oldFrameRate,
+            "same-as-capture switching preserves fixed preference, FPS and cached device capabilities");
+    }
+    SendMessageW(state.upscalerCombo, CB_SETCURSEL, 2, 0);
     PopulatePixelFormatCombo(&state);
     complete();
     Require(modeQueryCalls == 3 && state.pixelFormats.front().selectedFps == 144,
@@ -918,6 +976,7 @@ static void TestSettingsModeFlow() {
     UnregisterClassW(wc.lpszClassName,wc.hInstance);
     g_testVideoCapabilityProbe = nullptr;
     g_settings = saved;
+    g_suppressSettingsSave = savedSuppress;
     std::puts("PASS: production settings flow, slow driver, 50 display changes without rescans, cached capture/FPS and refresh.");
 }
 
@@ -984,6 +1043,8 @@ static void TestNativeControls(HWND window, int width, int height, const std::ve
 
 static void TestLiveToggle(HWND window, int width, int height, const std::vector<BYTE>& pixels,
                            VideoPixelFormat format = VideoPixelFormat::Nv12) {
+    g_settings.cmaaNisEnabled=false;
+    g_settings.preferredUpscaler=llcv::settings::UpscalingMethod::NvidiaVsr;
     g_vsrMode.store(llcv::vsr::Mode::Disabled);
     DirectD3D11Renderer renderer;
     Check(renderer.initialize(window,width,height,60,format), "toggle renderer init");
@@ -1093,7 +1154,10 @@ static void TestLiveToggle(HWND window, int width, int height, const std::vector
         renderer.vsrState = savedState;
         for (const auto content : {TransientHudContent::VsrPending, TransientHudContent::VsrOn,
                 TransientHudContent::VsrOff, TransientHudContent::VsrUnavailable,
-                TransientHudContent::VsrRejected, TransientHudContent::VsrFailed}) {
+                TransientHudContent::VsrRejected, TransientHudContent::VsrFailed,
+                TransientHudContent::CmaaNisPending, TransientHudContent::CmaaNisOn,
+                TransientHudContent::CmaaNisOff, TransientHudContent::CmaaNisHdrBypass,
+                TransientHudContent::CmaaNisScaleBypass, TransientHudContent::CmaaNisFailed}) {
             ShowTransientHud(content);
             Check(renderer.refreshOverlayLayouts(), "bilingual VSR overlay");
             DWRITE_TEXT_METRICS metrics{};
@@ -1113,6 +1177,7 @@ static void TestCenteredPixelPerfect(HWND window) {
     std::vector<BYTE> pixels(static_cast<size_t>(width) * height * 3 / 2, 128);
     const auto savedDisplay = g_settings.videoPreset;
     const auto savedCapture = g_settings.capturePreset;
+    const bool savedMatchCapture = g_settings.displayMatchesCapture;
     const auto savedPosition = g_settings.fullscreenVideoPosition;
     g_settings.videoPreset = g_settings.capturePreset = VideoPreset::R1280x720;
     g_settings.fullscreenVideoPosition = llcv::settings::FullscreenVideoPosition::Center;
@@ -1178,6 +1243,13 @@ static void TestCenteredPixelPerfect(HWND window) {
         return region;
     };
     const auto baseline = renderNativeRegion();
+    g_settings.videoPreset = VideoPreset::R3840x2160;
+    g_settings.displayMatchesCapture = true;
+    Check(renderer.configureVideoOutput(width,height), "match-capture fullscreen output");
+    requireRects(nativeExpected,largeTarget);
+    Require(renderNativeRegion() == baseline && g_settings.videoPreset == VideoPreset::R3840x2160 &&
+            renderer.device == device && renderer.processor == processor && renderer.swapChain == swapchain,
+        "same-as-capture preserves native fullscreen pixels and resources without erasing the fixed display size");
     for (int pair = 0; pair < 3; ++pair) {
         g_vsrMode = llcv::vsr::Mode::On;
         Check(renderer.applyVsrMode(), "centered native ON");
@@ -1217,6 +1289,7 @@ static void TestCenteredPixelPerfect(HWND window) {
     std::puts("PASS: centered fullscreen 1:1 rectangles, ON/OFF native pixels, resources, and oversized-input bypass.");
     g_settings.videoPreset = savedDisplay;
     g_settings.capturePreset = savedCapture;
+    g_settings.displayMatchesCapture = savedMatchCapture;
     g_settings.fullscreenVideoPosition = savedPosition;
 }
 
@@ -1259,6 +1332,7 @@ static void TestSplitResolutionRenderer(HWND window) {
 #include "VideoClearRegression.inl"
 
 #include "SettingsControllerRegressionTests.inl"
+#include "CaptureFrameRateOsdTests.inl"
 #include "ViewerLifecycleTests.inl"
 #include "ExclusiveViewerLifecycleTests.inl"
 #include "ExclusiveRendererRegression.inl"
@@ -1290,6 +1364,15 @@ static void TestPlaybackPowerBroadcastRouting() {
 }
 
 int main(int argc, char** argv) {
+    // Every entry point is synthetic. Individual persistence tests explicitly
+    // opt in only after redirecting SettingsPath to their own temporary folder.
+    g_suppressSettingsSave = true;
+    if (argc > 1 && std::string(argv[1]) == "--capture-fps-osd") {
+        Check(CoInitializeEx(nullptr, COINIT_MULTITHREADED), "capture FPS OSD COM");
+        TestCaptureFrameRateOsd();
+        CoUninitialize();
+        return 0;
+    }
     if (argc > 1 && std::string(argv[1]) == "--exclusive-renderer-regression") {
         Check(CoInitializeEx(nullptr, COINIT_MULTITHREADED), "exclusive renderer COM");
         const int result = RunExclusiveRendererRegression();
@@ -1338,11 +1421,19 @@ int main(int argc, char** argv) {
     const bool hd720 = argc > 1 && std::string(argv[1]) == "--720p";
     Check(CoInitializeEx(nullptr, COINIT_MULTITHREADED), "COM");
     if (argc > 1 && std::string(argv[1]) == "--settings-controller") {
+        const auto profile = SettingsPath();
+        const auto profileBytes = [&] {
+            std::ifstream input(std::filesystem::path(profile),std::ios::binary);
+            return std::vector<char>(std::istreambuf_iterator<char>(input),std::istreambuf_iterator<char>());
+        };
+        const auto beforeProfile = profileBytes();
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         INITCOMMONCONTROLSEX controls{sizeof(controls),ICC_WIN95_CLASSES};
         Require(InitCommonControlsEx(&controls) != FALSE, "controller common controls");
         TestPlaybackPowerBroadcastRouting();
         TestSettingsController();
+        TestExplicitCaptureRateSelection();
+        TestFrameOptionsRedraw();
         TestSettingsShortcutStatusRefresh();
         TestSettingsAudioTransitions();
         TestSettingsBufferModeTransitions();
@@ -1350,6 +1441,7 @@ int main(int argc, char** argv) {
         TestSettingsAudioIdentityAndRefresh();
         TestExclusiveScanLifecycle();
         TestSettingsModeFlow();
+        Require(profileBytes()==beforeProfile,"controller fixtures leave the isolated profile unchanged");
         CoUninitialize();
         return 0;
     }

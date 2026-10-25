@@ -178,6 +178,8 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
         pages.Block(100, {{s->forceHdr10Check,0,0,width-34,36},{s->forceHdr10Help,width-24,6,24,24},
             {s->hdrChromaLabel,0,44,width-34,20},{s->hdrChromaCombo,0,68,width-34,30},
             {s->hdrChromaHelp,width-24,71,24,24}},44);
+        if (format!=static_cast<LRESULT>(settings::VideoPixelFormat::P010))
+            pages.Field(s->sdrRangeLabel,s->sdrRangeCombo,s->sdrRangeHelp);
         if (format==static_cast<LRESULT>(settings::VideoPixelFormat::Mjpeg))
             pages.Field(s->mjpegColorLabel,s->mjpegColorCombo,s->mjpegColorHelp);
         }
@@ -186,14 +188,17 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
         pages.Field(s->displayMonitorLabel,s->displayMonitorCombo);
         pages.Field(s->scalingLabel,s->scalingCombo);
         pages.Check(s->pixelCheck);
-        pages.Group(text(L"표시 해상도 · VSR",L"Display resolution & VSR"));
+        pages.Group(text(L"표시 해상도 · 업스케일링",L"Resolution & upscaling"));
         pages.Field(s->displayResolutionLabel,s->displayResolutionCombo);
-        pages.Block(32, {{s->vsrCheck,0,0,width-120,32},{s->vsrGuideButton,width-110,0,110,32}});
-        pages.Text(s->vsrStatus,36);
-        pages.Block(110, {{s->screenshotTitle,0,0,width,20},
+        pages.Field(s->upscalerLabel,s->upscalerCombo,s->vsrGuideButton);
+        if (SendMessageW(s->upscalerCombo,CB_GETCURSEL,0,0)==1)
+            pages.Field(s->nisSharpnessLabel,s->nisSharpnessCombo);
+        if (SendMessageW(s->upscalerCombo,CB_GETCURSEL,0,0)!=0 || s->vsrGpuUnavailable)
+            pages.Text(s->vsrStatus,36);
+        pages.Block(134, {{s->screenshotTitle,0,0,width,20},
             {s->screenshotClipboardCheck,0,28,width,28},
             {s->screenshotFolderButton,0,66,std::min(200,width/2),32},
-            {s->screenshotHelp,std::min(200,width/2)+12,62,width-std::min(200,width/2)-12,44}},62);
+            {s->screenshotHelp,0,102,width,32}},62);
         break;
     case SettingsTab::Audio:
         pages.Group(text(L"출력",L"Output"));
