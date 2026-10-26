@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <string>
 #include <system_error>
+#include <thread>
 
 namespace llcv::recording {
 
@@ -53,6 +54,33 @@ std::filesystem::path SegmentPath(const std::filesystem::path& first, int segmen
     char suffix[32];
     std::snprintf(suffix, sizeof(suffix), "_part%02d", segment);
     return first.parent_path() / (first.stem().string() + suffix + first.extension().string());
+}
+
+bool FreeSpaceProbe::Poll(const std::filesystem::path& directory, std::optional<uint64_t>& freeBytes) {
+    bool delivered = false;
+    {
+        std::lock_guard<std::mutex> lock(state_->mutex);
+        if (state_->pending) return false;
+        if (state_->completed) {
+            freeBytes = state_->freeBytes;
+            state_->completed = false;
+            delivered = true;
+        }
+        state_->pending = true;
+    }
+    try {
+        std::thread([state = state_, directory] {
+            const std::optional<uint64_t> available = FreeBytes(directory);
+            std::lock_guard<std::mutex> lock(state->mutex);
+            state->freeBytes = available;
+            state->completed = true;
+            state->pending = false;
+        }).detach();
+    } catch (const std::system_error&) {
+        std::lock_guard<std::mutex> lock(state_->mutex);
+        state_->pending = false;
+    }
+    return delivered;
 }
 
 }

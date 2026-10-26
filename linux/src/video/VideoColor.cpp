@@ -90,34 +90,21 @@ ColorSpec ResolveSdr(const ColorInput& input) {
     return spec;
 }
 
-void ApplyOverride(ColorSpec& spec, ColorOverride overrideMode) {
-    switch (overrideMode) {
-    case ColorOverride::Bt709Limited:
-        spec.matrix = Matrix::Bt709;
-        spec.range = Range::Limited;
-        break;
-    case ColorOverride::Bt709Full:
-        spec.matrix = Matrix::Bt709;
-        spec.range = Range::Full;
-        break;
-    case ColorOverride::Bt601Limited:
-        spec.matrix = Matrix::Bt601;
-        spec.range = Range::Limited;
-        break;
-    case ColorOverride::Bt601Full:
-        spec.matrix = Matrix::Bt601;
-        spec.range = Range::Full;
-        break;
-    case ColorOverride::Auto:
-        return;
+void ApplyOverrides(ColorSpec& spec, MatrixOverride matrixOverride, RangeOverride rangeOverride, bool tenBit) {
+    if (matrixOverride != MatrixOverride::Auto) {
+        spec.matrix = matrixOverride == MatrixOverride::Bt601 ? Matrix::Bt601 : Matrix::Bt709;
+        spec.matrixSource = ColorSource::User;
     }
-    spec.matrixSource = ColorSource::User;
-    spec.rangeSource = ColorSource::User;
+    if (rangeOverride != RangeOverride::Auto && !tenBit) {
+        spec.range = rangeOverride == RangeOverride::Full ? Range::Full : Range::Limited;
+        spec.rangeSource = ColorSource::User;
+    }
 }
 
 }
 
-ColorSpec ResolveV4l2Color(const ColorInput& input, ColorOverride overrideMode, HdrInput hdrInput) {
+ColorSpec ResolveV4l2Color(const ColorInput& input, MatrixOverride matrixOverride, RangeOverride rangeOverride,
+                           HdrInput hdrInput) {
     if (input.rgb) return {};
 
     const bool driverPq = input.transferFunction == V4L2_XFER_FUNC_SMPTE2084;
@@ -130,7 +117,7 @@ ColorSpec ResolveV4l2Color(const ColorInput& input, ColorOverride overrideMode, 
 
     ColorSpec spec = ResolveSdr(input);
     if (!pq) {
-        ApplyOverride(spec, overrideMode);
+        ApplyOverrides(spec, matrixOverride, rangeOverride, input.tenBit);
         return spec;
     }
     spec.transfer = Transfer::Pq;
@@ -198,7 +185,10 @@ const char* TransferName(Transfer transfer) {
 
 const char* SourceName(ColorSource matrixSource, ColorSource rangeSource) {
     using ui::T;
-    if (matrixSource == ColorSource::User) return T("manual");
+    if (matrixSource == ColorSource::User && rangeSource == ColorSource::User) return T("manual");
+    if (matrixSource == ColorSource::User || rangeSource == ColorSource::User) {
+        return T("manual + automatic");
+    }
     if (matrixSource == ColorSource::Hdr10) return T("HDR10 default");
     if (matrixSource == ColorSource::Jpeg) return T("JPEG default");
     if (matrixSource == ColorSource::Driver && rangeSource == ColorSource::Driver) {

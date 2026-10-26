@@ -4,6 +4,7 @@
 #include "capture/FrameMailbox.h"
 #include "capture/V4l2Capture.h"
 #include "capture/V4l2Devices.h"
+#include "diagnostics/CaptureFrameRateMonitor.h"
 #include "platform/SleepInhibitor.h"
 #include "recording/EncoderSupport.h"
 #include "recording/Recorder.h"
@@ -121,6 +122,9 @@ private:
     void PollRecording();
     bool RecordingActive() const;
     void ToggleMute();
+    void ToggleUpscaling();
+    void ReportUpscaling();
+    std::string UpscalingText() const;
     void SetPlaybackMuted(bool muted);
     void ChooseRecordingFolder();
     static void SDLCALL OnRecordingFolderChosen(void* userdata, const char* const* files, int filter);
@@ -233,6 +237,11 @@ private:
     double latencySumMs_ = 0.0;
     uint64_t latencySamples_ = 0;
     double inputFps_ = 0.0;
+    diagnostics::CaptureFrameRateMonitor frameRateMonitor_;
+    bool frameRateOverdelivery_ = false;
+    bool upscalingToastPending_ = false;
+    bool upscalingFailureShown_ = false;
+    video::UpscaleState reportedUpscaleState_ = video::UpscaleState::Off;
     double presentFps_ = 0.0;
     double averageLatencyMs_ = -1.0;
     double averageProcessingMs_ = -1.0;

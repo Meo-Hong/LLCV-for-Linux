@@ -3,7 +3,8 @@
 namespace llcv::input {
 namespace {
 
-constexpr std::string_view kDefaultLabels[kActionCount] = {"F1", "F2", "F3", "F5", "F11", "F12", "Tab", "Esc", "F9", "M"};
+constexpr std::string_view kDefaultLabels[kActionCount] = {"F1", "F2",  "F3", "F5", "F11", "F12",
+                                                                "Tab", "Esc", "F9", "M",  "F6"};
 
 bool IsAsciiAlnum(char value) {
     const unsigned char c = static_cast<unsigned char>(value);

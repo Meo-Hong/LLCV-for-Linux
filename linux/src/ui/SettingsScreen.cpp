@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <iterator>
@@ -155,6 +156,20 @@ constexpr const char* kUnlistedFpsGuide[] = {
        "Start stops with a notice."),
     N_("Turn off 40 fps capture first. It does not convert 60 fps to 30 fps in software."),
     N_("After starting, check Actual FPS in the Tab diagnostics."),
+};
+
+constexpr const char* kSdrRangeGuide[] = {
+    N_("Auto uses the range the driver reports, or the format default."),
+    N_("Choose Limited or Full only when blacks look crushed or washed out."),
+    N_("Applies to playback, screenshots and recording. P010 and HDR input keep their own range."),
+};
+
+constexpr const char* kUpscalingGuide[] = {
+    N_("CMAA2 reduces jagged edges, then NIS enlarges the image. Default sharpness: 0.15."),
+    N_("SDR only, for enlargement up to 2x per axis. HDR, native size and downscaling use the normal path."),
+    N_("F6 turns the method on and off without changing its sharpness."),
+    N_("Display only: recordings and screenshots keep the capture image. The OSD is drawn afterwards."),
+    N_("Needs OpenGL 4.3 compute shaders. Otherwise the normal path is used."),
 };
 
 void HelpMarker(const char* const* lines, size_t count) {
@@ -443,6 +458,9 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
             Row(T("Frame rate"));
             const auto rates = capture::RatesAt(*device, s.videoWidth, s.videoHeight,
                                                 app::FormatFromChoice(s.pixelFormat));
+            const char* moreLabel = T("More##frameOptions");
+            const float moreWidth = ButtonWidth(moreLabel);
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - moreWidth - ImGui::GetStyle().ItemSpacing.x);
             ImGui::BeginDisabled(s.capture40Fps);
             std::vector<std::string> rateItems{T("Auto (highest uncompressed rate)")};
             std::vector<int> rateValues{0};
@@ -462,7 +480,8 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
                 directIndex = static_cast<int>(rateValues.size()) - 1;
                 if (std::abs(s.frameRateMilli - capture::kDirectRequestFpsMilli) <= 10) rateIndex = directIndex;
             }
-            if (rateIndex < 0) {
+            const bool rateUnavailable = rateIndex < 0;
+            if (rateUnavailable) {
                 rateItems.push_back(platform::Format("%.2f fps%s", s.frameRateMilli / 1000.0,
                                                      T(" (unsupported)")));
                 rateValues.push_back(s.frameRateMilli);
@@ -472,17 +491,34 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
                 s.frameRateMilli = rateValues[static_cast<size_t>(rateIndex)];
             }
             ImGui::EndDisabled();
+            ImGui::SameLine();
+            const bool frameOptionsActive = s.capture40Fps || s.allowUnlistedFps;
+            if (frameOptionsActive) ImGui::PushStyleColor(ImGuiCol_Text, palette.accent);
+            if (ImGui::Button(moreLabel)) ImGui::OpenPopup("##frameOptionsPopup");
+            if (frameOptionsActive) ImGui::PopStyleColor();
+            if (ImGui::BeginPopup("##frameOptionsPopup")) {
+                ImGui::Checkbox(T("40 fps capture"), &s.capture40Fps);
+                ImGui::SameLine();
+                HelpMarker(kCapture40Guide, std::size(kCapture40Guide));
+                ImGui::BeginDisabled(s.capture40Fps);
+                ImGui::Checkbox(T("Allow unlisted FPS (30 fps)"), &s.allowUnlistedFps);
+                ImGui::EndDisabled();
+                ImGui::SameLine();
+                HelpMarker(kUnlistedFpsGuide, std::size(kUnlistedFpsGuide));
+                ImGui::EndPopup();
+            }
             if (directIndex >= 0 && rateIndex == directIndex) {
                 ValueRow();
                 Note(Keys(T("Direct request: 30 fps. This is not a support confirmation. Start stops with a notice if "
                             "the driver rejects it or applies another rate; check Actual FPS in the Tab diagnostics.")),
                      palette.accent);
             }
-
-            ValueRow();
-            ImGui::Checkbox(T("40 fps capture"), &s.capture40Fps);
-            ImGui::SameLine();
-            HelpMarker(kCapture40Guide, std::size(kCapture40Guide));
+            if (rateUnavailable && !s.capture40Fps) {
+                ValueRow();
+                Note(T("Selected FPS unavailable: select another rate. LLCV does not switch to a different rate on "
+                       "its own."),
+                     palette.warning);
+            }
             if (s.capture40Fps) {
                 const bool listed = std::any_of(rates.begin(), rates.end(), capture::IsFortyFps);
                 ValueRow();
@@ -493,14 +529,11 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
                            "if not, LLCV shows an error instead of using another rate."),
                          palette.warning);
                 }
+            } else if (s.allowUnlistedFps && directIndex < 0) {
+                ValueRow();
+                Note(T("Allow unlisted FPS (30 fps) is on (More)."));
             }
 
-            ValueRow();
-            ImGui::BeginDisabled(s.capture40Fps);
-            ImGui::Checkbox(T("Allow unlisted FPS (30 fps)"), &s.allowUnlistedFps);
-            ImGui::EndDisabled();
-            ImGui::SameLine();
-            HelpMarker(kUnlistedFpsGuide, std::size(kUnlistedFpsGuide));
             ValueRow();
             if (const auto mode = capture::ResolveMode(*device, app::RequestFromSettings(s))) {
                 Note(platform::Format(T("Selected mode: %d × %d · %s · %s fps"),
@@ -525,13 +558,22 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
         EnumCombo<settings::ScalingMode>("##scaling", s.scalingMode,
                                          {{settings::ScalingMode::Smooth, T("Smooth")},
                                           {settings::ScalingMode::Sharp, T("Sharp")}});
-        Row(T("Color interpretation"));
-        EnumCombo<video::ColorOverride>("##color", s.colorOverride,
-                                        {{video::ColorOverride::Auto, T("Auto (recommended)")},
-                                         {video::ColorOverride::Bt709Limited, "BT.709 Limited"},
-                                         {video::ColorOverride::Bt709Full, "BT.709 Full"},
-                                         {video::ColorOverride::Bt601Limited, "BT.601 Limited"},
-                                         {video::ColorOverride::Bt601Full, "BT.601 Full"}});
+        Row(T("Color matrix"));
+        EnumCombo<video::MatrixOverride>("##colorMatrix", s.colorMatrix,
+                                         {{video::MatrixOverride::Auto, T("Auto (recommended)")},
+                                          {video::MatrixOverride::Bt709, "BT.709"},
+                                          {video::MatrixOverride::Bt601, "BT.601"}});
+        Row(T("SDR color range"));
+        const char* rangeHelp = "(?)";
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(rangeHelp).x -
+                                ImGui::GetStyle().ItemSpacing.x);
+        EnumCombo<video::RangeOverride>("##sdrRange", s.sdrRange,
+                                        {{video::RangeOverride::Auto, T("Auto (recommended)")},
+                                         {video::RangeOverride::Limited, T("Limited (16-235)")},
+                                         {video::RangeOverride::Full, T("Full (0-255)")}});
+        ImGui::SameLine();
+        HelpMarker(kSdrRangeGuide, std::size(kSdrRangeGuide));
+        DrawUpscaling(s, context);
     }
     EndCard(table);
 
@@ -549,6 +591,31 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
         Note(T("Saved as PNG at the capture resolution."));
     }
     EndCard(table);
+}
+
+void SettingsScreen::DrawUpscaling(AppSettings& s, const SettingsContext& context) {
+    const Palette& palette = CurrentPalette();
+    Row(T("Upscaling"));
+    const char* help = "(?)";
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(help).x -
+                            ImGui::GetStyle().ItemSpacing.x);
+    EnumCombo<bool>("##upscaling", s.upscaling, {{false, T("Off")}, {true, T("CMAA2 → NIS")}});
+    ImGui::SameLine();
+    HelpMarker(kUpscalingGuide, std::size(kUpscalingGuide));
+    if (!s.upscaling) return;
+    Row(T("NIS sharpness"));
+    float sharpness = static_cast<float>(s.nisSharpnessPercent) / 100.0f;
+    if (ImGui::SliderFloat("##nisSharpness", &sharpness, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
+        s.nisSharpnessPercent = std::clamp(static_cast<int>(std::lround(sharpness * 100.0f)), 0, 100);
+    }
+    ValueRow();
+    if (context.upscalingSupported) {
+        Note(Keys(T("SDR only, enlargement up to 2x per axis. Default sharpness 0.15. F6 toggles it while playing.")));
+    } else {
+        Note(platform::Format(T("Not available with this GPU driver (%s). The normal path is used."),
+                              context.upscalingIssue.c_str()),
+             palette.warning);
+    }
 }
 
 void SettingsScreen::DrawHdr(AppSettings& s, const SettingsContext& context) {

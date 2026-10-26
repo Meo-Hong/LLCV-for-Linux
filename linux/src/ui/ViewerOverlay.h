@@ -60,6 +60,7 @@ enum class MenuCommand {
     Borderless,
     ScalingSmooth,
     ScalingSharp,
+    Upscaling,
     PresentImmediate,
     PresentVSync,
     Diagnostics,
@@ -85,6 +86,7 @@ struct MenuState {
     bool fullscreen = false;
     bool borderless = false;
     bool sharp = false;
+    bool upscaling = false;
     bool vsync = false;
     bool diagnostics = false;
     bool audioOsd = false;

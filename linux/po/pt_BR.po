@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-19 02:55+0900\n"
+"POT-Creation-Date: 2026-10-26 09:23+0900\n"
 "PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
@@ -144,13 +144,22 @@ msgid "Smooth"
 msgstr "Suave"
 
 #: src/app/App.cpp
-msgid "Actual FPS"
-msgstr "FPS reais"
-
-#: src/app/App.cpp
 #, c-format
 msgid "Input %.1f · Present %.1f"
 msgstr "Entrada %.1f · Exibição %.1f"
+
+#: src/app/App.cpp
+#, c-format
+msgid " · above requested %d"
+msgstr " · acima dos %d solicitados"
+
+#: src/app/App.cpp
+msgid "Actual FPS"
+msgstr "FPS reais"
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Upscaling"
+msgstr "Upscaling"
 
 #: src/app/App.cpp
 msgid "App latency"
@@ -343,6 +352,10 @@ msgid "with audio"
 msgstr "com áudio"
 
 #: src/app/App.cpp
+msgid "Selected FPS unavailable: select another rate."
+msgstr "FPS selecionados indisponíveis: selecione outra taxa."
+
+#: src/app/App.cpp
 msgid "The device does not support the selected mode."
 msgstr "O dispositivo não suporta o modo selecionado."
 
@@ -354,6 +367,14 @@ msgstr "Nenhum dispositivo de captura foi encontrado. Verifique a conexão USB."
 #, c-format
 msgid "HDR input not supported: %s"
 msgstr "Entrada HDR não compatível: %s"
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"The device does not list %.2f fps for the selected resolution and format. A "
+"different rate is not used automatically. Select Auto or another supported "
+"rate."
+msgstr "O dispositivo não lista %.2f fps para a resolução e o formato selecionados. Outra taxa não é usada automaticamente. Selecione Automático ou outra taxa compatível."
 
 #: src/app/App.cpp
 msgid "The device does not support the selected resolution and format."
@@ -400,6 +421,16 @@ msgstr ""
 "Foram solicitados 30 fps diretamente porque o driver não os lista. O driver "
 "recusou ou aplicou outra taxa. Escolha uma taxa de quadros da lista ou "
 "desative Vídeo → Permitir FPS não listados."
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"\n"
+"\n"
+"Requested capture rate: %s fps. A different rate is not used automatically. "
+"Select Auto or another supported rate to retry. The diagnostic log shows the "
+"failed step."
+msgstr "\n\nTaxa de captura solicitada: %s fps. Outra taxa não é usada automaticamente. Selecione Automático ou outra taxa compatível para tentar novamente. O log de diagnóstico mostra a etapa que falhou."
 
 #: src/app/App.cpp
 msgid "Could not start audio: "
@@ -587,8 +618,56 @@ msgid "Nothing was recorded."
 msgstr "Nada foi gravado."
 
 #: src/app/App.cpp
+msgid "CMAA2 → NIS unavailable · using the normal path"
+msgstr "CMAA2 → NIS indisponível · usando a saída normal"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS OFF · F6: on"
+msgstr "CMAA2 → NIS OFF · F6: ativar"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS ON · F6: off"
+msgstr "CMAA2 → NIS ON · F6: desativar"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS bypass · SDR only"
+msgstr "CMAA2 → NIS ignorado · somente SDR"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS bypass · enlargement up to 2x only"
+msgstr "CMAA2 → NIS ignorado · somente ampliação de até 2x"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS · waiting for video"
+msgstr "CMAA2 → NIS · aguardando vídeo"
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Off"
+msgstr "Desativado"
+
+#: src/app/App.cpp
+#, c-format
+msgid "CMAA2 → NIS · ON · sharpness %.2f"
+msgstr "CMAA2 → NIS · ON · nitidez %.2f"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS · bypass (SDR only)"
+msgstr "CMAA2 → NIS · ignorado (somente SDR)"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS · bypass (enlargement up to 2x only)"
+msgstr "CMAA2 → NIS · ignorado (somente ampliação de até 2x)"
+
+#: src/app/App.cpp
+#, c-format
+msgid "CMAA2 → NIS · unavailable (%s)"
+msgstr "CMAA2 → NIS · indisponível (%s)"
+
+#: src/app/App.cpp
 msgid "1:1 size · the capture matches this monitor, so fullscreen is used."
-msgstr "Tamanho 1:1 · a captura corresponde a este monitor, então a tela cheia é usada."
+msgstr ""
+"Tamanho 1:1 · a captura corresponde a este monitor, então a tela cheia é "
+"usada."
 
 #: src/app/App.cpp
 msgid "A 1:1 window does not fit this monitor, so it was reduced to fit."
@@ -674,6 +753,46 @@ msgstr ""
 #: src/ui/SettingsScreen.cpp
 msgid "After starting, check Actual FPS in the Tab diagnostics."
 msgstr "Depois de iniciar, confira “FPS reais” no diagnóstico (Tab)."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto uses the range the driver reports, or the format default."
+msgstr "Automático usa a faixa informada pelo driver ou o padrão do formato."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Choose Limited or Full only when blacks look crushed or washed out."
+msgstr "Escolha Limited ou Full somente se os pretos parecerem esmagados ou desbotados."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Applies to playback, screenshots and recording. P010 and HDR input keep "
+"their own range."
+msgstr "Aplica-se à reprodução, às capturas de tela e à gravação. A entrada P010 e HDR mantém a própria faixa."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"CMAA2 reduces jagged edges, then NIS enlarges the image. Default sharpness: "
+"0.15."
+msgstr "O CMAA2 reduz o serrilhado e depois o NIS amplia a imagem. Nitidez padrão: 0.15."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"SDR only, for enlargement up to 2x per axis. HDR, native size and "
+"downscaling use the normal path."
+msgstr "Somente SDR, para ampliações de até 2x por eixo. HDR, tamanho original e redução usam o caminho normal."
+
+#: src/ui/SettingsScreen.cpp
+msgid "F6 turns the method on and off without changing its sharpness."
+msgstr "F6 liga e desliga sem alterar a nitidez."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Display only: recordings and screenshots keep the capture image. The OSD is "
+"drawn afterwards."
+msgstr "Somente na tela: gravações e capturas de tela mantêm a imagem capturada. O OSD é desenhado depois."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Needs OpenGL 4.3 compute shaders. Otherwise the normal path is used."
+msgstr "Requer shaders de computação do OpenGL 4.3. Caso contrário, o caminho normal é usado."
 
 #: src/ui/SettingsScreen.cpp
 msgid "MJPEG (compressed · high resolution/refresh)"
@@ -811,12 +930,24 @@ msgid "Frame rate"
 msgstr "Taxa de quadros"
 
 #: src/ui/SettingsScreen.cpp
+msgid "More##frameOptions"
+msgstr "Mais##frameOptions"
+
+#: src/ui/SettingsScreen.cpp
 msgid "Auto (highest uncompressed rate)"
 msgstr "Automático (maior taxa sem compressão)"
 
 #: src/ui/SettingsScreen.cpp
 msgid "30 fps · direct request"
 msgstr "30 fps · solicitação direta"
+
+#: src/ui/SettingsScreen.cpp
+msgid "40 fps capture"
+msgstr "Captura a 40 fps"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Allow unlisted FPS (30 fps)"
+msgstr "Permitir FPS não listados (30 fps)"
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
@@ -829,8 +960,10 @@ msgstr ""
 "taxa; confira “FPS reais” no diagnóstico (Tab)."
 
 #: src/ui/SettingsScreen.cpp
-msgid "40 fps capture"
-msgstr "Captura a 40 fps"
+msgid ""
+"Selected FPS unavailable: select another rate. LLCV does not switch to a "
+"different rate on its own."
+msgstr "FPS selecionados indisponíveis: selecione outra taxa. O LLCV não muda para outra taxa por conta própria."
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
@@ -850,8 +983,8 @@ msgstr ""
 "taxa."
 
 #: src/ui/SettingsScreen.cpp
-msgid "Allow unlisted FPS (30 fps)"
-msgstr "Permitir FPS não listados (30 fps)"
+msgid "Allow unlisted FPS (30 fps) is on (More)."
+msgstr "“Permitir FPS não listados (30 fps)” está ativado (Mais)."
 
 #: src/ui/SettingsScreen.cpp
 #, c-format
@@ -879,12 +1012,24 @@ msgid "Scaling mode"
 msgstr "Modo de escala"
 
 #: src/ui/SettingsScreen.cpp
-msgid "Color interpretation"
-msgstr "Interpretação de cor"
+msgid "Color matrix"
+msgstr "Matriz de cor"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Auto (recommended)"
 msgstr "Automático (recomendado)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "SDR color range"
+msgstr "Faixa de cor SDR"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Limited (16-235)"
+msgstr "Limited (16-235)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Full (0-255)"
+msgstr "Full (0-255)"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Screenshots (F12)"
@@ -905,6 +1050,25 @@ msgstr "Copiar também o PNG para a área de transferência"
 #: src/ui/SettingsScreen.cpp
 msgid "Saved as PNG at the capture resolution."
 msgstr "Salva como PNG na resolução de captura."
+
+#: src/ui/SettingsScreen.cpp
+msgid "CMAA2 → NIS"
+msgstr "CMAA2 → NIS"
+
+#: src/ui/SettingsScreen.cpp
+msgid "NIS sharpness"
+msgstr "Nitidez do NIS"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"SDR only, enlargement up to 2x per axis. Default sharpness 0.15. F6 toggles "
+"it while playing."
+msgstr "Somente SDR, ampliação de até 2x por eixo. Nitidez padrão: 0.15. F6 liga e desliga durante a reprodução."
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Not available with this GPU driver (%s). The normal path is used."
+msgstr "Indisponível com este driver de GPU (%s). O caminho normal é usado."
 
 #: src/ui/SettingsScreen.cpp
 msgid "HDR input interpretation"
@@ -959,7 +1123,9 @@ msgstr "Superior esquerdo"
 msgid ""
 "A compatibility override for P010 when color edges look shifted. Leave it on "
 "Auto otherwise."
-msgstr "Um ajuste de compatibilidade para P010 quando as bordas de cor parecem deslocadas. Caso contrário, deixe em Automático."
+msgstr ""
+"Um ajuste de compatibilidade para P010 quando as bordas de cor parecem "
+"deslocadas. Caso contrário, deixe em Automático."
 
 #: src/ui/SettingsScreen.cpp
 msgid "SDR reference white"
@@ -1209,7 +1375,9 @@ msgstr ""
 msgid ""
 "When the capture resolution matches the monitor, playback starts in "
 "fullscreen and F5 uses fullscreen for 1:1 pixels."
-msgstr "Quando a resolução de captura corresponde ao monitor, a reprodução começa em tela cheia e F5 usa a tela cheia para pixels 1:1."
+msgstr ""
+"Quando a resolução de captura corresponde ao monitor, a reprodução começa em "
+"tela cheia e F5 usa a tela cheia para pixels 1:1."
 
 #: src/ui/SettingsScreen.cpp
 msgid "Monitor"
@@ -1391,7 +1559,7 @@ msgid ""
 "records silence."
 msgstr ""
 "O volume da gravação é separado do volume e do silenciamento da reprodução. "
-"Com 0% grava-se silêncio."
+"Com 0%, a gravação fica em silêncio."
 
 #: src/ui/SettingsScreen.cpp
 msgid "Files"
@@ -1753,6 +1921,10 @@ msgid "Toggle playback mute"
 msgstr "Ativar / desativar silenciamento da reprodução"
 
 #: src/ui/Shortcuts.h
+msgid "Toggle CMAA2 → NIS upscaling"
+msgstr "Ligar/desligar upscaling CMAA2 → NIS"
+
+#: src/ui/Shortcuts.h
 msgid "Show / hide the menu bar"
 msgstr "Mostrar / ocultar a barra de menus"
 
@@ -1915,6 +2087,10 @@ msgid "Sharp scaling"
 msgstr "Escala nítida"
 
 #: src/ui/ViewerOverlay.cpp
+msgid "CMAA2 → NIS upscaling"
+msgstr "Upscaling CMAA2 → NIS"
+
+#: src/ui/ViewerOverlay.cpp
 msgid "Immediate presentation"
 msgstr "Apresentação imediata"
 
@@ -1998,6 +2174,10 @@ msgstr "Alt · Esc: fechar menu"
 #: src/video/VideoColor.cpp
 msgid "manual"
 msgstr "manual"
+
+#: src/video/VideoColor.cpp
+msgid "manual + automatic"
+msgstr "manual + automático"
 
 #: src/video/VideoColor.cpp
 msgid "HDR10 default"

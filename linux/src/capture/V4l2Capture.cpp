@@ -18,6 +18,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstdlib>
 #include <cstring>
 
 namespace llcv::capture {
@@ -55,8 +56,7 @@ uint64_t TimestampNs(const v4l2_buffer& buffer, uint64_t fallback) {
     return value ? value : fallback;
 }
 
-using RateCheck = bool (*)(const FrameRate&);
-
+template <typename RateCheck>
 bool ConfirmRequestedRate(int fd, bool rateSet, int rateError, const v4l2_streamparm& requested, const char* label,
                           RateCheck matches, FrameRate& rate, std::string& error) {
     if (!rateSet) {
@@ -218,7 +218,7 @@ bool V4l2Capture::OpenDevice(std::string& error) {
     colorInput.tenBit = config_.format == PixelFormat::P010;
     colorInput.width = config_.width;
     colorInput.height = config_.height;
-    negotiated.color = video::ResolveV4l2Color(colorInput, config_.colorOverride, config_.hdrInput);
+    negotiated.color = video::ResolveV4l2Color(colorInput, config_.colorMatrix, config_.sdrRange, config_.hdrInput);
 
     v4l2_streamparm parameters{};
     parameters.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -243,6 +243,18 @@ bool V4l2Capture::OpenDevice(std::string& error) {
                               error)) {
         CloseDevice();
         return false;
+    }
+    if (!config_.capture40Fps && !config_.directRate && config_.exactRate) {
+        const int requestedMilli = config_.rate.Milli();
+        const auto matchesRequest = [requestedMilli](const FrameRate& rate) {
+            return std::abs(rate.Milli() - requestedMilli) <= 10;
+        };
+        const std::string label = FormatRate(config_.rate) + " fps";
+        if (!ConfirmRequestedRate(fd_, rateSet, rateError, parameters, label.c_str(), matchesRequest,
+                                  negotiated.rate, error)) {
+            CloseDevice();
+            return false;
+        }
     }
 
     v4l2_requestbuffers request{};
@@ -299,7 +311,7 @@ bool V4l2Capture::OpenDevice(std::string& error) {
         colorInput.ycbcrEncoding = active.fmt.pix.ycbcr_enc;
         colorInput.quantization = active.fmt.pix.quantization;
         colorInput.transferFunction = active.fmt.pix.xfer_func;
-        negotiated.color = video::ResolveV4l2Color(colorInput, config_.colorOverride, config_.hdrInput);
+        negotiated.color = video::ResolveV4l2Color(colorInput, config_.colorMatrix, config_.sdrRange, config_.hdrInput);
     }
     {
         std::lock_guard<std::mutex> lock(mutex_);

@@ -39,12 +39,13 @@ constexpr EnumName<PresentationMode> kPresentation[] = {
     {PresentationMode::Immediate, "immediate"}, {PresentationMode::VSync, "vsync"}};
 constexpr EnumName<ScalingMode> kScaling[] = {
     {ScalingMode::Smooth, "smooth"}, {ScalingMode::Sharp, "sharp"}};
-constexpr EnumName<video::ColorOverride> kColors[] = {
-    {video::ColorOverride::Auto, "auto"},
-    {video::ColorOverride::Bt709Limited, "bt709-limited"},
-    {video::ColorOverride::Bt709Full, "bt709-full"},
-    {video::ColorOverride::Bt601Limited, "bt601-limited"},
-    {video::ColorOverride::Bt601Full, "bt601-full"}};
+constexpr EnumName<video::MatrixOverride> kColorMatrices[] = {
+    {video::MatrixOverride::Auto, "auto"}, {video::MatrixOverride::Bt709, "bt709"},
+    {video::MatrixOverride::Bt601, "bt601"}};
+constexpr EnumName<video::RangeOverride> kSdrRanges[] = {
+    {video::RangeOverride::Auto, "auto"}, {video::RangeOverride::Limited, "limited"},
+    {video::RangeOverride::Full, "full"}};
+constexpr EnumName<bool> kUpscaling[] = {{false, "off"}, {true, "cmaa2-nis"}};
 constexpr EnumName<video::HdrInput> kHdrInput[] = {
     {video::HdrInput::Auto, "auto"}, {video::HdrInput::ForceHdr10, "hdr10"}, {video::HdrInput::ForceSdr, "sdr"}};
 constexpr EnumName<HdrOutputMode> kHdrOutput[] = {
@@ -184,6 +185,7 @@ AppSettings LoadSettings(const std::filesystem::path& path) {
     s.lightTheme = ReadBool(v, "App.LightTheme", s.lightTheme);
     s.displayBackend = ReadEnum(v, "App.DisplayBackend", kBackends, s.displayBackend);
     s.skipStartupSettings = ReadBool(v, "App.SkipStartupSettings", s.skipStartupSettings);
+    s.startupSettingsVersion = ReadString(v, "App.StartupSettingsVersion");
     s.saveLog = ReadBool(v, "App.SaveLog", s.saveLog);
     s.preventSleep = ReadBool(v, "App.PreventSleep", s.preventSleep);
 
@@ -196,7 +198,20 @@ AppSettings LoadSettings(const std::filesystem::path& path) {
     s.allowUnlistedFps = ReadBool(v, "Video.AllowUnlistedFps", s.allowUnlistedFps);
     s.presentationMode = ReadEnum(v, "Video.Presentation", kPresentation, s.presentationMode);
     s.scalingMode = ReadEnum(v, "Video.Scaling", kScaling, s.scalingMode);
-    s.colorOverride = ReadEnum(v, "Video.Color", kColors, s.colorOverride);
+    if (v.count("Video.ColorMatrix") || v.count("Video.SdrRange")) {
+        s.colorMatrix = ReadEnum(v, "Video.ColorMatrix", kColorMatrices, s.colorMatrix);
+        s.sdrRange = ReadEnum(v, "Video.SdrRange", kSdrRanges, s.sdrRange);
+    } else {
+        const std::string legacy = ReadString(v, "Video.Color");
+        const auto dash = legacy.find('-');
+        if (dash != std::string::npos) {
+            const Values parts{{"matrix", legacy.substr(0, dash)}, {"range", legacy.substr(dash + 1)}};
+            s.colorMatrix = ReadEnum(parts, "matrix", kColorMatrices, s.colorMatrix);
+            s.sdrRange = ReadEnum(parts, "range", kSdrRanges, s.sdrRange);
+        }
+    }
+    s.upscaling = ReadEnum(v, "Video.Upscaling", kUpscaling, s.upscaling);
+    s.nisSharpnessPercent = ReadInt(v, "Video.NisSharpness", s.nisSharpnessPercent, 0, 100);
     s.hdrInput = ReadEnum(v, "Video.HdrInput", kHdrInput, s.hdrInput);
     s.hdrOutput = ReadEnum(v, "Video.HdrOutput", kHdrOutput, s.hdrOutput);
     s.hdrChromaLocation = ReadEnum(v, "Video.HdrChroma", kHdrChroma, s.hdrChromaLocation);
@@ -268,6 +283,7 @@ bool SaveSettings(const std::filesystem::path& path, const AppSettings& s) {
              << "LightTheme=" << Bool(s.lightTheme) << "\n"
              << "DisplayBackend=" << EnumText(s.displayBackend, kBackends) << "\n"
              << "SkipStartupSettings=" << Bool(s.skipStartupSettings) << "\n"
+             << "StartupSettingsVersion=" << s.startupSettingsVersion << "\n"
              << "SaveLog=" << Bool(s.saveLog) << "\n"
              << "PreventSleep=" << Bool(s.preventSleep) << "\n\n"
              << "[Video]\n"
@@ -280,7 +296,10 @@ bool SaveSettings(const std::filesystem::path& path, const AppSettings& s) {
              << "AllowUnlistedFps=" << Bool(s.allowUnlistedFps) << "\n"
              << "Presentation=" << EnumText(s.presentationMode, kPresentation) << "\n"
              << "Scaling=" << EnumText(s.scalingMode, kScaling) << "\n"
-             << "Color=" << EnumText(s.colorOverride, kColors) << "\n"
+             << "ColorMatrix=" << EnumText(s.colorMatrix, kColorMatrices) << "\n"
+             << "SdrRange=" << EnumText(s.sdrRange, kSdrRanges) << "\n"
+             << "Upscaling=" << EnumText(s.upscaling, kUpscaling) << "\n"
+             << "NisSharpness=" << std::clamp(s.nisSharpnessPercent, 0, 100) << "\n"
              << "HdrInput=" << EnumText(s.hdrInput, kHdrInput) << "\n"
              << "HdrOutput=" << EnumText(s.hdrOutput, kHdrOutput) << "\n"
              << "HdrChroma=" << EnumText(s.hdrChromaLocation, kHdrChroma) << "\n"

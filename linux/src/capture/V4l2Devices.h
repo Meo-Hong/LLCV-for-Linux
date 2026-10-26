@@ -60,6 +60,7 @@ struct ResolvedMode {
     int height = 0;
     FrameRate rate;
     bool directRequest = false;
+    bool exactRate = false;
 };
 
 const char* PixelFormatName(PixelFormat format);

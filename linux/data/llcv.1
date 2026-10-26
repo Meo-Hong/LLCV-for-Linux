@@ -1,4 +1,4 @@
-.TH LLCV 1 "2026-10-22" "LLCV 2.1.4" "User Commands"
+.TH LLCV 1 "2026-10-26" "LLCV 2.1.7" "User Commands"
 .SH NAME
 llcv \- low-latency viewer for USB HDMI capture devices
 .SH SYNOPSIS
@@ -81,6 +81,10 @@ Start or stop recording. Pause and resume are in the Recording menu.
 .B M
 Mute or unmute playback. Recordings keep their sound; the mouse wheel also
 unmutes.
+.TP
+.B F6
+Turn CMAA2 \(-> NIS upscaling on or off. It applies to SDR video enlarged by
+up to 2x per axis, for display only, and needs OpenGL compute shaders.
 .SH FILES
 .TP
 .I $XDG_CONFIG_HOME/llcv/settings.ini

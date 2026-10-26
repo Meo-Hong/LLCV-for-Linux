@@ -1,0 +1,47 @@
+LLCV for Linux display upscaling
+
+The Linux build compiles these shaders at run time for its optional CMAA2 -> NIS
+display upscaling. They are embedded into the llcv binary as text.
+
+NVIDIA Image Scaling SDK 1.0.3
+Copyright (c) 2022 NVIDIA CORPORATION & AFFILIATES. MIT license.
+https://github.com/NVIDIAGameWorks/NVIDIAImageScaling
+Pinned source: 35e13ba316c98eeecf16f37eae70ce88019911f6 (taken from the Windows
+LLCV copy in windows/third_party/upscaling/nis).
+See nis/licence.txt.
+nis/NIS_Config.h is unmodified and used on the host for the constants and
+filter coefficients.
+nis/NIS_Scaler.h, LLCV changes:
+- The GLSL texture macros use combined OpenGL samplers instead of Vulkan
+  separate samplers (NVTEX_LOAD, NVTEX_SAMPLE, NVTEX_SAMPLE_RED/GREEN/BLUE).
+- NVScaler computes the tile load coordinates with signed integers. Upstream
+  adds an unsigned tile index to the signed block origin, so the padding to the
+  left of and above the image wrapped to a huge coordinate and sampled the
+  right and bottom edges instead of the left and top ones.
+LLCV builds only the SDR scaler (NIS_SCALER 1, NIS_HDR_MODE 0, no viewport or
+NV12 support, output clamp on), with 128 threads per group on NVIDIA and 256
+elsewhere.
+
+Conservative Morphological Anti-Aliasing 2 (CMAA2)
+Copyright (c) 2018 Intel Corporation. Apache License 2.0.
+https://github.com/GameTechDev/CMAA2
+Pinned source: 071c6b0857559f4e36f614362e6d2aab1b61938a (CMAA2.hlsl with the
+Windows LLCV adapter changes in windows/third_party/upscaling/cmaa2).
+See cmaa2/license.txt.
+cmaa2/CMAA2.glsl is an OpenGL 4.3 GLSL port of CMAA2.hlsl, reduced to the
+configuration the Windows build compiles: High preset, color edge detection
+(path 0), Extra Sharpness off, FP32, single sample, direct candidate
+processing (CMAA2_COLLECT_EXPAND_BLEND_ITEMS 0), typed FP16 output without
+sRGB conversion, and source loads clamped to the image like the Windows
+adapter. LLCV additions: list writes past the end of the work buffers are
+skipped, and float to integer conversions follow the Direct3D rules the
+original relies on (negative positions clamp to zero, fmod keeps the sign).
+Each pass was compared with the original CMAA2.hlsl compiled to GLSL with
+glslang and SPIRV-Cross; the results were identical.
+
+The host code (src/video/CmaaNisUpscaler.cpp) follows the Windows pipeline:
+BT.709-encoded SDR video is linearized, CMAA2 runs its five dispatches with
+full-size work buffers, the result is encoded again, and NIS enlarges it to the
+display size. HDR input or output, native size, downscaling and enlargement
+beyond 2x per axis use the normal path. Recordings and screenshots are not
+processed.

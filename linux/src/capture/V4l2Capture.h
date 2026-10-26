@@ -24,7 +24,9 @@ struct CaptureConfig {
     FrameRate rate;
     bool capture40Fps = false;
     bool directRate = false;
-    video::ColorOverride colorOverride = video::ColorOverride::Auto;
+    bool exactRate = false;
+    video::MatrixOverride colorMatrix = video::MatrixOverride::Auto;
+    video::RangeOverride sdrRange = video::RangeOverride::Auto;
     video::HdrInput hdrInput = video::HdrInput::Auto;
 };
 

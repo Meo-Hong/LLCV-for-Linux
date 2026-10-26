@@ -4,7 +4,7 @@
 
 LLCV는 USB(UVC/V4L2) HDMI 캡처 장치의 영상과 소리를 낮은 지연으로 표시하는
 뷰어입니다. 이 폴더는 [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer)의
-Windows용 LLCV 2.1.4를 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
+Windows용 LLCV 2.1.7을 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
 기준 장치는 AVerMedia Live Gamer ULTRA S GC553Pro이고, 기준 데스크톱은
 Ubuntu 26.04(GNOME, Wayland)입니다.
 
@@ -15,23 +15,36 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 > [이 저장소의 이슈](https://github.com/Meo-Hong/LLCV-for-Linux/issues)에
 > 남겨 주세요.
 
-## 2.1.4 새 기능
+## 2.1.7 새 기능
 
-- **F2**는 기본 설정 화면(영상, 오디오 전용 모드에서는 오디오)을 엽니다.
-  녹화 옵션은 그대로 녹화 탭에 있습니다.
-- 녹화를 멈출 때 마지막 영상·오디오 데이터가 빠지지 않습니다.
-- `settings.ini`의 잘못된 숫자값은 기본값으로 읽습니다.
+- **CMAA2 → NIS 업스케일링**(기본 꺼짐): 창이나 전체화면에서 SDR 영상을 가로·세로
+  최대 2배까지 확대할 때, CMAA2로 계단 현상을 먼저 줄이고 NVIDIA Image Scaling으로
+  확대·선명화합니다(기본 선명도 0.15). **F6**으로 켜고 끕니다.
+  [업스케일링](#업스케일링)을 보세요.
+- **SDR 색 범위**(자동 / Limited / Full)를 색 공간과 분리했고, 재생·스크린샷·녹화에
+  함께 적용됩니다.
+- **직접 고른 FPS는 그대로만 씁니다.** 장치 목록에 없는 FPS는 "지원 안 함"으로
+  표시되고 시작 버튼이 꺼지며, 드라이버가 다른 FPS를 적용하면 그 FPS로 시작하지 않고
+  중단합니다. 자동은 그대로입니다. 입력이 요청 FPS보다 계속 높으면 Tab 진단에
+  경고가 뜹니다.
+- 40fps 캡처와 목록에 없는 30fps 요청을 프레임레이트 옆 **추가 설정**으로
+  옮겼습니다.
+- 업데이트 뒤 첫 실행에는 **다음 실행부터 설정 화면 건너뛰기**가 켜져 있어도 설정
+  화면을 한 번 보여줍니다.
+- 남은 저장 공간 확인이 녹화 인코딩 스레드를 막지 않습니다.
 
-전체 목록: [릴리스 노트](release-notes/v2.1.4.md). 2.1.3에서는 [녹화](#녹화)(F9),
-[재생 음소거](#재생-음소거)(M), 목록에 없는 30fps 요청, 전체화면 영상 크기·위치가
-추가되었습니다. [2.1.3 릴리스 노트](release-notes/v2.1.3.md)와
-[2.1.3.1 릴리스 노트](release-notes/v2.1.3.1.md)를 보세요.
+전체 목록: [릴리스 노트](release-notes/v2.1.7.md). 2.1.4에서는 F2가 기본 설정
+화면을 열고 녹화 끝부분 데이터 누락을 고쳤습니다([2.1.4 릴리스 노트](release-notes/v2.1.4.md)).
+2.1.3에서는 [녹화](#녹화)(F9), [재생 음소거](#재생-음소거)(M), 목록에 없는 30fps
+요청, 전체화면 영상 크기·위치가 추가되었습니다([2.1.3 릴리스 노트](release-notes/v2.1.3.md),
+[2.1.3.1 릴리스 노트](release-notes/v2.1.3.1.md)).
 
 | 항목 | Windows판 | 리눅스판 |
 | --- | --- | --- |
 | 영상 캡처 | DirectShow | V4L2 mmap 버퍼, 최신 프레임 우선 |
 | 화면 출력 | D3D11 / DXGI | OpenGL 3.3 (Wayland는 EGL, X11은 GLX), 또는 OpenGL ES 3.0 |
 | 색 변환 | D3D11 Video Processor | GLSL 셰이더, BT.601/709/2020, Limited/Full |
+| 업스케일링 | CMAA2 → NIS 또는 NVIDIA VSR | CMAA2 → NIS (OpenGL 4.3 컴퓨트 셰이더) |
 | HDR10 | P010 + DXGI HDR10 | P010 + Wayland `wp_color_management_v1`, 또는 톤매핑 |
 | MJPEG | Media Foundation | libjpeg-turbo (YUV 평면으로 디코딩) |
 | 오디오 | WASAPI / ASIO | PipeWire 위의 SDL3 오디오 |
@@ -43,7 +56,7 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 | 녹화 파일 | 동영상 폴더 | `$XDG_VIDEOS_DIR/LLCV/` |
 | 업데이트 | 앱 안의 업데이트 확인 | APT 저장소 (`.deb`) |
 
-리눅스판에서 지원하지 않는 기능: NVIDIA VSR, WASAPI Exclusive, ASIO,
+리눅스판에서 지원하지 않는 기능: NVIDIA VSR(CMAA2 → NIS는 지원), WASAPI Exclusive, ASIO,
 콘솔 LPCM 5.1, 독점 전체화면과 호환성(Blt) 표시 방식([전체화면](#전체화면) 참고),
 창 가장자리 스냅과 둥근 모서리(컴포지터나 창 관리자가 담당), 앱 안의 업데이트
 확인(패키지 관리자가 담당).
@@ -55,11 +68,11 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 
 | 파일 | 설치할 OS | 명령 |
 | --- | --- | --- |
-| `llcv_2.1.4_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.4_amd64.deb` |
-| `llcv_2.1.4_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.1.4_arm64.deb` |
-| `llcv_2.1.4_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.1.4_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.1.4-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.1.4-1.x86_64.rpm` |
-| `llcv-2.1.4-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.4-1-x86_64.pkg.tar.zst` |
+| `llcv_2.1.7_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.7_amd64.deb` |
+| `llcv_2.1.7_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.1.7_arm64.deb` |
+| `llcv_2.1.7_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.1.7_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.1.7-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.1.7-1.x86_64.rpm` |
+| `llcv-2.1.7-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.7-1-x86_64.pkg.tar.zst` |
 
 - `.deb`를 설치하면 LLCV APT 저장소도 함께 등록되어, 다음 버전부터는
   `apt upgrade`나 소프트웨어 업데이트로 받습니다. `.rpm`과 Arch는 Releases에서
@@ -87,7 +100,9 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 | Arch Linux, Manjaro, EndeavourOS | `.pkg.tar.zst` | 가능 (GNOME 48 이상 / KDE Plasma 6) | 빌드 |
 
 "설치 확인"은 패키지 관리자가 패키지와 의존성을 받아들이는지까지 확인했다는
-뜻이며, 그 환경에서 앱을 실행해 보지는 않았습니다. HDR 출력은 Wayland 세션에서만
+뜻이며, 그 환경에서 앱을 실행해 보지는 않았습니다. RHEL, Rocky Linux, AlmaLinux
+9에서는 libjpeg-turbo가 있는 CRB 저장소를 먼저 켜세요
+(`sudo dnf config-manager --set-enabled crb`). HDR 출력은 Wayland 세션에서만
 됩니다. Raspberry Pi OS 32비트는 Raspberry Pi 2 이상이 필요하며, Pi Zero와 Pi 1,
 Raspberry Pi OS bookworm 32비트는 지원하지 않습니다.
 
@@ -127,9 +142,24 @@ HDR을 쓸 수 없는 환경이면 앱이 그 사실과 이유를 직접 알려�
 설정 화면의 프레임레이트 목록은 선택한 해상도와 형식에 대해 장치가 알려주는
 값입니다. P010에는 리눅스 7.1 이상 커널이 필요합니다([HDR](#hdr) 참고).
 
+### 직접 고른 프레임레이트
+
+**자동**은 이전처럼 무압축 형식의 가장 높은 FPS를 고릅니다. 특정 FPS를 고르면
+드라이버에 정확히 그 FPS를 요청합니다.
+
+- 선택한 해상도·형식에서 장치가 그 FPS를 알려주지 않으면(예: 해상도를 바꾼 뒤)
+  목록에 **(지원 안 함)**으로 남고 경고가 표시되며, 다른 FPS를 고를 때까지 시작
+  버튼이 꺼집니다. 가까운 FPS로 스스로 바꾸지 않습니다.
+- 시작할 때 드라이버가 다른 FPS를 적용하면 안내와 함께 시작을 중단합니다.
+- 재생 중 입력이 요청 FPS보다 몇 초 이상 크게 높으면 Tab 진단의 입력 FPS 옆에
+  **요청 N 초과**가 붙고, 로그에도 남습니다.
+
+**40fps 캡처**와 **목록에 없는 FPS 요청 (30fps)**은 프레임레이트 옆 **추가 설정**에
+있습니다. 둘 중 하나라도 켜져 있으면 버튼이 강조색으로 표시됩니다.
+
 ### 40fps 캡처
 
-**영상 → 캡처 → 40fps 캡처**는 기본 꺼짐입니다. 체크하면 프레임레이트 선택 대신
+**영상 → 캡처 → 프레임레이트 → 추가 설정 → 40fps 캡처**는 기본 꺼짐입니다. 체크하면 프레임레이트 선택 대신
 캡처 드라이버에 40fps를 요청하고, 해제하면 기존 선택으로 돌아갑니다.
 
 - 장치가 알려준 목록에 40fps가 없어도 요청할 수 있습니다. 지원 여부는 장치,
@@ -143,7 +173,8 @@ HDR을 쓸 수 없는 환경이면 앱이 그 사실과 이유를 직접 알려�
 
 ### 목록에 없는 30fps 요청
 
-**영상 → 캡처 → 목록에 없는 FPS 요청 (30fps)**은 기본 꺼짐입니다. 켜면 선택한
+**영상 → 캡처 → 프레임레이트 → 추가 설정 → 목록에 없는 FPS 요청 (30fps)**은
+기본 꺼짐입니다. 켜면 선택한
 해상도와 형식에서 드라이버 목록에 30fps가 없을 때, 프레임레이트 목록에
 **30fps · 직접 요청**이 강조색으로 추가됩니다.
 
@@ -152,6 +183,46 @@ HDR을 쓸 수 없는 환경이면 앱이 그 사실과 이유를 직접 알려�
   안내와 함께 시작을 중단합니다.
 - 40fps 캡처는 먼저 끄세요. 60fps 입력을 앱에서 30fps로 줄이는 기능이 아닙니다.
 - 시작한 뒤 Tab 진단의 **실제 FPS**를 확인하세요.
+
+## SDR 색 범위
+
+**영상 → 표시**에 색 관련 옵션이 두 개 있습니다.
+
+- **색 공간**(자동 / BT.709 / BT.601)은 YUV를 RGB로 바꾸는 방식을 고릅니다.
+- **SDR 색 범위**(자동 / Limited / Full)는 검은색과 흰색이 16-235인지 0-255인지
+  고릅니다. 자동은 드라이버가 알려 준 범위를 쓰고, 없으면 형식 기본값을 씁니다.
+  검은색이 뭉개지거나 회색빛으로 뜰 때만 Limited나 Full을 고르세요.
+
+두 옵션 모두 재생·스크린샷·녹화에 함께 적용되며, P010과 HDR 입력은 자체 범위를
+유지합니다. 이전 버전의 색 옵션(하나로 합쳐진 옵션)은 자동으로 두 옵션으로
+나뉩니다.
+
+## 업스케일링
+
+**영상 → 표시 → 업스케일링**에서 **끄기**(기본)와 **CMAA2 → NIS**를 고릅니다.
+켜 두면 영상을 가로·세로 1배 초과 2배 이하로 확대할 때(예: 1440p 창의 1080p,
+4K 모니터 전체화면의 1080p) 다음 순서로 처리합니다.
+
+1. **CMAA2**(Intel Conservative Morphological Anti-Aliasing 2, High 프리셋)가
+   선형광 SDR 영상에서 계단 현상을 줄입니다. 평평한 영역과 곧은 경계는 흐리게
+   하지 않습니다.
+2. **NIS**(NVIDIA Image Scaling 1.0.3)가 확대하고 선명하게 합니다. **NIS
+   선명도**는 0.00~1.00이며 기본값은 0.15입니다.
+
+- **F6**(또는 **Alt → 보기 → CMAA2 → NIS 업스케일링**)으로 선명도를 유지한 채
+  켜고 끕니다. 켜짐, 꺼짐, 적용 제외 이유가 알림으로 표시됩니다.
+- 화면 표시에만 적용됩니다. 녹화와 스크린샷은 캡처 원본을 유지하고, 오버레이는
+  처리 후에 그립니다.
+- SDR 전용입니다. HDR 입력, HDR 출력, P010, 원본 크기, 축소, 2배를 넘는 확대는
+  기존 경로를 사용합니다. 현재 상태는 Tab 진단의 **업스케일링**에서 확인하세요.
+- OpenGL 컴퓨트 셰이더가 필요합니다(OpenGL 4.3, 또는 컴퓨트·이미지 읽기/쓰기·
+  스토리지 버퍼 확장이 있는 3.3). 없거나 OpenGL ES이면 사용할 수 없다고 표시하고
+  기존 경로를 씁니다. GeForce RTX 2070에서 1080p → 1440p는 프레임당 약 1 ms입니다.
+- 리눅스 셰이더는 Windows판이 넣어 둔 셰이더를 옮긴 것입니다. CMAA2 이식본은
+  원본 HLSL을 OpenGL용으로 컴파일한 것과 결과가 같았습니다
+  ([third_party/upscaling/NOTICE.txt](third_party/upscaling/NOTICE.txt) 참고).
+  다른 점이 하나 있습니다. NIS SDK에서 왼쪽·위쪽 가장자리가 반대편 가장자리를
+  읽던 부호 오류를 리눅스 셰이더에서 고쳤습니다.
 
 ## 녹화
 
@@ -194,6 +265,25 @@ HDR을 쓸 수 없는 환경이면 앱이 그 사실과 이유를 직접 알려�
 링크할 수 없음) 녹화를 쓸 수 없습니다. Fedora `.rpm`과 Arch 패키지는 시스템 FFmpeg를 씁니다(빌드할 때 4.4 이상).
 RHEL, Rocky Linux, AlmaLinux용 `.rpm`은 FFmpeg 없이 빌드하므로 녹화를 쓸 수 없다고
 표시합니다.
+
+### 테스트 결과 (2.1.7)
+
+| 환경 | 확인한 내용 | 결과 |
+| --- | --- | --- |
+| Ubuntu 26.04, GeForce RTX 2070(NVIDIA 595), Mesa llvmpipe | CMAA2 → NIS 테스트 프로그램: 합성 이미지 1.2×·1.33×·1.5×·1.7×·2×, 홀수 크기, 1080p → 1440p·4K | 평평한 이미지 유지(0.3/255 이내), 그라데이션 단조 유지, 계단 현상 완화, 잘못된 값 없음. 두 드라이버의 CMAA2 판정 동일. RTX 2070에서 프레임당 1.0 ms(1440p), 1.5 ms(4K) |
+| Mesa llvmpipe | CMAA2 이식본과 원본 CMAA2 HLSL을 GLSL로 변환한 것(glslang + SPIRV-Cross)을 패스별로 바꿔 가며 비교 | 결과 동일 |
+| Ubuntu 26.04, GC553Pro | 업스케일링을 켠 앱 전체: NV12 640 × 480 → 960 × 720, YUY2 720 × 480 → 960 × 640 | 동작. 축소 화면은 적용 제외로 표시 |
+| Ubuntu 26.04, GC553Pro | 45fps(목록에 없음), 60fps 선택 | 45fps는 안내와 함께 거부, 60fps는 드라이버가 그대로 적용 |
+| Ubuntu 26.04, GC553Pro | 설정 화면 건너뛰기를 켠 2.1.4 설정, 예전 합쳐진 색 옵션 `bt601-full` | 설정 화면 한 번 표시 후 바로 시작, BT.601과 Full로 분리 |
+| Ubuntu 26.04, RTX 2070 | 비동기 저장 공간 확인을 넣은 상태로 1080p 60fps NVENC·x264 녹화 | 저장, 드롭 없음, 남은 공간 표시 |
+| Ubuntu 22.04·24.04·26.04, Debian 12·13 컨테이너 | 22.04에서 빌드한 amd64 `.deb` 하나를 각각 설치·실행 | 통과 |
+| Ubuntu 22.04 컨테이너, Mesa 23.2 llvmpipe, GC553Pro 연결 | 패키지로 설치한 `llcv`에서 업스케일링, NV12 640 × 480 → 960 × 720 | 동작 |
+| AlmaLinux 9(CRB 사용)·10, Fedora 44 컨테이너 | AlmaLinux 9에서 빌드한 `.rpm` 설치·실행 | 통과 |
+| Arch Linux 컨테이너 | `.pkg.tar.zst` 빌드·설치·실행 | 통과 |
+| arm64·armhf `.deb` | 교차 빌드 | 통과. 설치 검사는 CI에서 QEMU로 실행 |
+
+아직 확인하지 못한 것: AMD·Intel GPU와 X11에서의 업스케일링, 새 설정 컨트롤 직접
+조작, CI 설치 검사 대상이 아닌 시스템에서의 2.1.7 패키지.
 
 ### 녹화 테스트 결과 (2.1.3)
 
@@ -367,6 +457,7 @@ Alt나 종료 키(기본 Esc)를 다시 누르거나 메뉴 밖을 클릭하면 
 | Esc | 전체화면 해제 / 종료 |
 | F9 | 녹화 시작 / 종료 |
 | M | 재생 음소거 켜기 / 끄기 |
+| F6 | CMAA2 → NIS 업스케일링 켜기 / 끄기 |
 | 마우스 휠 | 음량 ±5% (음소거도 해제) |
 | 더블 클릭 | 전체화면 전환 |
 
@@ -377,14 +468,15 @@ Alt나 종료 키(기본 Esc)를 다시 누르거나 메뉴 밖을 클릭하면 
    버튼을 다시 누르면 취소됩니다.
 3. **시작**을 누르세요. 바꾼 키는 다른 설정과 함께 저장됩니다.
 
-**전체화면 해제 / 종료**(Esc)를 포함한 10개 단축키를 모두 바꿀 수 있습니다.
+**전체화면 해제 / 종료**(Esc)를 포함한 11개 단축키를 모두 바꿀 수 있습니다.
 빈 단축키는 둘 수 없습니다. 중복 키, 수정 키만 누른 경우, Super(Windows 키)
 조합, Alt+F4, Alt+Tab, Ctrl+Alt+Delete, Ctrl+Alt+F1~F12 같은 예약 조합은
-지정할 수 없습니다. **기본값 복원**은 10개를 모두 처음 키로 되돌립니다.
+지정할 수 없습니다. **기본값 복원**은 11개를 모두 처음 키로 되돌립니다.
 Alt(메뉴 막대)와 Alt+Enter(전체화면)는 고정입니다.
 
-이전 버전 설정에서 F9나 M을 이미 다른 동작에 쓰고 있으면 그 키는 그대로 두고,
-녹화 시작 / 종료나 재생 음소거에는 비어 있는 기능 키를 배정합니다. 배정된 키는
+이전 버전 설정에서 F9, M, F6을 이미 다른 동작에 쓰고 있으면 그 키는 그대로 두고,
+녹화 시작 / 종료, 재생 음소거, CMAA2 → NIS 업스케일링에는 비어 있는 기능 키를
+배정합니다. 배정된 키는
 **안내 · 로그**에서 확인하세요.
 
 키는 물리적인 위치로 구분하므로 한글 입력기가 켜져 있어도 동작합니다. 도움말,
@@ -444,4 +536,5 @@ Releases 페이지에도 파일이 올라갑니다. 배포 절차는
 
 GPL-3.0-or-later. 원본 Windows LLCV는 seria-aa, 리눅스판은 Meo-hong이
 만들었습니다. Dear ImGui는 MIT, Pretendard와 Noto Sans JP 한자 서브셋은
-SIL Open Font License 1.1을 따릅니다.
+SIL Open Font License 1.1을 따릅니다. NVIDIA Image Scaling 셰이더는 MIT, CMAA2
+셰이더 이식본은 Apache-2.0을 따릅니다([third_party/upscaling/NOTICE.txt](third_party/upscaling/NOTICE.txt)).

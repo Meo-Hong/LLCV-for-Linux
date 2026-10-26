@@ -63,4 +63,19 @@ bool LoadGlApi(std::string& missing) {
            Resolve(gl.Viewport, "glViewport", missing);
 }
 
+bool LoadComputeApi(std::string& missing) {
+    return Resolve(gl.BindBuffer, "glBindBuffer", missing) &&
+           Resolve(gl.BindBufferBase, "glBindBufferBase", missing) &&
+           Resolve(gl.BindImageTexture, "glBindImageTexture", missing) &&
+           Resolve(gl.BufferData, "glBufferData", missing) &&
+           Resolve(gl.BufferSubData, "glBufferSubData", missing) &&
+           Resolve(gl.DeleteBuffers, "glDeleteBuffers", missing) &&
+           Resolve(gl.DispatchCompute, "glDispatchCompute", missing) &&
+           Resolve(gl.DispatchComputeIndirect, "glDispatchComputeIndirect", missing) &&
+           Resolve(gl.GenBuffers, "glGenBuffers", missing) &&
+           Resolve(gl.GetIntegerv, "glGetIntegerv", missing) &&
+           Resolve(gl.GetStringi, "glGetStringi", missing) &&
+           Resolve(gl.MemoryBarrier, "glMemoryBarrier", missing);
+}
+
 }

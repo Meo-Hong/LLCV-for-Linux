@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22...3.25)
-project(llcv VERSION 2.1.4 LANGUAGES C CXX)
+project(llcv VERSION 2.1.7 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -157,6 +157,7 @@ add_executable(llcv
     src/ui/Theme.cpp
     src/ui/ViewerOverlay.cpp
     src/video/GlApi.cpp
+    src/video/CmaaNisUpscaler.cpp
     src/video/HdrOutput.cpp
     src/video/MjpegDecoder.cpp
     src/video/VideoColor.cpp
@@ -164,6 +165,17 @@ add_executable(llcv
 )
 
 target_include_directories(llcv PRIVATE src)
+
+set(LLCV_UPSCALING_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/upscaling)
+set(LLCV_UPSCALING_SHADERS ${LLCV_UPSCALING_DIR}/cmaa2/CMAA2.glsl ${LLCV_UPSCALING_DIR}/nis/NIS_Scaler.h)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${LLCV_UPSCALING_SHADERS})
+file(READ ${LLCV_UPSCALING_DIR}/cmaa2/CMAA2.glsl LLCV_CMAA2_GLSL)
+file(READ ${LLCV_UPSCALING_DIR}/nis/NIS_Scaler.h LLCV_NIS_SCALER_GLSL)
+file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/UpscalingShaders.h
+     CONTENT "#pragma once\n\nnamespace llcv::video::shaders {\n\ninline constexpr const char kCmaa2Glsl[] = R\"llcv(@LLCV_CMAA2_GLSL@)llcv\";\n\ninline constexpr const char kNisScalerGlsl[] = R\"llcv(@LLCV_NIS_SCALER_GLSL@)llcv\";\n\n}\n"
+     @ONLY)
+target_include_directories(llcv PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_include_directories(llcv SYSTEM PRIVATE ${LLCV_UPSCALING_DIR})
 
 target_compile_definitions(llcv PRIVATE
     LLCV_VERSION="${PROJECT_VERSION}"

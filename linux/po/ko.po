@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-19 02:55+0900\n"
+"POT-Creation-Date: 2026-10-26 09:23+0900\n"
 "PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
@@ -138,13 +138,22 @@ msgid "Smooth"
 msgstr "부드럽게"
 
 #: src/app/App.cpp
-msgid "Actual FPS"
-msgstr "실제 FPS"
-
-#: src/app/App.cpp
 #, c-format
 msgid "Input %.1f · Present %.1f"
 msgstr "입력 %.1f · 표시 %.1f"
+
+#: src/app/App.cpp
+#, c-format
+msgid " · above requested %d"
+msgstr " · 요청 %d 초과"
+
+#: src/app/App.cpp
+msgid "Actual FPS"
+msgstr "실제 FPS"
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Upscaling"
+msgstr "업스케일링"
 
 #: src/app/App.cpp
 msgid "App latency"
@@ -335,6 +344,10 @@ msgid "with audio"
 msgstr "오디오 사용"
 
 #: src/app/App.cpp
+msgid "Selected FPS unavailable: select another rate."
+msgstr "선택한 FPS 미지원 · 다른 FPS를 선택하세요."
+
+#: src/app/App.cpp
 msgid "The device does not support the selected mode."
 msgstr "선택한 모드를 장치가 지원하지 않습니다."
 
@@ -346,6 +359,14 @@ msgstr "캡처 장치를 찾지 못했습니다. USB 연결을 확인하세요."
 #, c-format
 msgid "HDR input not supported: %s"
 msgstr "HDR 입력 미지원: %s"
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"The device does not list %.2f fps for the selected resolution and format. A "
+"different rate is not used automatically. Select Auto or another supported "
+"rate."
+msgstr "장치가 선택한 해상도·포맷에서 %.2f fps를 지원 목록에 올리지 않습니다. 다른 FPS로 자동 변경하지 않습니다. 자동 또는 지원되는 다른 FPS를 선택하세요."
 
 #: src/app/App.cpp
 msgid "The device does not support the selected resolution and format."
@@ -391,6 +412,16 @@ msgstr ""
 "드라이버 목록에 없는 30fps를 직접 요청했지만, 드라이버가 거부했거나 다른 FPS"
 "로 적용했습니다. 목록에 있는 프레임레이트를 고르거나 영상 → 목록에 없는 FPS "
 "요청을 끄세요."
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"\n"
+"\n"
+"Requested capture rate: %s fps. A different rate is not used automatically. "
+"Select Auto or another supported rate to retry. The diagnostic log shows the "
+"failed step."
+msgstr "\n\n요청한 캡처 FPS: %s fps. 다른 FPS로 자동 변경하지 않습니다. 자동 또는 지원되는 다른 FPS로 다시 시도하세요. 실패한 단계는 진단 로그에서 확인할 수 있습니다."
 
 #: src/app/App.cpp
 msgid "Could not start audio: "
@@ -569,6 +600,52 @@ msgid "Nothing was recorded."
 msgstr "녹화된 내용이 없습니다."
 
 #: src/app/App.cpp
+msgid "CMAA2 → NIS unavailable · using the normal path"
+msgstr "CMAA2 → NIS 사용 불가 · 기본 출력 유지"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS OFF · F6: on"
+msgstr "CMAA2 → NIS OFF · F6: 켜기"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS ON · F6: off"
+msgstr "CMAA2 → NIS ON · F6: 끄기"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS bypass · SDR only"
+msgstr "CMAA2 → NIS 적용 제외 · SDR 전용"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS bypass · enlargement up to 2x only"
+msgstr "CMAA2 → NIS 적용 제외 · 최대 2배 확대에만 적용"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS · waiting for video"
+msgstr "CMAA2 → NIS · 영상 대기 중"
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Off"
+msgstr "끄기"
+
+#: src/app/App.cpp
+#, c-format
+msgid "CMAA2 → NIS · ON · sharpness %.2f"
+msgstr "CMAA2 → NIS · ON · 선명도 %.2f"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS · bypass (SDR only)"
+msgstr "CMAA2 → NIS · 적용 제외 (SDR 전용)"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS · bypass (enlargement up to 2x only)"
+msgstr "CMAA2 → NIS · 적용 제외 (최대 2배 확대에만 적용)"
+
+#: src/app/App.cpp
+#, c-format
+msgid "CMAA2 → NIS · unavailable (%s)"
+msgstr "CMAA2 → NIS · 사용 불가 (%s)"
+
+#: src/app/App.cpp
 msgid "1:1 size · the capture matches this monitor, so fullscreen is used."
 msgstr "1:1 크기 · 캡처 해상도가 이 모니터와 같아서 전체화면으로 표시합니다."
 
@@ -653,6 +730,46 @@ msgstr ""
 #: src/ui/SettingsScreen.cpp
 msgid "After starting, check Actual FPS in the Tab diagnostics."
 msgstr "시작한 뒤 Tab 진단의 실제 FPS를 확인하세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto uses the range the driver reports, or the format default."
+msgstr "자동은 드라이버가 알려 준 범위를 쓰고, 없으면 포맷 기본값을 씁니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Choose Limited or Full only when blacks look crushed or washed out."
+msgstr "검은색이 뭉개지거나 회색빛으로 뜰 때만 Limited 또는 Full을 고르세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Applies to playback, screenshots and recording. P010 and HDR input keep "
+"their own range."
+msgstr "재생·스크린샷·녹화에 함께 적용됩니다. P010과 HDR 입력은 자체 범위를 유지합니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"CMAA2 reduces jagged edges, then NIS enlarges the image. Default sharpness: "
+"0.15."
+msgstr "CMAA2로 계단 현상을 줄인 뒤 NIS로 확대합니다. 기본 선명도: 0.15."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"SDR only, for enlargement up to 2x per axis. HDR, native size and "
+"downscaling use the normal path."
+msgstr "SDR에서 가로·세로 최대 2배 확대에만 적용됩니다. HDR·원본 크기·축소는 기본 경로를 사용합니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "F6 turns the method on and off without changing its sharpness."
+msgstr "F6은 선명도를 바꾸지 않고 켜고 끕니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Display only: recordings and screenshots keep the capture image. The OSD is "
+"drawn afterwards."
+msgstr "화면 표시에만 적용되며 녹화·스크린샷은 캡처 원본을 유지합니다. OSD는 처리 후에 그립니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Needs OpenGL 4.3 compute shaders. Otherwise the normal path is used."
+msgstr "OpenGL 4.3 컴퓨트 셰이더가 필요합니다. 없으면 기본 경로를 사용합니다."
 
 #: src/ui/SettingsScreen.cpp
 msgid "MJPEG (compressed · high resolution/refresh)"
@@ -788,12 +905,24 @@ msgid "Frame rate"
 msgstr "프레임레이트"
 
 #: src/ui/SettingsScreen.cpp
+msgid "More##frameOptions"
+msgstr "추가 설정##frameOptions"
+
+#: src/ui/SettingsScreen.cpp
 msgid "Auto (highest uncompressed rate)"
 msgstr "자동 (최고 비압축 프레임레이트)"
 
 #: src/ui/SettingsScreen.cpp
 msgid "30 fps · direct request"
 msgstr "30fps · 직접 요청"
+
+#: src/ui/SettingsScreen.cpp
+msgid "40 fps capture"
+msgstr "40fps 캡처"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Allow unlisted FPS (30 fps)"
+msgstr "목록에 없는 FPS 요청 (30fps)"
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
@@ -805,8 +934,10 @@ msgstr ""
 "로 적용하면 시작할 때 안내하고 중단합니다. Tab 진단의 실제 FPS를 확인하세요."
 
 #: src/ui/SettingsScreen.cpp
-msgid "40 fps capture"
-msgstr "40fps 캡처"
+msgid ""
+"Selected FPS unavailable: select another rate. LLCV does not switch to a "
+"different rate on its own."
+msgstr "선택한 FPS 미지원 · 다른 FPS를 선택하세요. LLCV는 다른 FPS로 스스로 바꾸지 않습니다."
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
@@ -824,8 +955,8 @@ msgstr ""
 "거부하면 다른 FPS로 대체하지 않고 오류를 표시합니다."
 
 #: src/ui/SettingsScreen.cpp
-msgid "Allow unlisted FPS (30 fps)"
-msgstr "목록에 없는 FPS 요청 (30fps)"
+msgid "Allow unlisted FPS (30 fps) is on (More)."
+msgstr "목록에 없는 FPS 요청 (30fps)이 켜져 있습니다 (추가 설정)."
 
 #: src/ui/SettingsScreen.cpp
 #, c-format
@@ -853,12 +984,24 @@ msgid "Scaling mode"
 msgstr "화면 확대 방식"
 
 #: src/ui/SettingsScreen.cpp
-msgid "Color interpretation"
-msgstr "색상 해석"
+msgid "Color matrix"
+msgstr "색 공간"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Auto (recommended)"
 msgstr "자동 (권장)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "SDR color range"
+msgstr "SDR 색 범위"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Limited (16-235)"
+msgstr "Limited (16-235)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Full (0-255)"
+msgstr "Full (0-255)"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Screenshots (F12)"
@@ -879,6 +1022,25 @@ msgstr "클립보드에도 PNG 복사"
 #: src/ui/SettingsScreen.cpp
 msgid "Saved as PNG at the capture resolution."
 msgstr "입력 해상도 그대로 PNG로 저장합니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "CMAA2 → NIS"
+msgstr "CMAA2 → NIS"
+
+#: src/ui/SettingsScreen.cpp
+msgid "NIS sharpness"
+msgstr "NIS 선명도"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"SDR only, enlargement up to 2x per axis. Default sharpness 0.15. F6 toggles "
+"it while playing."
+msgstr "SDR 전용 · 가로·세로 최대 2배 확대. 기본 선명도 0.15. 재생 중 F6으로 켜고 끕니다."
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Not available with this GPU driver (%s). The normal path is used."
+msgstr "이 GPU 드라이버에서는 사용할 수 없습니다 (%s). 기본 경로를 사용합니다."
 
 #: src/ui/SettingsScreen.cpp
 msgid "HDR input interpretation"
@@ -932,7 +1094,9 @@ msgstr "좌측 상단"
 msgid ""
 "A compatibility override for P010 when color edges look shifted. Leave it on "
 "Auto otherwise."
-msgstr "P010에서 색 경계가 어긋나 보일 때 쓰는 호환용 설정입니다. 그 밖에는 자동으로 두세요."
+msgstr ""
+"P010에서 색 경계가 어긋나 보일 때 쓰는 호환용 설정입니다. 그 밖에는 자동으로 "
+"두세요."
 
 #: src/ui/SettingsScreen.cpp
 msgid "SDR reference white"
@@ -1173,7 +1337,9 @@ msgstr ""
 msgid ""
 "When the capture resolution matches the monitor, playback starts in "
 "fullscreen and F5 uses fullscreen for 1:1 pixels."
-msgstr "캡처 해상도가 모니터와 같으면 전체화면으로 재생을 시작하고, F5도 1:1 픽셀을 위해 전체화면을 씁니다."
+msgstr ""
+"캡처 해상도가 모니터와 같으면 전체화면으로 재생을 시작하고, F5도 1:1 픽셀을 "
+"위해 전체화면을 씁니다."
 
 #: src/ui/SettingsScreen.cpp
 msgid "Monitor"
@@ -1693,6 +1859,10 @@ msgid "Toggle playback mute"
 msgstr "재생 음소거 켜기 / 끄기"
 
 #: src/ui/Shortcuts.h
+msgid "Toggle CMAA2 → NIS upscaling"
+msgstr "CMAA2 → NIS 업스케일링 켜기/끄기"
+
+#: src/ui/Shortcuts.h
 msgid "Show / hide the menu bar"
 msgstr "메뉴 막대 표시 / 숨기기"
 
@@ -1851,6 +2021,10 @@ msgid "Sharp scaling"
 msgstr "선명하게 확대"
 
 #: src/ui/ViewerOverlay.cpp
+msgid "CMAA2 → NIS upscaling"
+msgstr "CMAA2 → NIS 업스케일링"
+
+#: src/ui/ViewerOverlay.cpp
 msgid "Immediate presentation"
 msgstr "저지연 표시"
 
@@ -1934,6 +2108,10 @@ msgstr "Alt · Esc: 메뉴 닫기"
 #: src/video/VideoColor.cpp
 msgid "manual"
 msgstr "수동"
+
+#: src/video/VideoColor.cpp
+msgid "manual + automatic"
+msgstr "수동 + 자동"
 
 #: src/video/VideoColor.cpp
 msgid "HDR10 default"

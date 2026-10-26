@@ -32,6 +32,7 @@ struct AppSettings {
     bool lightTheme = false;
     DisplayBackend displayBackend = DisplayBackend::Auto;
     bool skipStartupSettings = false;
+    std::string startupSettingsVersion;
     bool saveLog = false;
     bool preventSleep = true;
 
@@ -44,7 +45,10 @@ struct AppSettings {
     bool allowUnlistedFps = false;
     PresentationMode presentationMode = PresentationMode::Immediate;
     ScalingMode scalingMode = ScalingMode::Smooth;
-    video::ColorOverride colorOverride = video::ColorOverride::Auto;
+    video::MatrixOverride colorMatrix = video::MatrixOverride::Auto;
+    video::RangeOverride sdrRange = video::RangeOverride::Auto;
+    bool upscaling = false;
+    int nisSharpnessPercent = 15;
     video::HdrInput hdrInput = video::HdrInput::Auto;
     HdrOutputMode hdrOutput = HdrOutputMode::Auto;
     HdrChromaLocation hdrChromaLocation = HdrChromaLocation::Auto;

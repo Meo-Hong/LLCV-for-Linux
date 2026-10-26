@@ -3,7 +3,7 @@
 > [한국어](README.ko.md)
 
 LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices with low
-latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.1.4 viewer
+latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.1.7 viewer
 by [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer). The
 reference device is the AVerMedia Live Gamer ULTRA S GC553Pro. The reference
 desktop is Ubuntu 26.04 (GNOME, Wayland).
@@ -16,24 +16,37 @@ desktop is Ubuntu 26.04 (GNOME, Wayland).
 > [this repository's issues](https://github.com/Meo-Hong/LLCV-for-Linux/issues),
 > not in the original repository.
 
-## What's new in 2.1.4
+## What's new in 2.1.7
 
-- **F2** opens the default settings page (Video, or Audio in audio-only mode);
-  recording options stay on the Recording tab.
-- The last video and audio packets are no longer lost when a recording stops.
-- Invalid numbers in `settings.ini` fall back to the defaults.
+- **CMAA2 → NIS upscaling** (off by default): when the window or fullscreen
+  view enlarges SDR video by up to 2× per axis, CMAA2 first smooths jagged
+  edges, then NVIDIA Image Scaling enlarges and sharpens (default sharpness
+  0.15). **F6** turns it on and off. See [Upscaling](#upscaling).
+- **SDR color range** (Auto / Limited / Full) is now separate from the color
+  matrix and applies to playback, screenshots and recording.
+- **Explicit frame rates are strict**: a selected rate the device does not list
+  is shown as unsupported and Start stays off, and if the driver applies a
+  different rate, startup stops instead of using it. Auto is unchanged. The
+  Tab diagnostics warn when the input runs well above the requested rate.
+- 40 fps capture and unlisted 30 fps requests moved to **More** beside the
+  frame rate.
+- After an update, the settings screen is shown once even when **Skip this
+  settings screen on next launch** is on.
+- Free-space checks no longer run on the recording encoder thread.
 
-Full list: [release notes](release-notes/v2.1.4.md). 2.1.3 added
-[recording](#recording) (F9), [playback mute](#playback-mute) (M), unlisted
-30 fps requests and fullscreen video size and position; see the
-[2.1.3 notes](release-notes/v2.1.3.md) and the
-[2.1.3.1 notes](release-notes/v2.1.3.1.md).
+Full list: [release notes](release-notes/v2.1.7.md). 2.1.4 made F2 open the
+default settings page and fixed lost packets at the end of a recording
+([2.1.4 notes](release-notes/v2.1.4.md)). 2.1.3 added [recording](#recording)
+(F9), [playback mute](#playback-mute) (M), unlisted 30 fps requests and
+fullscreen video size and position ([2.1.3 notes](release-notes/v2.1.3.md),
+[2.1.3.1 notes](release-notes/v2.1.3.1.md)).
 
 | Area | Windows build | Linux build |
 | --- | --- | --- |
 | Video capture | DirectShow | V4L2 memory-mapped buffers, latest frame first |
 | Presentation | D3D11 / DXGI | OpenGL 3.3 (EGL on Wayland, GLX on X11), or OpenGL ES 3.0 |
 | Color conversion | D3D11 Video Processor | GLSL shaders, BT.601/709/2020, limited/full range |
+| Upscaling | CMAA2 → NIS or NVIDIA VSR | CMAA2 → NIS (OpenGL 4.3 compute shaders) |
 | HDR10 | P010 + DXGI HDR10 | P010 + Wayland `wp_color_management_v1`, or tone mapping |
 | MJPEG | Media Foundation | libjpeg-turbo (decoded to YUV planes) |
 | Audio | WASAPI / ASIO | SDL3 audio on PipeWire |
@@ -45,7 +58,7 @@ Full list: [release notes](release-notes/v2.1.4.md). 2.1.3 added
 | Recordings | Videos | `$XDG_VIDEOS_DIR/LLCV/` |
 | Updates | In-app update check | APT repository (`.deb`) |
 
-Not available on Linux: NVIDIA VSR, WASAPI Exclusive, ASIO, console LPCM 5.1,
+Not available on Linux: NVIDIA VSR (CMAA2 → NIS is available), WASAPI Exclusive, ASIO, console LPCM 5.1,
 the exclusive fullscreen and Compatibility (Blt) presentation modes (see
 [Fullscreen](#fullscreen)), window edge snapping and rounded corners (the
 compositor or window manager handles them), and the in-app update check (the
@@ -58,11 +71,11 @@ Download the file for your system from
 
 | File | Install on | Command |
 | --- | --- | --- |
-| `llcv_2.1.4_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.4_amd64.deb` |
-| `llcv_2.1.4_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.1.4_arm64.deb` |
-| `llcv_2.1.4_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.1.4_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.1.4-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.1.4-1.x86_64.rpm` |
-| `llcv-2.1.4-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.4-1-x86_64.pkg.tar.zst` |
+| `llcv_2.1.7_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.7_amd64.deb` |
+| `llcv_2.1.7_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.1.7_arm64.deb` |
+| `llcv_2.1.7_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.1.7_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.1.7-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.1.7-1.x86_64.rpm` |
+| `llcv-2.1.7-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.7-1-x86_64.pkg.tar.zst` |
 
 - Installing a `.deb` also registers the LLCV APT repository, so later
   versions arrive through `apt upgrade` or Software Updater. For `.rpm` and
@@ -90,7 +103,9 @@ Download the file for your system from
 | Arch Linux, Manjaro, EndeavourOS | `.pkg.tar.zst` | yes (GNOME 48 or newer / KDE Plasma 6) | build |
 
 "Install check" means the package manager accepted the package and its
-dependencies; the app itself was not run on that system. HDR output needs a
+dependencies; the app itself was not run on that system. On RHEL, Rocky Linux
+and AlmaLinux 9, enable the CRB repository first
+(`sudo dnf config-manager --set-enabled crb`); it holds libjpeg-turbo. HDR output needs a
 Wayland session. Raspberry Pi OS 32-bit needs a Raspberry Pi 2 or newer; Pi
 Zero and Pi 1 are not supported, and Raspberry Pi OS bookworm 32-bit is not
 supported.
@@ -132,9 +147,26 @@ SDR.
 The frame rate list in the settings comes from the device for the selected
 resolution and format. P010 needs Linux 7.1 or newer (see [HDR](#hdr)).
 
+### Explicit frame rates
+
+**Auto** picks the highest uncompressed rate, as before. When a specific rate
+is selected, LLCV asks the driver for exactly that rate:
+
+- If the device does not list it for the selected resolution and format (for
+  example after changing the resolution), the list shows it as
+  **(unsupported)**, a warning appears and Start stays off until another rate
+  is chosen. LLCV never switches to a nearby rate by itself.
+- If the driver applies a different rate on Start, startup stops with a notice.
+- While playing, the Tab diagnostics add **above requested N** next to the
+  input rate when the device delivers well above the requested rate for
+  several seconds. The log records the same.
+
+**40 fps capture** and **Allow unlisted FPS (30 fps)** are under **More**
+beside the frame rate. The button is highlighted when one of them is on.
+
 ### 40 fps capture
 
-**Video → Capture → 40 fps capture** is off by default. When checked, LLCV
+**Video → Capture → Frame rate → More → 40 fps capture** is off by default. When checked, LLCV
 asks the capture driver for 40 fps instead of the frame-rate selection.
 Unchecking it restores that selection.
 
@@ -150,7 +182,8 @@ Unchecking it restores that selection.
 
 ### Unlisted 30 fps requests
 
-**Video → Capture → Allow unlisted FPS (30 fps)** is off by default. When it is
+**Video → Capture → Frame rate → More → Allow unlisted FPS (30 fps)** is off
+by default. When it is
 checked and the driver does not list 30 fps for the selected resolution and
 format, the frame-rate list gains **30 fps · direct request**, shown in the
 accent color.
@@ -161,6 +194,50 @@ accent color.
 - Turn off 40 fps capture first. It does not convert 60 fps to 30 fps in
   software.
 - After starting, check **Actual FPS** in the Tab diagnostics.
+
+## SDR color range
+
+**Video → Display** has two color options:
+
+- **Color matrix** (Auto / BT.709 / BT.601) chooses how YUV is converted to RGB.
+- **SDR color range** (Auto / Limited / Full) chooses whether black and white
+  sit at 16-235 or 0-255. Auto uses the range the driver reports, or the format
+  default. Choose Limited or Full only when blacks look crushed or washed out.
+
+Both apply to playback, screenshots and recording. P010 and HDR input keep
+their own range. Settings from earlier versions (one combined color option)
+are split into the two options automatically.
+
+## Upscaling
+
+**Video → Display → Upscaling** offers **Off** (default) and **CMAA2 → NIS**.
+When it is on and the video is enlarged by more than 1× and up to 2× per axis
+(for example 1080p in a 1440p window, or 1080p fullscreen on a 4K monitor),
+LLCV runs:
+
+1. **CMAA2** (Intel Conservative Morphological Anti-Aliasing 2, High preset) on
+   linear-light SDR video, smoothing jagged edges without blurring flat areas
+   or straight edges.
+2. **NIS** (NVIDIA Image Scaling 1.0.3) to enlarge and sharpen. **NIS
+   sharpness** goes from 0.00 to 1.00; the default is 0.15.
+
+- **F6** (or **Alt → View → CMAA2 → NIS upscaling**) turns it on and off
+  without changing the sharpness. A notice shows the result: on, off, or why it
+  is bypassed.
+- It is display only. Recordings and screenshots keep the capture image, and
+  the overlays are drawn afterwards.
+- SDR only. HDR input, HDR output, P010, native size, downscaling and
+  enlargement beyond 2× use the normal path. The Tab diagnostics show the
+  current state under **Upscaling**.
+- It needs OpenGL compute shaders (OpenGL 4.3, or 3.3 with the compute,
+  image load/store and storage buffer extensions). Without them, or with
+  OpenGL ES, the option reports that it is unavailable and the normal path is
+  used. On a GeForce RTX 2070, 1080p to 1440p takes about 1 ms per frame.
+- The Linux shaders are ports of the shaders the Windows build embeds. The
+  CMAA2 port was compared with the original HLSL compiled for OpenGL and gave
+  identical results; see [third_party/upscaling/NOTICE.txt](third_party/upscaling/NOTICE.txt).
+  One difference: the Linux NIS shader fixes a sign error in the SDK that made
+  the left and top edges sample the opposite edge of the image.
 
 ## Recording
 
@@ -207,6 +284,26 @@ and AV1 need NVENC or VA-API. The Raspberry Pi OS 32-bit package has no x264
 available on it. The Fedora `.rpm` and the Arch package use the
 system FFmpeg (4.4 or newer when building). The RHEL, Rocky Linux and
 AlmaLinux `.rpm` is built without FFmpeg and shows recording as unavailable.
+
+### Tests (2.1.7)
+
+| Environment | What was checked | Result |
+| --- | --- | --- |
+| Ubuntu 26.04, GeForce RTX 2070 (NVIDIA 595), and Mesa llvmpipe | CMAA2 → NIS test program on synthetic images at 1.2×, 1.33×, 1.5×, 1.7× and 2×, odd sizes, 1080p to 1440p and 4K | Flat images unchanged (within 0.3/255), gradients stay monotonic, jagged edges smoothed, no invalid values; both drivers made the same CMAA2 decisions. 1.0 ms (1440p) and 1.5 ms (4K) per frame on the RTX 2070 |
+| Mesa llvmpipe | CMAA2 port against the original CMAA2 HLSL compiled to GLSL (glslang + SPIRV-Cross), each pass swapped in turn | Identical results |
+| Ubuntu 26.04, GC553Pro | Full app with upscaling on: NV12 640 × 480 → 960 × 720, YUY2 720 × 480 → 960 × 640 | Active; downscaled views reported as bypassed |
+| Ubuntu 26.04, GC553Pro | 45 fps selected (not listed), 60 fps selected | 45 fps refused with a notice; 60 fps confirmed by the driver |
+| Ubuntu 26.04, GC553Pro | Settings from 2.1.4 with the settings screen skipped, old combined color option `bt601-full` | Settings shown once, then direct start; split into BT.601 and Full |
+| Ubuntu 26.04, RTX 2070 | NVENC and x264 recording of 1080p 60 fps with the asynchronous free-space check | Saved, no dropped frames, free space reported |
+| Ubuntu 22.04, 24.04 and 26.04, Debian 12 and 13 containers | One amd64 `.deb` (built on 22.04) installed and run on each | Passed |
+| Ubuntu 22.04 container, Mesa 23.2 llvmpipe, GC553Pro passed through | Packaged `llcv` with upscaling on, NV12 640 × 480 → 960 × 720 | Active |
+| AlmaLinux 9 (with CRB) and 10, Fedora 44 containers | `.rpm` built on AlmaLinux 9: install and run | Passed |
+| Arch Linux container | `.pkg.tar.zst` build, install and run | Passed |
+| arm64 and armhf `.deb` | Cross build | Passed; install checks run in CI under QEMU |
+
+Not checked yet: upscaling on AMD and Intel GPUs and on X11, the new settings
+controls operated by hand, and the 2.1.7 packages on systems other than those
+in the CI install checks.
 
 ### Recording tests (2.1.3)
 
@@ -392,6 +489,7 @@ The keys below are the defaults. They can be changed under
 | Esc | Leave fullscreen, or exit |
 | F9 | Start or stop recording |
 | M | Mute or unmute playback |
+| F6 | Turn CMAA2 → NIS upscaling on or off |
 | Mouse wheel | Volume ±5% (also unmutes) |
 | Double-click | Toggle fullscreen |
 
@@ -403,15 +501,15 @@ The keys below are the defaults. They can be changed under
    button again to cancel.
 3. Choose **Start**. The new keys are saved with the other settings.
 
-All ten shortcuts can be changed, including **Leave fullscreen / exit**
+All eleven shortcuts can be changed, including **Leave fullscreen / exit**
 (Esc). None can be empty. Duplicate keys, modifier-only keys, Super (Windows
 key) combinations and reserved combinations such as Alt+F4, Alt+Tab,
 Ctrl+Alt+Delete and Ctrl+Alt+F1 to F12 cannot be assigned. **Reset defaults**
-restores all ten. Alt (menu bar) and Alt+Enter (fullscreen) stay fixed.
+restores all eleven. Alt (menu bar) and Alt+Enter (fullscreen) stay fixed.
 
-When a profile from an earlier version already uses F9 or M for another action,
-that key is kept, and Start / stop recording or Toggle playback mute gets an
-unused function key instead. Check the assigned keys under **Guide & logs**.
+When a profile from an earlier version already uses F9, M or F6 for another
+action, that key is kept, and Start / stop recording, Toggle playback mute or
+Toggle CMAA2 → NIS upscaling gets an unused function key instead. Check the assigned keys under **Guide & logs**.
 
 Keys are matched by their physical position, so they keep working when a
 Korean or other input method is active. The help window, menu bar, overlays
@@ -474,4 +572,6 @@ the regular system updates. Each release is built by GitHub Actions from a
 
 GPL-3.0-or-later. The original Windows LLCV is by seria-aa; the Linux port is
 by Meo-hong. Dear ImGui is MIT licensed. Pretendard and the Noto Sans JP kanji
-subset are licensed under the SIL Open Font License 1.1.
+subset are licensed under the SIL Open Font License 1.1. The NVIDIA Image
+Scaling shader is MIT licensed and the CMAA2 shader port is Apache-2.0
+licensed (see [third_party/upscaling/NOTICE.txt](third_party/upscaling/NOTICE.txt)).

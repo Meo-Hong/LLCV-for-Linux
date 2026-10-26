@@ -1,10 +1,10 @@
 pkgname=llcv
-pkgver=2.1.4
+pkgver=2.1.7
 pkgrel=1
 pkgdesc="Low-latency viewer for USB (UVC) HDMI capture devices, with HDR10"
 arch=('x86_64' 'aarch64')
 url="https://github.com/Meo-Hong/LLCV-for-Linux"
-license=('GPL-3.0-or-later' 'MIT' 'OFL-1.1')
+license=('GPL-3.0-or-later' 'MIT' 'OFL-1.1' 'Apache-2.0')
 depends=('dbus' 'ffmpeg' 'gcc-libs' 'glibc' 'libglvnd' 'libjpeg-turbo' 'libpng' 'sdl3' 'wayland')
 makedepends=('cmake' 'pkgconf' 'wayland-protocols')
 optdepends=('pipewire: low-latency audio routing (recommended)'
@@ -32,4 +32,7 @@ package() {
     install -Dm644 "$_srcroot/third_party/imgui/LICENSE.txt" "$pkgdir/usr/share/licenses/$pkgname/imgui-MIT.txt"
     install -Dm644 "$_srcroot/third_party/pretendard/LICENSE.txt" "$pkgdir/usr/share/licenses/$pkgname/Pretendard-OFL.txt"
     install -Dm644 "$_srcroot/third_party/noto-sans-jp/LICENSE.txt" "$pkgdir/usr/share/licenses/$pkgname/NotoSansJP-OFL.txt"
+    install -Dm644 "$_srcroot/third_party/upscaling/nis/licence.txt" "$pkgdir/usr/share/licenses/$pkgname/NIS-MIT.txt"
+    install -Dm644 "$_srcroot/third_party/upscaling/cmaa2/license.txt" "$pkgdir/usr/share/licenses/$pkgname/CMAA2-Apache-2.0.txt"
+    install -Dm644 "$_srcroot/third_party/upscaling/NOTICE.txt" "$pkgdir/usr/share/licenses/$pkgname/upscaling-NOTICE.txt"
 }

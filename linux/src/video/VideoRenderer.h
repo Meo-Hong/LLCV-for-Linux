@@ -1,6 +1,7 @@
 #pragma once
 
 #include "capture/VideoFrame.h"
+#include "video/CmaaNisUpscaler.h"
 #include "video/GlApi.h"
 
 #include <array>
@@ -34,6 +35,10 @@ public:
     void Configure(OutputMode output, float sdrWhiteNits);
     void SetPlacement(const Placement& placement) { placement_ = placement; }
     void SetP010ChromaSiting(ChromaSiting siting) { p010Siting_ = siting; }
+    void SetUpscaling(bool enabled, float sharpness) {
+        upscaleRequested_ = enabled;
+        upscaleSharpness_ = sharpness;
+    }
     void Upload(const capture::VideoFrame& frame);
     void Draw(int targetWidth, int targetHeight, bool sharp);
     void BeginUiLayer(int targetWidth, int targetHeight);
@@ -50,6 +55,9 @@ public:
     int ImageWidth() const { return sourceWidth_; }
     int ImageHeight() const { return sourceHeight_; }
     PixelRect LastVideoRect() const { return lastRect_; }
+    UpscaleState LastUpscaleState() const { return upscaleState_; }
+    bool UpscalingSupported() const { return upscaleSupported_ && !upscaler_.Failed(); }
+    std::string UpscalingIssue() const { return upscaler_.Failed() ? upscaler_.Error() : upscaleIssue_; }
 
 private:
     enum ProgramIndex { kNv12, kP010, kYuyv, kYuv3, kRgb, kDisplay, kCompose, kProgramCount };
@@ -93,6 +101,7 @@ private:
     void Convert(Target& target, OutputMode output);
     void SetFilter(GLuint texture, bool sharp);
     PixelRect FitRect(int targetWidth, int targetHeight) const;
+    GLuint UpscaledTexture(const PixelRect& rect);
     void DrawQuad(const Program& program, float x0, float y0, float x1, float y1, bool flip);
 
     std::array<Program, kProgramCount> programs_{};
@@ -116,6 +125,13 @@ private:
     PixelRect lastRect_;
     Placement placement_;
     ChromaSiting p010Siting_ = ChromaSiting::Center;
+    CmaaNisUpscaler upscaler_;
+    bool upscaleRequested_ = false;
+    float upscaleSharpness_ = 0.15f;
+    bool upscaleSupported_ = false;
+    std::string upscaleIssue_;
+    UpscaleState upscaleState_ = UpscaleState::Off;
+    uint64_t imageGeneration_ = 0;
 };
 
 }

@@ -567,6 +567,8 @@ MenuCommand DrawMenuBar(const MenuState& state, const input::Bindings& shortcuts
             if (!state.audioOnly) {
                 item(T("Smooth scaling"), nullptr, !state.sharp, MenuCommand::ScalingSmooth);
                 item(T("Sharp scaling"), nullptr, state.sharp, MenuCommand::ScalingSharp);
+                item(T("CMAA2 → NIS upscaling"), key(input::Action::Upscaling).c_str(), state.upscaling,
+                     MenuCommand::Upscaling);
                 ImGui::Separator();
                 item(T("Immediate presentation"), nullptr, !state.vsync, MenuCommand::PresentImmediate);
                 item("VSync", nullptr, state.vsync, MenuCommand::PresentVSync);

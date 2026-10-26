@@ -1,5 +1,7 @@
 #include "app/ModeSelection.h"
 
+#include <cmath>
+
 namespace llcv::app {
 
 std::optional<capture::PixelFormat> FormatFromChoice(settings::PixelFormatChoice choice) {
@@ -34,6 +36,19 @@ capture::ModeRequest RequestFromSettings(const settings::AppSettings& settings) 
     request.capture40Fps = settings.capture40Fps;
     request.allowUnlistedFps = settings.allowUnlistedFps;
     return request;
+}
+
+bool SelectedFpsUnavailable(const capture::CaptureDevice& device, const settings::AppSettings& settings) {
+    capture::ModeRequest request = RequestFromSettings(settings);
+    if (request.capture40Fps || request.fpsMilli <= 0 || capture::ResolveMode(device, request)) return false;
+    request.fpsMilli = 0;
+    return capture::ResolveMode(device, request).has_value();
+}
+
+int RequestedCaptureFps(const settings::AppSettings& settings) {
+    if (settings.audioOnly) return 0;
+    if (settings.capture40Fps) return 40;
+    return settings.frameRateMilli > 0 ? static_cast<int>(std::lround(settings.frameRateMilli / 1000.0)) : 0;
 }
 
 }

@@ -285,6 +285,7 @@ private:
     uint64_t completedBytes_ = 0;
     bool anyPacket_ = false;
     std::optional<uint64_t> freeBytes_;
+    FreeSpaceProbe spaceProbe_;
 
     int audioFrameSize_ = 1024;
     int64_t audioPts_ = 0;
@@ -508,7 +509,7 @@ void Recorder::Impl::Session::CheckSplit(int64_t pts) {
 }
 
 void Recorder::Impl::Session::CheckStorage() {
-    freeBytes_ = FreeBytes(currentPath_.parent_path());
+    if (!spaceProbe_.Poll(currentPath_.parent_path(), freeBytes_)) return;
     if (freeBytes_ && *freeBytes_ < ReserveBytes(options_)) {
         Fail(Failure::DiskFull, "free space below the recording reserve");
     }

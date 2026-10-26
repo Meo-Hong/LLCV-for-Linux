@@ -41,6 +41,18 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="2.1.7" date="2026-10-26">
+      <description>
+        <p>Follows the Windows LLCV 2.1.5 to 2.1.7 updates.</p>
+        <ul>
+          <li>Optional CMAA2 to NIS upscaling for SDR video enlarged up to 2x, toggled with F6.</li>
+          <li>SDR color range (Auto, Limited, Full) is separate from the color matrix and applies to playback, screenshots and recording.</li>
+          <li>Explicitly selected frame rates are no longer replaced by another rate; the diagnostics warn about input above the requested rate.</li>
+          <li>40 fps and unlisted 30 fps requests moved under More beside the frame rate.</li>
+          <li>The settings screen is shown once after an update.</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.1.4" date="2026-10-22">
       <description>
         <p>Follows the Windows LLCV 2.1.4 update.</p>

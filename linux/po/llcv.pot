@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-19 02:55+0900\n"
+"POT-Creation-Date: 2026-10-26 09:27+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -136,12 +136,21 @@ msgid "Smooth"
 msgstr ""
 
 #: src/app/App.cpp
-msgid "Actual FPS"
+#, c-format
+msgid "Input %.1f · Present %.1f"
 msgstr ""
 
 #: src/app/App.cpp
 #, c-format
-msgid "Input %.1f · Present %.1f"
+msgid " · above requested %d"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "Actual FPS"
+msgstr ""
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Upscaling"
 msgstr ""
 
 #: src/app/App.cpp
@@ -333,6 +342,10 @@ msgid "with audio"
 msgstr ""
 
 #: src/app/App.cpp
+msgid "Selected FPS unavailable: select another rate."
+msgstr ""
+
+#: src/app/App.cpp
 msgid "The device does not support the selected mode."
 msgstr ""
 
@@ -343,6 +356,14 @@ msgstr ""
 #: src/app/App.cpp
 #, c-format
 msgid "HDR input not supported: %s"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"The device does not list %.2f fps for the selected resolution and format. A "
+"different rate is not used automatically. Select Auto or another supported "
+"rate."
 msgstr ""
 
 #: src/app/App.cpp
@@ -376,6 +397,16 @@ msgid ""
 "30 fps was requested directly because the driver does not list it. The "
 "driver rejected it or applied another rate. Choose a listed frame rate or "
 "turn off Video → Allow unlisted FPS."
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"\n"
+"\n"
+"Requested capture rate: %s fps. A different rate is not used automatically. "
+"Select Auto or another supported rate to retry. The diagnostic log shows the "
+"failed step."
 msgstr ""
 
 #: src/app/App.cpp
@@ -544,6 +575,52 @@ msgid "Nothing was recorded."
 msgstr ""
 
 #: src/app/App.cpp
+msgid "CMAA2 → NIS unavailable · using the normal path"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS OFF · F6: on"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS ON · F6: off"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS bypass · SDR only"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS bypass · enlargement up to 2x only"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS · waiting for video"
+msgstr ""
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Off"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "CMAA2 → NIS · ON · sharpness %.2f"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS · bypass (SDR only)"
+msgstr ""
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS · bypass (enlargement up to 2x only)"
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid "CMAA2 → NIS · unavailable (%s)"
+msgstr ""
+
+#: src/app/App.cpp
 msgid "1:1 size · the capture matches this monitor, so fullscreen is used."
 msgstr ""
 
@@ -614,6 +691,46 @@ msgstr ""
 
 #: src/ui/SettingsScreen.cpp
 msgid "After starting, check Actual FPS in the Tab diagnostics."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto uses the range the driver reports, or the format default."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Choose Limited or Full only when blacks look crushed or washed out."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Applies to playback, screenshots and recording. P010 and HDR input keep "
+"their own range."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"CMAA2 reduces jagged edges, then NIS enlarges the image. Default sharpness: "
+"0.15."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"SDR only, for enlargement up to 2x per axis. HDR, native size and "
+"downscaling use the normal path."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "F6 turns the method on and off without changing its sharpness."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Display only: recordings and screenshots keep the capture image. The OSD is "
+"drawn afterwards."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Needs OpenGL 4.3 compute shaders. Otherwise the normal path is used."
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
@@ -750,11 +867,23 @@ msgid "Frame rate"
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
+msgid "More##frameOptions"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
 msgid "Auto (highest uncompressed rate)"
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
 msgid "30 fps · direct request"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "40 fps capture"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Allow unlisted FPS (30 fps)"
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
@@ -765,7 +894,9 @@ msgid ""
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
-msgid "40 fps capture"
+msgid ""
+"Selected FPS unavailable: select another rate. LLCV does not switch to a "
+"different rate on its own."
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
@@ -781,7 +912,7 @@ msgid ""
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
-msgid "Allow unlisted FPS (30 fps)"
+msgid "Allow unlisted FPS (30 fps) is on (More)."
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
@@ -810,11 +941,23 @@ msgid "Scaling mode"
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
-msgid "Color interpretation"
+msgid "Color matrix"
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
 msgid "Auto (recommended)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "SDR color range"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Limited (16-235)"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "Full (0-255)"
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
@@ -835,6 +978,25 @@ msgstr ""
 
 #: src/ui/SettingsScreen.cpp
 msgid "Saved as PNG at the capture resolution."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "CMAA2 → NIS"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid "NIS sharpness"
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"SDR only, enlargement up to 2x per axis. Default sharpness 0.15. F6 toggles "
+"it while playing."
+msgstr ""
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Not available with this GPU driver (%s). The normal path is used."
 msgstr ""
 
 #: src/ui/SettingsScreen.cpp
@@ -1617,6 +1779,10 @@ msgid "Toggle playback mute"
 msgstr ""
 
 #: src/ui/Shortcuts.h
+msgid "Toggle CMAA2 → NIS upscaling"
+msgstr ""
+
+#: src/ui/Shortcuts.h
 msgid "Show / hide the menu bar"
 msgstr ""
 
@@ -1775,6 +1941,10 @@ msgid "Sharp scaling"
 msgstr ""
 
 #: src/ui/ViewerOverlay.cpp
+msgid "CMAA2 → NIS upscaling"
+msgstr ""
+
+#: src/ui/ViewerOverlay.cpp
 msgid "Immediate presentation"
 msgstr ""
 
@@ -1857,6 +2027,10 @@ msgstr ""
 
 #: src/video/VideoColor.cpp
 msgid "manual"
+msgstr ""
+
+#: src/video/VideoColor.cpp
+msgid "manual + automatic"
 msgstr ""
 
 #: src/video/VideoColor.cpp

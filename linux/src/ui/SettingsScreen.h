@@ -41,6 +41,8 @@ struct SettingsContext {
     std::string startSummary;
     HdrSupport hdr;
     int framebufferBits = 8;
+    bool upscalingSupported = false;
+    std::string upscalingIssue;
     FontSet fonts;
     float scale = 1.0f;
 };
@@ -79,6 +81,7 @@ private:
     void DrawFooter(const SettingsContext& context);
     void DrawVideo(settings::AppSettings& settings, const SettingsContext& context);
     void DrawHdr(settings::AppSettings& settings, const SettingsContext& context);
+    void DrawUpscaling(settings::AppSettings& settings, const SettingsContext& context);
     void DrawAudio(settings::AppSettings& settings, const SettingsContext& context);
     void DrawWindow(settings::AppSettings& settings, const SettingsContext& context);
     void DrawRecording(settings::AppSettings& settings, const SettingsContext& context);

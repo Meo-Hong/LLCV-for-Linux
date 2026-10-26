@@ -1,3 +1,23 @@
+llcv (2.1.7) resolute; urgency=medium
+
+  * Follow the Windows LLCV 2.1.5 to 2.1.7 updates.
+  * Optional CMAA2 -> NIS display upscaling for SDR video enlarged by up to
+    2x per axis (OpenGL compute shaders), with NIS sharpness (default 0.15)
+    and the new F6 shortcut. HDR, native size and downscaling are bypassed.
+  * The NIS shader samples the left and top image edges correctly (the SDK
+    used an unsigned tile offset there).
+  * Split the color override into Color matrix and SDR color range; the range
+    applies to playback, screenshots and recording, not to P010/HDR. Old
+    combined values are migrated.
+  * Explicit frame rates are never replaced: unlisted rates keep Start
+    disabled and a different driver rate stops startup. Warn in the
+    diagnostics when the input stays above the requested rate.
+  * Move 40 fps capture and unlisted 30 fps requests under More.
+  * Show the settings screen once after an update even when it is skipped.
+  * Check free recording space on a separate thread.
+
+ -- Meohong <busimh001@gmail.com>  Mon, 26 Oct 2026 12:00:00 +0900
+
 llcv (2.1.4) resolute; urgency=medium
 
   * Follow the Windows LLCV 2.1.4 update.

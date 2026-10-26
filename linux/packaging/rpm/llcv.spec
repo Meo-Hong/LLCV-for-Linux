@@ -11,11 +11,11 @@
 %endif
 
 Name:           llcv
-Version:        2.1.4
+Version:        2.1.7
 Release:        1
 Summary:        Low-latency viewer for USB HDMI capture devices
 
-License:        GPL-3.0-or-later AND MIT AND OFL-1.1%{?with_bundled_sdl3: AND Zlib}
+License:        GPL-3.0-or-later AND MIT AND OFL-1.1 AND Apache-2.0%{?with_bundled_sdl3: AND Zlib}
 URL:            https://github.com/Meo-Hong/LLCV-for-Linux
 Source0:        llcv-%{version}.tar.gz
 %if %{with bundled_sdl3}
@@ -96,6 +96,9 @@ tar -xzf %{SOURCE1} -C third_party/sdl3
 cp -p third_party/imgui/LICENSE.txt imgui-LICENSE.txt
 cp -p third_party/pretendard/LICENSE.txt Pretendard-LICENSE.txt
 cp -p third_party/noto-sans-jp/LICENSE.txt NotoSansJP-LICENSE.txt
+cp -p third_party/upscaling/nis/licence.txt NIS-LICENSE.txt
+cp -p third_party/upscaling/cmaa2/license.txt CMAA2-LICENSE.txt
+cp -p third_party/upscaling/NOTICE.txt upscaling-NOTICE.txt
 
 %build
 %cmake \
@@ -110,7 +113,7 @@ cp -p third_party/noto-sans-jp/LICENSE.txt NotoSansJP-LICENSE.txt
 %cmake_install
 
 %files
-%license LICENSE imgui-LICENSE.txt Pretendard-LICENSE.txt NotoSansJP-LICENSE.txt
+%license LICENSE imgui-LICENSE.txt Pretendard-LICENSE.txt NotoSansJP-LICENSE.txt NIS-LICENSE.txt CMAA2-LICENSE.txt upscaling-NOTICE.txt
 %doc README.md README.ko.md
 %{_bindir}/llcv
 %{_datadir}/applications/%{app_id}.desktop
@@ -121,6 +124,14 @@ cp -p third_party/noto-sans-jp/LICENSE.txt NotoSansJP-LICENSE.txt
 %{_prefix}/lib/udev/rules.d/70-llcv-elgato-hid.rules
 
 %changelog
+* Mon Oct 26 2026 Meohong <busimh001@gmail.com> - 2.1.7-1
+- Follow the Windows LLCV 2.1.5 to 2.1.7 updates.
+- Optional CMAA2 -> NIS display upscaling for SDR video (F6).
+- SDR color range separate from the color matrix.
+- Explicit frame rates are never replaced by another rate.
+- Settings shown once after an update; free space checked off the encoder
+  thread.
+
 * Thu Oct 22 2026 Meohong <busimh001@gmail.com> - 2.1.4-1
 - Follow the Windows LLCV 2.1.4 update.
 - F2 opens the default settings page (Video, or Audio in audio-only mode).

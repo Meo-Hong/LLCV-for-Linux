@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-19 02:55+0900\n"
+"POT-Creation-Date: 2026-10-26 09:23+0900\n"
 "PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
@@ -141,13 +141,22 @@ msgid "Smooth"
 msgstr "なめらか"
 
 #: src/app/App.cpp
-msgid "Actual FPS"
-msgstr "実測FPS"
-
-#: src/app/App.cpp
 #, c-format
 msgid "Input %.1f · Present %.1f"
 msgstr "入力 %.1f · 表示 %.1f"
+
+#: src/app/App.cpp
+#, c-format
+msgid " · above requested %d"
+msgstr " · 要求%dを超過"
+
+#: src/app/App.cpp
+msgid "Actual FPS"
+msgstr "実測FPS"
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Upscaling"
+msgstr "アップスケーリング"
 
 #: src/app/App.cpp
 msgid "App latency"
@@ -338,6 +347,10 @@ msgid "with audio"
 msgstr "オーディオあり"
 
 #: src/app/App.cpp
+msgid "Selected FPS unavailable: select another rate."
+msgstr "選択したFPSに非対応です。別のFPSを選択してください。"
+
+#: src/app/App.cpp
 msgid "The device does not support the selected mode."
 msgstr "選択したモードにデバイスが対応していません。"
 
@@ -349,6 +362,14 @@ msgstr "キャプチャデバイスが見つかりませんでした。USB接続
 #, c-format
 msgid "HDR input not supported: %s"
 msgstr "HDR入力非対応：%s"
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"The device does not list %.2f fps for the selected resolution and format. A "
+"different rate is not used automatically. Select Auto or another supported "
+"rate."
+msgstr "デバイスは選択した解像度・フォーマットで%.2f fpsを一覧に示していません。別のFPSへ自動では切り替えません。「自動」または対応する別のFPSを選択してください。"
 
 #: src/app/App.cpp
 msgid "The device does not support the selected resolution and format."
@@ -395,6 +416,16 @@ msgstr ""
 "ドライバーの一覧にない30fpsを直接要求しましたが、ドライバーが拒否したか、別の"
 "フレームレートを適用しました。一覧にあるフレームレートを選ぶか、映像 → 一覧に"
 "ないFPSを要求をオフにしてください。"
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"\n"
+"\n"
+"Requested capture rate: %s fps. A different rate is not used automatically. "
+"Select Auto or another supported rate to retry. The diagnostic log shows the "
+"failed step."
+msgstr "\n\n要求したキャプチャFPS：%s fps。別のFPSへ自動では切り替えません。「自動」または対応する別のFPSで再試行してください。失敗した段階は診断ログで確認できます。"
 
 #: src/app/App.cpp
 msgid "Could not start audio: "
@@ -576,8 +607,55 @@ msgid "Nothing was recorded."
 msgstr "何も録画されませんでした。"
 
 #: src/app/App.cpp
+msgid "CMAA2 → NIS unavailable · using the normal path"
+msgstr "CMAA2 → NIS 使用不可 · 通常の出力を使用"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS OFF · F6: on"
+msgstr "CMAA2 → NIS OFF · F6：オン"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS ON · F6: off"
+msgstr "CMAA2 → NIS ON · F6：オフ"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS bypass · SDR only"
+msgstr "CMAA2 → NIS 適用外 · SDR専用"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS bypass · enlargement up to 2x only"
+msgstr "CMAA2 → NIS 適用外 · 2倍までの拡大のみ"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS · waiting for video"
+msgstr "CMAA2 → NIS · 映像待ち"
+
+#: src/app/App.cpp src/ui/SettingsScreen.cpp
+msgid "Off"
+msgstr "オフ"
+
+#: src/app/App.cpp
+#, c-format
+msgid "CMAA2 → NIS · ON · sharpness %.2f"
+msgstr "CMAA2 → NIS · ON · シャープネス %.2f"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS · bypass (SDR only)"
+msgstr "CMAA2 → NIS · 適用外（SDR専用）"
+
+#: src/app/App.cpp
+msgid "CMAA2 → NIS · bypass (enlargement up to 2x only)"
+msgstr "CMAA2 → NIS · 適用外（2倍までの拡大のみ）"
+
+#: src/app/App.cpp
+#, c-format
+msgid "CMAA2 → NIS · unavailable (%s)"
+msgstr "CMAA2 → NIS · 使用不可（%s）"
+
+#: src/app/App.cpp
 msgid "1:1 size · the capture matches this monitor, so fullscreen is used."
-msgstr "1:1サイズ · キャプチャ解像度がこのモニターと同じため、全画面表示にします。"
+msgstr ""
+"1:1サイズ · キャプチャ解像度がこのモニターと同じため、全画面表示にします。"
 
 #: src/app/App.cpp
 msgid "A 1:1 window does not fit this monitor, so it was reduced to fit."
@@ -661,6 +739,46 @@ msgstr ""
 #: src/ui/SettingsScreen.cpp
 msgid "After starting, check Actual FPS in the Tab diagnostics."
 msgstr "開始後、Tab診断の「実測FPS」を確認してください。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto uses the range the driver reports, or the format default."
+msgstr "「自動」はドライバーが報告する範囲を使い、ない場合はフォーマットの既定値を使います。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Choose Limited or Full only when blacks look crushed or washed out."
+msgstr "黒がつぶれたり白っぽく浮いたりする場合にのみ、LimitedまたはFullを選択してください。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Applies to playback, screenshots and recording. P010 and HDR input keep "
+"their own range."
+msgstr "再生・スクリーンショット・録画に共通で適用されます。P010とHDR入力はそれぞれの範囲を維持します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"CMAA2 reduces jagged edges, then NIS enlarges the image. Default sharpness: "
+"0.15."
+msgstr "CMAA2でジャギーを軽減してから、NISで拡大します。既定のシャープネス：0.15。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"SDR only, for enlargement up to 2x per axis. HDR, native size and "
+"downscaling use the normal path."
+msgstr "SDRで、縦横それぞれ最大2倍までの拡大にのみ適用されます。HDR・原寸・縮小では通常の経路を使用します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "F6 turns the method on and off without changing its sharpness."
+msgstr "F6を押すと、シャープネスを変えずにオン・オフを切り替えます。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Display only: recordings and screenshots keep the capture image. The OSD is "
+"drawn afterwards."
+msgstr "画面表示にのみ適用され、録画とスクリーンショットはキャプチャ画像のままです。OSDは処理後に描画します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Needs OpenGL 4.3 compute shaders. Otherwise the normal path is used."
+msgstr "OpenGL 4.3のコンピュートシェーダーが必要です。使えない場合は通常の経路を使用します。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "MJPEG (compressed · high resolution/refresh)"
@@ -798,12 +916,24 @@ msgid "Frame rate"
 msgstr "フレームレート"
 
 #: src/ui/SettingsScreen.cpp
+msgid "More##frameOptions"
+msgstr "その他の設定##frameOptions"
+
+#: src/ui/SettingsScreen.cpp
 msgid "Auto (highest uncompressed rate)"
 msgstr "自動（非圧縮の最高フレームレート）"
 
 #: src/ui/SettingsScreen.cpp
 msgid "30 fps · direct request"
 msgstr "30fps · 直接要求"
+
+#: src/ui/SettingsScreen.cpp
+msgid "40 fps capture"
+msgstr "40fpsキャプチャ"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Allow unlisted FPS (30 fps)"
+msgstr "一覧にないFPSを要求（30fps）"
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
@@ -816,8 +946,10 @@ msgstr ""
 "FPS」を確認してください。"
 
 #: src/ui/SettingsScreen.cpp
-msgid "40 fps capture"
-msgstr "40fpsキャプチャ"
+msgid ""
+"Selected FPS unavailable: select another rate. LLCV does not switch to a "
+"different rate on its own."
+msgstr "選択したFPSに非対応です。別のFPSを選択してください。LLCVが別のFPSへ自動で切り替えることはありません。"
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
@@ -836,8 +968,8 @@ msgstr ""
 "を確認し、拒否された場合は別のFPSに切り替えずにエラーを表示します。"
 
 #: src/ui/SettingsScreen.cpp
-msgid "Allow unlisted FPS (30 fps)"
-msgstr "一覧にないFPSを要求（30fps）"
+msgid "Allow unlisted FPS (30 fps) is on (More)."
+msgstr "「一覧にないFPSを要求（30fps）」がオンです（その他の設定）。"
 
 #: src/ui/SettingsScreen.cpp
 #, c-format
@@ -865,12 +997,24 @@ msgid "Scaling mode"
 msgstr "画面の拡大方式"
 
 #: src/ui/SettingsScreen.cpp
-msgid "Color interpretation"
-msgstr "色の解釈"
+msgid "Color matrix"
+msgstr "カラーマトリクス"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Auto (recommended)"
 msgstr "自動（推奨）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "SDR color range"
+msgstr "SDRの色範囲"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Limited (16-235)"
+msgstr "Limited (16-235)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Full (0-255)"
+msgstr "Full (0-255)"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Screenshots (F12)"
@@ -891,6 +1035,25 @@ msgstr "PNGをクリップボードにもコピー"
 #: src/ui/SettingsScreen.cpp
 msgid "Saved as PNG at the capture resolution."
 msgstr "入力解像度のままPNGで保存します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "CMAA2 → NIS"
+msgstr "CMAA2 → NIS"
+
+#: src/ui/SettingsScreen.cpp
+msgid "NIS sharpness"
+msgstr "NISのシャープネス"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"SDR only, enlargement up to 2x per axis. Default sharpness 0.15. F6 toggles "
+"it while playing."
+msgstr "SDR専用で、縦横それぞれ最大2倍まで拡大します。既定のシャープネスは0.15です。再生中はF6でオン・オフできます。"
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid "Not available with this GPU driver (%s). The normal path is used."
+msgstr "このGPUドライバーでは使用できません（%s）。通常の経路を使用します。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "HDR input interpretation"
@@ -944,7 +1107,9 @@ msgstr "左上"
 msgid ""
 "A compatibility override for P010 when color edges look shifted. Leave it on "
 "Auto otherwise."
-msgstr "P010で色の境界がずれて見える場合の互換用設定です。それ以外は自動のままにしてください。"
+msgstr ""
+"P010で色の境界がずれて見える場合の互換用設定です。それ以外は自動のままにして"
+"ください。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "SDR reference white"
@@ -1191,7 +1356,9 @@ msgstr ""
 msgid ""
 "When the capture resolution matches the monitor, playback starts in "
 "fullscreen and F5 uses fullscreen for 1:1 pixels."
-msgstr "キャプチャ解像度がモニターと同じ場合は全画面表示で再生を開始し、F5でも1:1ピクセルのために全画面表示を使います。"
+msgstr ""
+"キャプチャ解像度がモニターと同じ場合は全画面表示で再生を開始し、F5でも1:1ピク"
+"セルのために全画面表示を使います。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Monitor"
@@ -1723,6 +1890,10 @@ msgid "Toggle playback mute"
 msgstr "再生ミュートの切り替え"
 
 #: src/ui/Shortcuts.h
+msgid "Toggle CMAA2 → NIS upscaling"
+msgstr "CMAA2 → NISアップスケーリングのオン・オフ"
+
+#: src/ui/Shortcuts.h
 msgid "Show / hide the menu bar"
 msgstr "メニューバーの表示 / 非表示"
 
@@ -1881,6 +2052,10 @@ msgid "Sharp scaling"
 msgstr "シャープに拡大"
 
 #: src/ui/ViewerOverlay.cpp
+msgid "CMAA2 → NIS upscaling"
+msgstr "CMAA2 → NISアップスケーリング"
+
+#: src/ui/ViewerOverlay.cpp
 msgid "Immediate presentation"
 msgstr "低遅延表示"
 
@@ -1964,6 +2139,10 @@ msgstr "Alt · Esc：メニューを閉じる"
 #: src/video/VideoColor.cpp
 msgid "manual"
 msgstr "手動"
+
+#: src/video/VideoColor.cpp
+msgid "manual + automatic"
+msgstr "手動 + 自動"
 
 #: src/video/VideoColor.cpp
 msgid "HDR10 default"

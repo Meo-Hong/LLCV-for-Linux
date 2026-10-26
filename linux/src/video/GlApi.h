@@ -50,10 +50,24 @@ struct GlApi {
     void (*UniformMatrix3fv)(GLint, GLsizei, GLboolean, const GLfloat*);
     void (*UseProgram)(GLuint);
     void (*Viewport)(GLint, GLint, GLsizei, GLsizei);
+
+    void (*BindBuffer)(GLenum, GLuint);
+    void (*BindBufferBase)(GLenum, GLuint, GLuint);
+    void (*BindImageTexture)(GLuint, GLuint, GLint, GLboolean, GLint, GLenum, GLenum);
+    void (*BufferData)(GLenum, GLsizeiptr, const void*, GLenum);
+    void (*BufferSubData)(GLenum, GLintptr, GLsizeiptr, const void*);
+    void (*DeleteBuffers)(GLsizei, const GLuint*);
+    void (*DispatchCompute)(GLuint, GLuint, GLuint);
+    void (*DispatchComputeIndirect)(GLintptr);
+    void (*GenBuffers)(GLsizei, GLuint*);
+    void (*GetIntegerv)(GLenum, GLint*);
+    const GLubyte* (*GetStringi)(GLenum, GLuint);
+    void (*MemoryBarrier)(GLbitfield);
 };
 
 extern GlApi gl;
 
 bool LoadGlApi(std::string& missing);
+bool LoadComputeApi(std::string& missing);
 
 }

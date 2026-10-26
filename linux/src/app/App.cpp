@@ -154,8 +154,9 @@ int App::Run(const LaunchOptions& options) {
     logDirectoryText_ = platform::LogDirectory().string();
     RefreshDevices();
 
+    const bool reviewStartup = settings_.startupSettingsVersion != kVersion;
     bool started = false;
-    if (settings_.skipStartupSettings && !options.forceSettings) {
+    if (settings_.skipStartupSettings && !options.forceSettings && !reviewStartup) {
         std::string error;
         started = StartSession(error);
         if (!started) {
@@ -163,7 +164,14 @@ int App::Run(const LaunchOptions& options) {
             Log("[session] start failed: %s", error.c_str());
         }
     }
-    if (!started) EnterSettings();
+    if (!started) {
+        if (reviewStartup) {
+            if (settings_.skipStartupSettings) Log("[settings] showing settings once after updating to %s", kVersion);
+            settings_.startupSettingsVersion = kVersion;
+            SaveSettings();
+        }
+        EnterSettings();
+    }
 
     MainLoop();
     StopSession();
@@ -557,6 +565,9 @@ void App::HandleKey(const SDL_KeyboardEvent& key) {
     case input::Action::Mute:
         ToggleMute();
         break;
+    case input::Action::Upscaling:
+        if (screen_ == Screen::Video) ToggleUpscaling();
+        break;
     default:
         break;
     }
@@ -680,6 +691,14 @@ void App::UpdateStatistics(uint64_t now) {
     averageProcessingMs_ =
         samples ? static_cast<double>(processingNs - statsProcessingNsBase_) / 1.0e6 / static_cast<double>(samples)
                 : -1.0;
+    const bool streaming = screen_ == Screen::Video && capture_.State() == capture::CaptureState::Streaming;
+    const auto observed = frameRateMonitor_.Observe(now, captured, streaming ? RequestedCaptureFps(settings_) : 0);
+    frameRateOverdelivery_ = observed.overdelivery;
+    if (observed.event != diagnostics::CaptureFrameRateMonitor::Event::None) {
+        Log("[video-rate] %s requested=%d measured-input=%.2f fps",
+            observed.overdelivery ? "sustained-overdelivery" : "delivery-recovered", RequestedCaptureFps(settings_),
+            observed.measuredFps);
+    }
     statsCapturedBase_ = captured;
     statsPresentedBase_ = presentedFrames_;
     statsProcessingNsBase_ = processingNs;
@@ -741,6 +760,7 @@ void App::RenderFrame() {
     ImGui::Render();
 
     const bool sharp = settings_.scalingMode == settings::ScalingMode::Sharp;
+    renderer_.SetUpscaling(settings_.upscaling, static_cast<float>(settings_.nisSharpnessPercent) / 100.0f);
     if (screen_ == Screen::Video && hdrActive_) {
         renderer_.BeginUiLayer(width, height);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -757,6 +777,7 @@ void App::RenderFrame() {
     }
     SDL_GL_SwapWindow(window_);
     lastRenderMs_ = platform::MonotonicMs();
+    if (screen_ == Screen::Video) ReportUpscaling();
 
     if (frameCaptureNs) {
         ++presentedFrames_;
@@ -894,8 +915,10 @@ std::vector<ui::DiagnosticsLine> App::BuildDiagnostics() const {
                                 settings_.scalingMode == settings::ScalingMode::Sharp
                                     ? T("Sharp")
                                     : T("Smooth"))});
-        lines.push_back({T("Actual FPS"),
-                         Format(T("Input %.1f · Present %.1f"), inputFps_, presentFps_)});
+        std::string actualFps = Format(T("Input %.1f · Present %.1f"), inputFps_, presentFps_);
+        if (frameRateOverdelivery_) actualFps += Format(T(" · above requested %d"), RequestedCaptureFps(settings_));
+        lines.push_back({T("Actual FPS"), actualFps});
+        lines.push_back({T("Upscaling"), UpscalingText()});
         lines.push_back({T("App latency"),
                          Format(T("capture→present %s · copy/decode %s (not total HDMI latency)"),
                                 Ms(averageLatencyMs_).c_str(), Ms(averageProcessingMs_).c_str())});
@@ -1050,6 +1073,8 @@ ui::SettingsContext App::BuildSettingsContext() {
     context.fonts = fonts_;
     context.scale = scale_;
     context.framebufferBits = framebufferBits_;
+    context.upscalingSupported = renderer_.UpscalingSupported();
+    context.upscalingIssue = renderer_.UpscalingIssue();
 
     const capture::CaptureDevice* device = capture::SelectDevice(captureDevices_, settings_.captureDevice);
     context.hdr = EvaluateHdrSupport(device);
@@ -1073,6 +1098,8 @@ ui::SettingsContext App::BuildSettingsContext() {
                    mode->directRequest ? T(" (direct request)") : "",
                    audioName.empty() ? T("no audio")
                                      : T("with audio"));
+    } else if (SelectedFpsUnavailable(*device, settings_)) {
+        context.startSummary = T("Selected FPS unavailable: select another rate.");
     } else {
         context.startSummary = T("The device does not support the selected mode.");
     }
@@ -1137,6 +1164,11 @@ bool App::StartSession(std::string& error) {
                 !device->Supports(capture::PixelFormat::P010)) {
                 error = Format(T("HDR input not supported: %s"),
                                EvaluateHdrSupport(device).inputText.c_str());
+            } else if (SelectedFpsUnavailable(*device, settings_)) {
+                error = Format(T("The device does not list %.2f fps for the selected resolution and format. "
+                                 "A different rate is not used automatically. Select Auto or another supported "
+                                 "rate."),
+                               settings_.frameRateMilli / 1000.0);
             } else {
                 error = T("The device does not support the selected resolution and format.");
             }
@@ -1159,7 +1191,9 @@ bool App::StartSession(std::string& error) {
         config.rate = activeMode_->rate;
         config.capture40Fps = settings_.capture40Fps;
         config.directRate = activeMode_->directRequest;
-        config.colorOverride = settings_.colorOverride;
+        config.exactRate = activeMode_->exactRate;
+        config.colorMatrix = settings_.colorMatrix;
+        config.sdrRange = settings_.sdrRange;
         config.hdrInput = settings_.hdrInput;
         switch (settings_.hdrChromaLocation) {
         case settings::HdrChromaLocation::Left: renderer_.SetP010ChromaSiting(video::ChromaSiting::Left); break;
@@ -1177,6 +1211,11 @@ bool App::StartSession(std::string& error) {
                 error += T("\n\n30 fps was requested directly because the driver does not list it. The driver rejected "
                            "it or applied another rate. Choose a listed frame rate or turn off Video → Allow unlisted "
                            "FPS.");
+            } else if (activeMode_->exactRate) {
+                error += Format(T("\n\nRequested capture rate: %s fps. A different rate is not used automatically. "
+                                  "Select Auto or another supported rate to retry. The diagnostic log shows the failed "
+                                  "step."),
+                                capture::FormatRate(activeMode_->rate).c_str());
             }
             return false;
         }
@@ -1218,6 +1257,8 @@ bool App::StartSession(std::string& error) {
     latencySamples_ = 0;
     inputFps_ = 0.0;
     presentFps_ = 0.0;
+    frameRateMonitor_.Reset();
+    frameRateOverdelivery_ = false;
     averageLatencyMs_ = -1.0;
     averageProcessingMs_ = -1.0;
     sessionStartMs_ = platform::MonotonicMs();
@@ -1636,6 +1677,7 @@ void App::DrawMenu() {
     state.fullscreen = fullscreen_;
     state.borderless = settings_.borderlessWindow;
     state.sharp = settings_.scalingMode == settings::ScalingMode::Sharp;
+    state.upscaling = settings_.upscaling;
     state.vsync = settings_.presentationMode == settings::PresentationMode::VSync;
     state.diagnostics = diagnosticsVisible_;
     state.audioOsd = audioOsdVisible_;
@@ -1671,6 +1713,9 @@ void App::ExecuteMenuCommand(ui::MenuCommand command) {
         break;
     case ui::MenuCommand::ScalingSharp:
         settings_.scalingMode = settings::ScalingMode::Sharp;
+        break;
+    case ui::MenuCommand::Upscaling:
+        ToggleUpscaling();
         break;
     case ui::MenuCommand::PresentImmediate:
         settings_.presentationMode = settings::PresentationMode::Immediate;
@@ -1880,6 +1925,63 @@ void App::PollRecording() {
         Log("[recording] %s", message.c_str());
         ShowToast(message, error);
     }
+}
+
+void App::ToggleUpscaling() {
+    settings_.upscaling = !settings_.upscaling;
+    upscalingToastPending_ = true;
+    redrawFrames_ = std::max(redrawFrames_, 1);
+    Log("[upscaling] CMAA2 -> NIS %s (sharpness %.2f)", settings_.upscaling ? "on" : "off",
+        settings_.nisSharpnessPercent / 100.0);
+}
+
+void App::ReportUpscaling() {
+    const video::UpscaleState state = renderer_.LastUpscaleState();
+    if (state != reportedUpscaleState_) {
+        reportedUpscaleState_ = state;
+        const auto rect = renderer_.LastVideoRect();
+        static constexpr const char* kStateNames[] = {"off", "active", "bypass (SDR only)", "bypass (scale)",
+                                                      "unavailable"};
+        Log("[upscaling] CMAA2 -> NIS %s, %dx%d -> %dx%d%s%s", kStateNames[static_cast<int>(state)],
+            renderer_.ImageWidth(), renderer_.ImageHeight(), rect.width, rect.height,
+            state == video::UpscaleState::Unavailable ? ": " : "",
+            state == video::UpscaleState::Unavailable ? renderer_.UpscalingIssue().c_str() : "");
+        if (state == video::UpscaleState::Unavailable && !upscalingToastPending_ && !upscalingFailureShown_) {
+            upscalingFailureShown_ = true;
+            ShowToast(T("CMAA2 → NIS unavailable · using the normal path"), true);
+        }
+    }
+    if (!upscalingToastPending_) return;
+    upscalingToastPending_ = false;
+    const char* text = nullptr;
+    bool error = false;
+    switch (state) {
+    case video::UpscaleState::Off: text = T("CMAA2 → NIS OFF · F6: on"); break;
+    case video::UpscaleState::Active: text = T("CMAA2 → NIS ON · F6: off"); break;
+    case video::UpscaleState::SdrOnly: text = T("CMAA2 → NIS bypass · SDR only"); break;
+    case video::UpscaleState::ScaleRange: text = T("CMAA2 → NIS bypass · enlargement up to 2x only"); break;
+    case video::UpscaleState::Unavailable:
+        text = T("CMAA2 → NIS unavailable · using the normal path");
+        error = true;
+        upscalingFailureShown_ = true;
+        break;
+    }
+    ShowToast(input::ExpandKeyLabels(text, settings_.shortcuts), error);
+    redrawFrames_ = std::max(redrawFrames_, 1);
+}
+
+std::string App::UpscalingText() const {
+    const double sharpness = settings_.nisSharpnessPercent / 100.0;
+    switch (renderer_.LastUpscaleState()) {
+    case video::UpscaleState::Off:
+        return settings_.upscaling ? std::string(T("CMAA2 → NIS · waiting for video")) : std::string(T("Off"));
+    case video::UpscaleState::Active: return Format(T("CMAA2 → NIS · ON · sharpness %.2f"), sharpness);
+    case video::UpscaleState::SdrOnly: return T("CMAA2 → NIS · bypass (SDR only)");
+    case video::UpscaleState::ScaleRange: return T("CMAA2 → NIS · bypass (enlargement up to 2x only)");
+    case video::UpscaleState::Unavailable:
+        return Format(T("CMAA2 → NIS · unavailable (%s)"), renderer_.UpscalingIssue().c_str());
+    }
+    return {};
 }
 
 void App::ToggleMute() {

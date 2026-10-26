@@ -420,28 +420,20 @@ std::optional<ResolvedMode> ResolveMode(const CaptureDevice& device, const ModeR
     if (request.fpsMilli > 0) {
         for (const CaptureMode* mode : candidates) {
             for (const auto& rate : mode->rates) {
-                if (std::abs(rate.Milli() - request.fpsMilli) <= 10) return make(mode, rate);
+                if (std::abs(rate.Milli() - request.fpsMilli) <= 10) {
+                    ResolvedMode exact = make(mode, rate);
+                    exact.exactRate = true;
+                    return exact;
+                }
             }
         }
         if (request.allowUnlistedFps && request.fpsMilli == kDirectRequestFpsMilli) {
             ResolvedMode direct = make(candidates.front(), kThirtyFps);
             direct.directRequest = true;
+            direct.exactRate = true;
             return direct;
         }
-        const CaptureMode* bestMode = nullptr;
-        FrameRate bestRate;
-        int bestDistance = 0;
-        for (const CaptureMode* mode : candidates) {
-            for (const auto& rate : mode->rates) {
-                const int distance = std::abs(rate.Milli() - request.fpsMilli);
-                if (!bestMode || distance < bestDistance) {
-                    bestMode = mode;
-                    bestRate = rate;
-                    bestDistance = distance;
-                }
-            }
-        }
-        return make(bestMode, bestRate);
+        return std::nullopt;
     }
 
     std::vector<const CaptureMode*> pool;
