@@ -104,8 +104,11 @@ size_t RawFrameBytes(const VideoInput& input) {
     const size_t pixels = static_cast<size_t>(std::max(input.width, 1)) * static_cast<size_t>(std::max(input.height, 1));
     switch (input.format) {
     case capture::PixelFormat::Nv12: return pixels * 3 / 2;
-    case capture::PixelFormat::Yuyv: return pixels * 2;
-    case capture::PixelFormat::Bgr24: return pixels * 3;
+    case capture::PixelFormat::Yuyv:
+    case capture::PixelFormat::Uyvy: return pixels * 2;
+    case capture::PixelFormat::Bgr24:
+    case capture::PixelFormat::Rgb24: return pixels * 3;
+    case capture::PixelFormat::Bgr32: return pixels * 4;
     case capture::PixelFormat::Mjpeg: return pixels / 4;
     case capture::PixelFormat::P010: break;
     }
@@ -123,7 +126,7 @@ size_t VideoPoolSize(const StartRequest& request) {
 
 video::ColorSpec OutputColor(const VideoInput& input) {
     video::ColorSpec color = input.color;
-    if (input.format == capture::PixelFormat::Bgr24) {
+    if (capture::IsRgb(input.format)) {
         color.matrix = input.height < 720 ? video::Matrix::Bt601 : video::Matrix::Bt709;
         color.range = video::Range::Limited;
     }
@@ -737,14 +740,23 @@ bool Recorder::Impl::Session::BuildSource(const VideoBuffer& buffer, SourceImage
         return true;
     }
     case capture::PixelFormat::Yuyv:
+    case capture::PixelFormat::Uyvy:
         if (stride < width * 2 || buffer.size < static_cast<size_t>(stride) * static_cast<size_t>(height)) return false;
-        source.format = AV_PIX_FMT_YUYV422;
+        source.format = input_.format == capture::PixelFormat::Uyvy ? AV_PIX_FMT_UYVY422 : AV_PIX_FMT_YUYV422;
         source.planes[0] = data;
         source.strides[0] = stride;
         return true;
     case capture::PixelFormat::Bgr24:
+    case capture::PixelFormat::Rgb24:
         if (stride < width * 3 || buffer.size < static_cast<size_t>(stride) * static_cast<size_t>(height)) return false;
-        source.format = AV_PIX_FMT_BGR24;
+        source.format = input_.format == capture::PixelFormat::Rgb24 ? AV_PIX_FMT_RGB24 : AV_PIX_FMT_BGR24;
+        source.planes[0] = data;
+        source.strides[0] = stride;
+        source.rgb = true;
+        return true;
+    case capture::PixelFormat::Bgr32:
+        if (stride < width * 4 || buffer.size < static_cast<size_t>(stride) * static_cast<size_t>(height)) return false;
+        source.format = AV_PIX_FMT_BGR0;
         source.planes[0] = data;
         source.strides[0] = stride;
         source.rgb = true;
@@ -969,8 +981,11 @@ StartError Recorder::Start(const StartRequest& request) {
     switch (request.video.format) {
     case capture::PixelFormat::Nv12:
     case capture::PixelFormat::Yuyv:
+    case capture::PixelFormat::Uyvy:
     case capture::PixelFormat::Mjpeg:
     case capture::PixelFormat::Bgr24:
+    case capture::PixelFormat::Bgr32:
+    case capture::PixelFormat::Rgb24:
         break;
     case capture::PixelFormat::P010:
         return StartError::HdrInput;

@@ -713,7 +713,7 @@ void NVScaler(NVU2 blockIdx, NVU threadIdx)
     // discretized phase
     const NVI fx_int = NVI(fx * kPhaseCount);
 #if NIS_VIEWPORT_SUPPORT
-    if (NVU(srcX) > kInputViewportWidth || NVU(dstX) > kOutputViewportWidth)
+    if (srcX >= NVF(kInputViewportWidth) || NVU(dstX) >= kOutputViewportWidth)
     {
         return;
     }
@@ -725,7 +725,7 @@ void NVScaler(NVU2 blockIdx, NVU threadIdx)
         // y coord inside the input image
         const NVF srcY = (0.5f + dstY) * kScaleY - 0.5f;
 #if NIS_VIEWPORT_SUPPORT
-        if (!(NVU(srcY) > kInputViewportHeight || NVU(dstY) > kOutputViewportHeight))
+        if (!(srcY >= NVF(kInputViewportHeight) || NVU(dstY) >= kOutputViewportHeight))
 #endif
         {
             // nearest integer part
@@ -986,7 +986,7 @@ void NVSharpen(NVU2 blockIdx, NVU threadIdx)
 #if NIS_VIEWPORT_SUPPORT
         NVF2 coord = NVF2((dstX + kInputViewportOriginX + 0.5f) * kSrcNormX, (dstY + kInputViewportOriginY + 0.5f) * kSrcNormY);
         NVF2 dstCoord = NVF2(dstX + kOutputViewportOriginX, dstY + kOutputViewportOriginY);
-        if (!(NVU(dstX) > kOutputViewportWidth || NVU(dstY) > kOutputViewportHeight))
+        if (!(NVU(dstX) >= kOutputViewportWidth || NVU(dstY) >= kOutputViewportHeight))
 #else
         NVF2 coord = NVF2((dstX + 0.5f) * kSrcNormX, (dstY + 0.5f) * kSrcNormY);
         NVF2 dstCoord = NVF2(dstX, dstY);

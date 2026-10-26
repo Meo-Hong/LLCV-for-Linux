@@ -167,7 +167,7 @@ bool V4l2Capture::OpenDevice(std::string& error) {
         return false;
     }
 
-    const uint32_t fourcc = FourccFor(config_.format);
+    const uint32_t fourcc = config_.fourcc ? config_.fourcc : FourccFor(config_.format);
     v4l2_format format{};
     format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     format.fmt.pix.width = static_cast<uint32_t>(config_.width);
@@ -193,8 +193,11 @@ bool V4l2Capture::OpenDevice(std::string& error) {
     if (bytesPerLine_ == 0) {
         switch (config_.format) {
         case PixelFormat::Nv12: bytesPerLine_ = static_cast<uint32_t>(config_.width); break;
-        case PixelFormat::Yuyv: bytesPerLine_ = static_cast<uint32_t>(config_.width) * 2; break;
-        case PixelFormat::Bgr24: bytesPerLine_ = static_cast<uint32_t>(config_.width) * 3; break;
+        case PixelFormat::Yuyv:
+        case PixelFormat::Uyvy: bytesPerLine_ = static_cast<uint32_t>(config_.width) * 2; break;
+        case PixelFormat::Bgr24:
+        case PixelFormat::Rgb24: bytesPerLine_ = static_cast<uint32_t>(config_.width) * 3; break;
+        case PixelFormat::Bgr32: bytesPerLine_ = static_cast<uint32_t>(config_.width) * 4; break;
         case PixelFormat::P010: bytesPerLine_ = static_cast<uint32_t>(config_.width) * 2; break;
         case PixelFormat::Mjpeg: break;
         }
@@ -214,7 +217,7 @@ bool V4l2Capture::OpenDevice(std::string& error) {
     colorInput.quantization = format.fmt.pix.quantization;
     colorInput.transferFunction = format.fmt.pix.xfer_func;
     colorInput.jpeg = config_.format == PixelFormat::Mjpeg;
-    colorInput.rgb = config_.format == PixelFormat::Bgr24;
+    colorInput.rgb = IsRgb(config_.format);
     colorInput.tenBit = config_.format == PixelFormat::P010;
     colorInput.width = config_.width;
     colorInput.height = config_.height;
@@ -500,18 +503,27 @@ bool V4l2Capture::FillFrame(uint32_t index, uint32_t bytesUsed, VideoFrame& fram
         CopyPlane(frame.planes[1], data + lumaBytes, stride, width * 2, height / 2, width / 2);
         return true;
     }
-    case PixelFormat::Yuyv: {
+    case PixelFormat::Yuyv:
+    case PixelFormat::Uyvy: {
         if (bytesUsed < static_cast<size_t>(stride) * static_cast<size_t>(height)) return false;
-        frame.layout = FrameLayout::Yuyv;
+        frame.layout = config_.format == PixelFormat::Uyvy ? FrameLayout::Uyvy : FrameLayout::Yuyv;
         frame.planeCount = 1;
         CopyPlane(frame.planes[0], data, stride, width * 2, height, width / 2);
         return true;
     }
-    case PixelFormat::Bgr24: {
-        if (bytesUsed < static_cast<size_t>(stride) * static_cast<size_t>(height)) return false;
-        frame.layout = FrameLayout::Bgr24;
+    case PixelFormat::Bgr24:
+    case PixelFormat::Rgb24: {
+        if (stride < width * 3 || bytesUsed < static_cast<size_t>(stride) * static_cast<size_t>(height)) return false;
+        frame.layout = config_.format == PixelFormat::Rgb24 ? FrameLayout::Rgb24 : FrameLayout::Bgr24;
         frame.planeCount = 1;
         CopyPlane(frame.planes[0], data, stride, width * 3, height, width);
+        return true;
+    }
+    case PixelFormat::Bgr32: {
+        if (stride < width * 4 || bytesUsed < static_cast<size_t>(stride) * static_cast<size_t>(height)) return false;
+        frame.layout = FrameLayout::Bgr32;
+        frame.planeCount = 1;
+        CopyPlane(frame.planes[0], data, stride, width * 4, height, width);
         return true;
     }
     case PixelFormat::Mjpeg: {

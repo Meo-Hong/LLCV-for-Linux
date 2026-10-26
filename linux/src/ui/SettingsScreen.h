@@ -39,6 +39,7 @@ struct SettingsContext {
     bool canCancel = false;
     bool canStart = false;
     std::string startSummary;
+    std::string formatNotice;
     HdrSupport hdr;
     int framebufferBits = 8;
     bool upscalingSupported = false;

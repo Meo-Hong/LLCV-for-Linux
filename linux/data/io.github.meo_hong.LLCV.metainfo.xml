@@ -17,7 +17,7 @@
       is played through PipeWire with a small, drift-corrected buffer.
     </p>
     <ul>
-      <li>NV12, YUY2, MJPEG, BGR24 and P010 (HDR10) capture modes</li>
+      <li>NV12, YUY2, UYVY, MJPEG, BGR24, BGR32, RGB24 and P010 (HDR10) capture modes</li>
       <li>HDR10 passthrough on Wayland, HDR to SDR tone mapping elsewhere</li>
       <li>Immediate or VSync presentation with OpenGL</li>
       <li>Audio-only mode, volume boost and background mute</li>
@@ -41,6 +41,17 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="2.1.8" date="2026-10-26">
+      <description>
+        <p>Follows the Windows LLCV 2.1.8 update.</p>
+        <ul>
+          <li>UYVY (8-bit 4:2:2) input for playback, screenshots and recording.</li>
+          <li>32-bit RGB (BGR32) and RGB24 input besides BGR24.</li>
+          <li>CMAA2 to NIS upscaling skips CMAA2 for a frame that overflows its work buffers instead of applying partial anti-aliasing.</li>
+          <li>Devices that offer only unsupported pixel formats stay listed, and settings name those formats.</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.1.7" date="2026-10-26">
       <description>
         <p>Follows the Windows LLCV 2.1.5 to 2.1.7 updates.</p>

@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-26 09:23+0900\n"
+"POT-Creation-Date: 2026-10-26 22:37+0900\n"
 "PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
@@ -14,6 +14,20 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"This device offers only pixel formats LLCV cannot use (%s). Select another "
+"device."
+msgstr "Este dispositivo solo ofrece formatos de píxel que LLCV no puede usar (%s). Selecciona otro dispositivo."
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"At this resolution the device offers only pixel formats LLCV cannot use "
+"(%s). Select another resolution."
+msgstr "En esta resolución, el dispositivo solo ofrece formatos de píxel que LLCV no puede usar (%s). Selecciona otra resolución."
 
 #: src/app/App.cpp
 msgid "The previous recording is still being finalized."
@@ -375,7 +389,10 @@ msgid ""
 "The device does not list %.2f fps for the selected resolution and format. A "
 "different rate is not used automatically. Select Auto or another supported "
 "rate."
-msgstr "El dispositivo no lista %.2f fps para la resolución y el formato seleccionados. No se usa otra velocidad automáticamente. Selecciona Automático u otra velocidad compatible."
+msgstr ""
+"El dispositivo no lista %.2f fps para la resolución y el formato "
+"seleccionados. No se usa otra velocidad automáticamente. Selecciona "
+"Automático u otra velocidad compatible."
 
 #: src/app/App.cpp
 msgid "The device does not support the selected resolution and format."
@@ -433,7 +450,12 @@ msgid ""
 "Requested capture rate: %s fps. A different rate is not used automatically. "
 "Select Auto or another supported rate to retry. The diagnostic log shows the "
 "failed step."
-msgstr "\n\nVelocidad de captura solicitada: %s fps. No se usa otra velocidad automáticamente. Selecciona Automático u otra velocidad compatible para reintentar. El registro de diagnóstico muestra el paso que falló."
+msgstr ""
+"\n"
+"\n"
+"Velocidad de captura solicitada: %s fps. No se usa otra velocidad "
+"automáticamente. Selecciona Automático u otra velocidad compatible para "
+"reintentar. El registro de diagnóstico muestra el paso que falló."
 
 #: src/app/App.cpp
 msgid "Could not start audio: "
@@ -759,29 +781,38 @@ msgstr "Después de iniciar, revisa “FPS reales” en el diagnóstico (Tab)."
 
 #: src/ui/SettingsScreen.cpp
 msgid "Auto uses the range the driver reports, or the format default."
-msgstr "Automático usa el rango que informa el controlador o el predeterminado del formato."
+msgstr ""
+"Automático usa el rango que informa el controlador o el predeterminado del "
+"formato."
 
 #: src/ui/SettingsScreen.cpp
 msgid "Choose Limited or Full only when blacks look crushed or washed out."
-msgstr "Elige Limited o Full solo si los negros se ven aplastados o deslavados."
+msgstr ""
+"Elige Limited o Full solo si los negros se ven aplastados o deslavados."
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
 "Applies to playback, screenshots and recording. P010 and HDR input keep "
 "their own range."
-msgstr "Se aplica a la reproducción, las capturas de pantalla y la grabación. La entrada P010 y HDR conserva su propio rango."
+msgstr ""
+"Se aplica a la reproducción, las capturas de pantalla y la grabación. La "
+"entrada P010 y HDR conserva su propio rango."
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
 "CMAA2 reduces jagged edges, then NIS enlarges the image. Default sharpness: "
 "0.15."
-msgstr "CMAA2 reduce los bordes dentados y luego NIS amplía la imagen. Nitidez predeterminada: 0.15."
+msgstr ""
+"CMAA2 reduce los bordes dentados y luego NIS amplía la imagen. Nitidez "
+"predeterminada: 0.15."
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
 "SDR only, for enlargement up to 2x per axis. HDR, native size and "
 "downscaling use the normal path."
-msgstr "Solo SDR, para ampliaciones de hasta 2x por eje. HDR, el tamaño original y la reducción usan la ruta normal."
+msgstr ""
+"Solo SDR, para ampliaciones de hasta 2x por eje. HDR, el tamaño original y "
+"la reducción usan la ruta normal."
 
 #: src/ui/SettingsScreen.cpp
 msgid "F6 turns the method on and off without changing its sharpness."
@@ -791,11 +822,14 @@ msgstr "F6 lo activa y desactiva sin cambiar la nitidez."
 msgid ""
 "Display only: recordings and screenshots keep the capture image. The OSD is "
 "drawn afterwards."
-msgstr "Solo para la pantalla: las grabaciones y capturas de pantalla conservan la imagen capturada. El OSD se dibuja después."
+msgstr ""
+"Solo para la pantalla: las grabaciones y capturas de pantalla conservan la "
+"imagen capturada. El OSD se dibuja después."
 
 #: src/ui/SettingsScreen.cpp
 msgid "Needs OpenGL 4.3 compute shaders. Otherwise the normal path is used."
-msgstr "Requiere shaders de cómputo de OpenGL 4.3. Si no, se usa la ruta normal."
+msgstr ""
+"Requiere shaders de cómputo de OpenGL 4.3. Si no, se usa la ruta normal."
 
 #: src/ui/SettingsScreen.cpp
 msgid "MJPEG (compressed · high resolution/refresh)"
@@ -966,7 +1000,9 @@ msgstr ""
 msgid ""
 "Selected FPS unavailable: select another rate. LLCV does not switch to a "
 "different rate on its own."
-msgstr "FPS seleccionados no disponibles: elige otra velocidad. LLCV no cambia a otra velocidad por su cuenta."
+msgstr ""
+"FPS seleccionados no disponibles: elige otra velocidad. LLCV no cambia a "
+"otra velocidad por su cuenta."
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
@@ -1066,7 +1102,9 @@ msgstr "Nitidez de NIS"
 msgid ""
 "SDR only, enlargement up to 2x per axis. Default sharpness 0.15. F6 toggles "
 "it while playing."
-msgstr "Solo SDR, ampliación de hasta 2x por eje. Nitidez predeterminada: 0.15. F6 lo activa y desactiva durante la reproducción."
+msgstr ""
+"Solo SDR, ampliación de hasta 2x por eje. Nitidez predeterminada: 0.15. F6 "
+"lo activa y desactiva durante la reproducción."
 
 #: src/ui/SettingsScreen.cpp
 #, c-format

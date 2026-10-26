@@ -29,6 +29,13 @@ struct CaptureMode {
     int width = 0;
     int height = 0;
     std::vector<FrameRate> rates;
+    uint32_t fourcc = 0;
+};
+
+struct UnsupportedFormat {
+    std::string name;
+    int width = 0;
+    int height = 0;
 };
 
 struct CaptureDevice {
@@ -39,6 +46,7 @@ struct CaptureDevice {
     std::string usbProduct;
     bool advertisesP010 = false;
     std::vector<CaptureMode> modes;
+    std::vector<UnsupportedFormat> unsupportedFormats;
 
     bool Supports(PixelFormat format) const;
     std::string Name() const;
@@ -61,12 +69,14 @@ struct ResolvedMode {
     FrameRate rate;
     bool directRequest = false;
     bool exactRate = false;
+    uint32_t fourcc = 0;
 };
 
 const char* PixelFormatName(PixelFormat format);
 uint32_t FourccFor(PixelFormat format);
 bool IsCompressed(PixelFormat format);
 bool IsHdrOnly(PixelFormat format);
+bool IsRgb(PixelFormat format);
 std::string FormatRate(const FrameRate& rate);
 bool IsFortyFps(const FrameRate& rate);
 bool IsThirtyFps(const FrameRate& rate);
@@ -76,6 +86,8 @@ std::vector<CaptureDevice> EnumerateCaptureDevices();
 const CaptureDevice* SelectDevice(const std::vector<CaptureDevice>& devices, const std::string& id);
 std::vector<std::pair<int, int>> Resolutions(const CaptureDevice& device);
 std::vector<PixelFormat> FormatsAt(const CaptureDevice& device, int width, int height);
+std::vector<std::string> UnsupportedFormatsAt(const CaptureDevice& device, int width, int height);
+std::vector<std::string> UnsupportedFormatNames(const CaptureDevice& device);
 std::vector<FrameRate> RatesAt(const CaptureDevice& device, int width, int height,
                                std::optional<PixelFormat> format);
 std::optional<ResolvedMode> ResolveMode(const CaptureDevice& device, const ModeRequest& request);

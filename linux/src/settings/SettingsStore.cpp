@@ -34,7 +34,9 @@ constexpr EnumName<DisplayBackend> kBackends[] = {
 constexpr EnumName<PixelFormatChoice> kFormats[] = {
     {PixelFormatChoice::Auto, "auto"}, {PixelFormatChoice::Nv12, "nv12"},
     {PixelFormatChoice::Yuyv, "yuy2"}, {PixelFormatChoice::Mjpeg, "mjpeg"},
-    {PixelFormatChoice::Bgr24, "bgr24"}, {PixelFormatChoice::P010, "p010"}};
+    {PixelFormatChoice::Bgr24, "bgr24"}, {PixelFormatChoice::P010, "p010"},
+    {PixelFormatChoice::Uyvy, "uyvy"}, {PixelFormatChoice::Bgr32, "bgr32"},
+    {PixelFormatChoice::Rgb24, "rgb24"}};
 constexpr EnumName<PresentationMode> kPresentation[] = {
     {PresentationMode::Immediate, "immediate"}, {PresentationMode::VSync, "vsync"}};
 constexpr EnumName<ScalingMode> kScaling[] = {

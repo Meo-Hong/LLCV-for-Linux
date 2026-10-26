@@ -3,7 +3,7 @@
 > [한국어](README.ko.md)
 
 LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices with low
-latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.1.7 viewer
+latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.1.8 viewer
 by [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer). The
 reference device is the AVerMedia Live Gamer ULTRA S GC553Pro. The reference
 desktop is Ubuntu 26.04 (GNOME, Wayland).
@@ -16,25 +16,22 @@ desktop is Ubuntu 26.04 (GNOME, Wayland).
 > [this repository's issues](https://github.com/Meo-Hong/LLCV-for-Linux/issues),
 > not in the original repository.
 
-## What's new in 2.1.7
+## What's new in 2.1.8
 
-- **CMAA2 → NIS upscaling** (off by default): when the window or fullscreen
-  view enlarges SDR video by up to 2× per axis, CMAA2 first smooths jagged
-  edges, then NVIDIA Image Scaling enlarges and sharpens (default sharpness
-  0.15). **F6** turns it on and off. See [Upscaling](#upscaling).
-- **SDR color range** (Auto / Limited / Full) is now separate from the color
-  matrix and applies to playback, screenshots and recording.
-- **Explicit frame rates are strict**: a selected rate the device does not list
-  is shown as unsupported and Start stays off, and if the driver applies a
-  different rate, startup stops instead of using it. Auto is unchanged. The
-  Tab diagnostics warn when the input runs well above the requested rate.
-- 40 fps capture and unlisted 30 fps requests moved to **More** beside the
-  frame rate.
-- After an update, the settings screen is shown once even when **Skip this
-  settings screen on next launch** is on.
-- Free-space checks no longer run on the recording encoder thread.
+- **UYVY (8-bit 4:2:2) input** for playback, screenshots and recording. Auto
+  still prefers NV12, then YUY2.
+- **More RGB input**: 32-bit RGB (BGR32, which UVC devices report for RGB32)
+  and RGB24, besides the existing BGR24. These are Linux-only additions.
+- **Safer CMAA2 → NIS upscaling**: if a very dense frame overflows the CMAA2
+  work buffers, that frame skips CMAA2 instead of getting partial
+  anti-aliasing, while NIS keeps scaling.
+- Devices that offer only pixel formats LLCV cannot use now stay in the list,
+  and settings name those formats instead of hiding the device. The log lists
+  every skipped format.
 
-Full list: [release notes](release-notes/v2.1.7.md). 2.1.4 made F2 open the
+Full list: [release notes](release-notes/v2.1.8.md). 2.1.7 added
+[CMAA2 → NIS upscaling](#upscaling) (F6), a separate SDR color range and strict
+explicit frame rates ([2.1.7 notes](release-notes/v2.1.7.md)). 2.1.4 made F2 open the
 default settings page and fixed lost packets at the end of a recording
 ([2.1.4 notes](release-notes/v2.1.4.md)). 2.1.3 added [recording](#recording)
 (F9), [playback mute](#playback-mute) (M), unlisted 30 fps requests and
@@ -71,11 +68,11 @@ Download the file for your system from
 
 | File | Install on | Command |
 | --- | --- | --- |
-| `llcv_2.1.7_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.7_amd64.deb` |
-| `llcv_2.1.7_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.1.7_arm64.deb` |
-| `llcv_2.1.7_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.1.7_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.1.7-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.1.7-1.x86_64.rpm` |
-| `llcv-2.1.7-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.7-1-x86_64.pkg.tar.zst` |
+| `llcv_2.1.8_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.8_amd64.deb` |
+| `llcv_2.1.8_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.1.8_arm64.deb` |
+| `llcv_2.1.8_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.1.8_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.1.8-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.1.8-1.x86_64.rpm` |
+| `llcv-2.1.8-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.8-1-x86_64.pkg.tar.zst` |
 
 - Installing a `.deb` also registers the LLCV APT repository, so later
   versions arrive through `apt upgrade` or Software Updater. For `.rpm` and
@@ -244,7 +241,7 @@ LLCV runs:
 **F9** records the playing video and capture audio to MP4. Press it again to
 stop and finish the file. The options are under **Settings → Recording**.
 
-- **Input.** NV12, YUY2, MJPEG and BGR24 SDR video with 16-bit stereo capture
+- **Input.** NV12, YUY2, UYVY, MJPEG, BGR24, BGR32 and RGB24 SDR video with 16-bit stereo capture
   audio. HDR input (P010 or Force HDR10) is not recorded. MJPEG is decoded a
   second time for the recording, which uses more CPU.
 - **Codec and encoder.** H.264, HEVC or AV1. **Automatic hardware** tries
@@ -395,7 +392,7 @@ P010 input look shifted; **Left** and **Top-left** are compatibility overrides
 for devices that place the chroma samples differently.
 
 At each start LLCV asks a supported capture device to tone map HDR to SDR
-itself for 8-bit formats (NV12, YUY2, MJPEG, BGR24), and to pass HDR through
+itself for 8-bit formats (NV12, YUY2, UYVY, MJPEG and the RGB formats), and to pass HDR through
 for P010 or **Force HDR10**, like the Windows build. This covers AVerMedia
 devices with the AVerMedia UVC extension control and the Elgato HD60 S+, HD60 X
 and HD60 X Rev.2. The packages install a udev rule that lets the logged-in user

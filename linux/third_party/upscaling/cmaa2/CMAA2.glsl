@@ -106,7 +106,7 @@ uint InternalPackColor(vec3 color) {
 
 void StoreColorSample(uvec2 pixelPos, vec3 color, bool isComplexShape) {
     uint counterIndex = atomicAdd(g_workingControlBuffer[12], 1u);
-    if (counterIndex >= uint(g_workingDeferredBlendItemList.length())) return;
+    if (counterIndex >= min(uint(g_workingDeferredBlendItemList.length()), 1u << 26)) return;
 
     uvec2 quadPos = pixelPos / uvec2(2u, 2u);
     uint offsetXY = (pixelPos.y % 2u) * 2u + (pixelPos.x % 2u);
@@ -333,7 +333,9 @@ layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
     if (gl_WorkGroupID.x == 1u) {
         uint shapeCandidateCount = g_workingControlBuffer[4];
-        shapeCandidateCount = min(shapeCandidateCount, uint(g_workingShapeCandidates.length()));
+        uint overflow = shapeCandidateCount > uint(g_workingShapeCandidates.length()) ? 1u : 0u;
+        g_workingControlBuffer[0] = overflow;
+        if (overflow != 0u) shapeCandidateCount = 0u;
 
         g_workingExecuteIndirectBuffer[0] =
             (shapeCandidateCount + uint(CMAA2_PROCESS_CANDIDATES_NUM_THREADS) - 1u) / uint(CMAA2_PROCESS_CANDIDATES_NUM_THREADS);
@@ -343,7 +345,11 @@ void main() {
         g_workingControlBuffer[3] = shapeCandidateCount;
     } else if (gl_WorkGroupID.y == 1u) {
         uint blendLocationCount = g_workingControlBuffer[8];
-        blendLocationCount = min(blendLocationCount, uint(g_workingDeferredBlendLocationList.length()));
+        uint overflow = g_workingControlBuffer[0];
+        if (g_workingControlBuffer[12] > min(uint(g_workingDeferredBlendItemList.length()), 1u << 26)) overflow |= 2u;
+        if (blendLocationCount > uint(g_workingDeferredBlendLocationList.length())) overflow |= 4u;
+        g_workingControlBuffer[0] = overflow;
+        if (overflow != 0u) blendLocationCount = 0u;
 
         g_workingExecuteIndirectBuffer[0] = 1u;
         g_workingExecuteIndirectBuffer[1] =
@@ -559,7 +565,7 @@ void main() {
         uint offsetXY = (counterIndexWithHeader >> 30) & 0x03u;
         bool isComplexShape = ((counterIndexWithHeader >> 26) & 0x01u) != 0u;
         uint itemIndex = counterIndexWithHeader & ((1u << 26) - 1u);
-        if (itemIndex >= itemCount) break;
+        if (itemIndex >= itemCount) return;
 
         uvec2 val = g_workingDeferredBlendItemList[itemIndex];
 
@@ -573,6 +579,7 @@ void main() {
     }
 
     if (outColors.a == 0.0) return;
+    if (counterIndexWithHeader != 0xFFFFFFFFu) return;
 
     vec4 outColor = outColors;
     outColor.rgb /= outColor.a;

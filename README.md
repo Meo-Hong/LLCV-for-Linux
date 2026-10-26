@@ -15,21 +15,21 @@ frames are dropped in favor of the newest one.
 | Folder | Contents |
 | --- | --- |
 | [`linux/`](linux/README.md) | Linux port by Meo-hong: V4L2 capture, OpenGL, PipeWire audio, HDR10 on Wayland, MP4 recording. Packages for Ubuntu, Debian, Raspberry Pi OS, Fedora, Nobara, RHEL and Arch |
-| [`windows/`](windows/README.md) | The original Windows LLCV 2.1.7 by seria-aa, unchanged: DirectShow capture, D3D11 presentation, WASAPI and ASIO audio |
+| [`windows/`](windows/README.md) | The original Windows LLCV 2.1.8 by seria-aa, unchanged: DirectShow capture, D3D11 presentation, WASAPI and ASIO audio |
 
 ## Linux
 
-Current release: **2.1.7** ([Releases](https://github.com/Meo-Hong/LLCV-for-Linux/releases/latest)) ·
-CMAA2 → NIS upscaling (F6), separate SDR color range, strict explicit frame
-rates ([release notes](linux/release-notes/v2.1.7.md))
+Current release: **2.1.8** ([Releases](https://github.com/Meo-Hong/LLCV-for-Linux/releases/latest)) ·
+UYVY and more RGB input, safer CMAA2 → NIS upscaling, a notice for
+unsupported pixel formats ([release notes](linux/release-notes/v2.1.8.md))
 
 | File | Install on |
 | --- | --- |
-| `llcv_2.1.7_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, and their derivatives |
-| `llcv_2.1.7_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) |
-| `llcv_2.1.7_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) |
-| `llcv-2.1.7-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 |
-| `llcv-2.1.7-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS |
+| `llcv_2.1.8_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, and their derivatives |
+| `llcv_2.1.8_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) |
+| `llcv_2.1.8_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) |
+| `llcv-2.1.8-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 |
+| `llcv-2.1.8-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS |
 
 - The `.deb` packages update themselves through the APT repository
   `https://meo-hong.github.io/LLCV-for-Linux/`.

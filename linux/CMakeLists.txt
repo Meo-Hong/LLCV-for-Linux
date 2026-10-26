@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22...3.25)
-project(llcv VERSION 2.1.7 LANGUAGES C CXX)
+project(llcv VERSION 2.1.8 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

@@ -187,9 +187,12 @@ std::string FormatLabel(capture::PixelFormat format) {
     switch (format) {
     case capture::PixelFormat::Nv12: return "NV12 (4:2:0)";
     case capture::PixelFormat::Yuyv: return "YUY2 (4:2:2)";
+    case capture::PixelFormat::Uyvy: return "UYVY (4:2:2)";
     case capture::PixelFormat::Mjpeg:
         return T("MJPEG (compressed · high resolution/refresh)");
     case capture::PixelFormat::Bgr24: return "BGR24 (RGB)";
+    case capture::PixelFormat::Bgr32: return "BGR32 (RGB)";
+    case capture::PixelFormat::Rgb24: return "RGB24 (RGB)";
     case capture::PixelFormat::P010: return T("P010 (10-bit HDR10)");
     }
     return "?";
@@ -453,6 +456,10 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
             }
             if (Combo("##pixelFormat", formatIndex, formatItems)) {
                 s.pixelFormat = formatChoices[static_cast<size_t>(formatIndex)];
+            }
+            if (!context.formatNotice.empty()) {
+                ValueRow();
+                Note(context.formatNotice, palette.warning);
             }
 
             Row(T("Frame rate"));

@@ -119,6 +119,22 @@ void main() {
 }
 )";
 
+constexpr const char* kUyvyBody = R"(
+uniform sampler2D uPlane0;
+void main() {
+    ivec2 position = ivec2(gl_FragCoord.xy);
+    int pair = position.x >> 1;
+    vec4 texel = texelFetch(uPlane0, ivec2(pair, position.y), 0);
+    float y = (position.x & 1) == 0 ? texel.g : texel.a;
+    vec2 chroma = texel.rb;
+    int lastPair = textureSize(uPlane0, 0).x - 1;
+    if ((position.x & 1) == 1 && pair < lastPair) {
+        chroma = 0.5 * (chroma + texelFetch(uPlane0, ivec2(pair + 1, position.y), 0).rb);
+    }
+    fragColor = vec4(finish(toRgb(vec3(y, chroma))), 1.0);
+}
+)";
+
 constexpr const char* kYuv3Body = R"(
 uniform sampler2D uPlane0;
 uniform sampler2D uPlane1;
@@ -246,6 +262,7 @@ bool VideoRenderer::Initialize(std::string& error, bool gles) {
     const std::string semiPlanar = ConversionShader(kSemiPlanarBody);
     if (!BuildProgram(kNv12, semiPlanar, error) || !BuildProgram(kP010, semiPlanar, error) ||
         !BuildProgram(kYuyv, ConversionShader(kYuyvBody), error) ||
+        !BuildProgram(kUyvy, ConversionShader(kUyvyBody), error) ||
         !BuildProgram(kYuv3, ConversionShader(kYuv3Body), error) ||
         !BuildProgram(kRgb, ConversionShader(kRgbBody), error) ||
         !BuildProgram(kDisplay, kDisplayShader, error) || !BuildProgram(kCompose, ComposeShader(), error)) {
@@ -475,6 +492,10 @@ void VideoRenderer::Upload(const capture::VideoFrame& frame) {
         UploadPlane(0, frame.planes[0], GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4);
         sourceProgram_ = kYuyv;
         break;
+    case capture::FrameLayout::Uyvy:
+        UploadPlane(0, frame.planes[0], GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4);
+        sourceProgram_ = kUyvy;
+        break;
     case capture::FrameLayout::Yuv3Plane:
         UploadPlane(0, frame.planes[0], GL_R8, GL_RED, GL_UNSIGNED_BYTE, 1);
         UploadPlane(1, frame.planes[1], GL_R8, GL_RED, GL_UNSIGNED_BYTE, 1);
@@ -483,6 +504,11 @@ void VideoRenderer::Upload(const capture::VideoFrame& frame) {
         break;
     case capture::FrameLayout::Bgr24:
         UploadPlane(0, frame.planes[0], GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE, 3);
+        sourceProgram_ = kRgb;
+        sourceBgr_ = true;
+        break;
+    case capture::FrameLayout::Bgr32:
+        UploadPlane(0, frame.planes[0], GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4);
         sourceProgram_ = kRgb;
         sourceBgr_ = true;
         break;

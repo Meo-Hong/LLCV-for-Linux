@@ -1,4 +1,4 @@
-.TH LLCV 1 "2026-10-26" "LLCV 2.1.7" "User Commands"
+.TH LLCV 1 "2026-10-26" "LLCV 2.1.8" "User Commands"
 .SH NAME
 llcv \- low-latency viewer for USB HDMI capture devices
 .SH SYNOPSIS
@@ -16,7 +16,7 @@ frame rate, audio devices, window behavior and recording options. Settings are
 stored in
 .IR $XDG_CONFIG_HOME/llcv/settings.ini .
 .PP
-Recording saves SDR video (NV12, YUY2, MJPEG or BGR24) with stereo capture
+Recording saves SDR video (NV12, YUY2, UYVY, MJPEG, BGR24, BGR32 or RGB24) with stereo capture
 audio as fragmented MP4 through FFmpeg, using H.264, HEVC or AV1 on NVENC,
 VA-API or CPU encoders. HDR input is not recorded. Builds without FFmpeg show
 recording as unavailable.

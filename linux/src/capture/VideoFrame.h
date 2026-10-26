@@ -8,8 +8,8 @@
 
 namespace llcv::capture {
 
-enum class PixelFormat { Nv12, Yuyv, Mjpeg, Bgr24, P010 };
-enum class FrameLayout { Nv12, P010, Yuyv, Yuv3Plane, Bgr24, Rgb24 };
+enum class PixelFormat { Nv12, Yuyv, Mjpeg, Bgr24, P010, Uyvy, Bgr32, Rgb24 };
+enum class FrameLayout { Nv12, P010, Yuyv, Yuv3Plane, Bgr24, Rgb24, Uyvy, Bgr32 };
 
 struct FramePlane {
     std::vector<uint8_t> data;

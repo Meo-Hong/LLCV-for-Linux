@@ -19,6 +19,7 @@ namespace llcv::capture {
 struct CaptureConfig {
     std::string devicePath;
     PixelFormat format = PixelFormat::Nv12;
+    uint32_t fourcc = 0;
     int width = 1920;
     int height = 1080;
     FrameRate rate;

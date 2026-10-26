@@ -10,7 +10,7 @@ namespace llcv::settings {
 
 enum class UiLanguage { Auto, Korean, English, Japanese, Spanish, Portuguese };
 enum class DisplayBackend { Auto, Wayland, X11 };
-enum class PixelFormatChoice { Auto, Nv12, Yuyv, Mjpeg, Bgr24, P010 };
+enum class PixelFormatChoice { Auto, Nv12, Yuyv, Mjpeg, Bgr24, P010, Uyvy, Bgr32, Rgb24 };
 enum class PresentationMode { Immediate, VSync };
 enum class ScalingMode { Smooth, Sharp };
 enum class DriftCorrection { Off, Auto };

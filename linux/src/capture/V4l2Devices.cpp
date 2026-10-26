@@ -47,12 +47,23 @@ bool FormatFromFourcc(uint32_t fourcc, PixelFormat& format) {
     case V4L2_PIX_FMT_YUYV:
         format = PixelFormat::Yuyv;
         return true;
+    case V4L2_PIX_FMT_UYVY:
+        format = PixelFormat::Uyvy;
+        return true;
     case V4L2_PIX_FMT_MJPEG:
     case V4L2_PIX_FMT_JPEG:
         format = PixelFormat::Mjpeg;
         return true;
     case V4L2_PIX_FMT_BGR24:
         format = PixelFormat::Bgr24;
+        return true;
+    case V4L2_PIX_FMT_XBGR32:
+    case V4L2_PIX_FMT_ABGR32:
+    case V4L2_PIX_FMT_BGR32:
+        format = PixelFormat::Bgr32;
+        return true;
+    case V4L2_PIX_FMT_RGB24:
+        format = PixelFormat::Rgb24;
         return true;
     case V4L2_PIX_FMT_P010:
         format = PixelFormat::P010;
@@ -66,11 +77,41 @@ int FormatPriority(PixelFormat format) {
     switch (format) {
     case PixelFormat::Nv12: return 0;
     case PixelFormat::Yuyv: return 1;
-    case PixelFormat::Bgr24: return 2;
-    case PixelFormat::Mjpeg: return 3;
-    case PixelFormat::P010: return 4;
+    case PixelFormat::Uyvy: return 2;
+    case PixelFormat::Bgr24: return 3;
+    case PixelFormat::Rgb24: return 4;
+    case PixelFormat::Bgr32: return 5;
+    case PixelFormat::Mjpeg: return 6;
+    case PixelFormat::P010: return 7;
     }
-    return 5;
+    return 8;
+}
+
+std::string FourccName(uint32_t fourcc) {
+    std::string text;
+    for (int i = 0; i < 4; ++i) {
+        const char c = static_cast<char>((fourcc >> (8 * i)) & 0xFF);
+        text.push_back(c >= 0x20 && c < 0x7F ? c : '?');
+    }
+    return platform::Trim(text);
+}
+
+void RecordUnsupported(CaptureDevice& device, const v4l2_fmtdesc& description,
+                       const std::vector<std::pair<int, int>>& sizes) {
+    const std::string name = FourccName(description.pixelformat);
+    std::string sizeText;
+    for (const auto& [width, height] : sizes) {
+        device.unsupportedFormats.push_back({name, width, height});
+        sizeText += (sizeText.empty() ? "" : ", ") + platform::Format("%dx%d", width, height);
+    }
+    if (sizes.empty()) device.unsupportedFormats.push_back({name, 0, 0});
+    diagnostics::Log("[capture] %s: pixel format %s (%s) is not supported, skipped: %s", device.node.c_str(),
+                     name.c_str(), reinterpret_cast<const char*>(description.description),
+                     sizeText.empty() ? "no frame sizes" : sizeText.c_str());
+}
+
+void AppendUnique(std::vector<std::string>& names, const std::string& name) {
+    if (std::find(names.begin(), names.end(), name) == names.end()) names.push_back(name);
 }
 
 std::string ReadLine(const std::filesystem::path& path) {
@@ -213,18 +254,22 @@ std::optional<CaptureDevice> Probe(const std::string& nodeName,
     description.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     for (description.index = 0; Ioctl(fd, VIDIOC_ENUM_FMT, &description) == 0; ++description.index) {
         PixelFormat format{};
-        if (!FormatFromFourcc(description.pixelformat, format)) continue;
+        if (!FormatFromFourcc(description.pixelformat, format)) {
+            RecordUnsupported(device, description, EnumerateSizes(fd, description.pixelformat));
+            continue;
+        }
         for (const auto& [width, height] : EnumerateSizes(fd, description.pixelformat)) {
             CaptureMode mode;
             mode.format = format;
             mode.width = width;
             mode.height = height;
             mode.rates = EnumerateRates(fd, description.pixelformat, width, height);
+            mode.fourcc = description.pixelformat;
             if (!mode.rates.empty()) device.modes.push_back(std::move(mode));
         }
     }
     close(fd);
-    if (device.modes.empty()) return std::nullopt;
+    if (device.modes.empty() && device.unsupportedFormats.empty()) return std::nullopt;
     return device;
 }
 
@@ -264,8 +309,11 @@ const char* PixelFormatName(PixelFormat format) {
     switch (format) {
     case PixelFormat::Nv12: return "NV12";
     case PixelFormat::Yuyv: return "YUY2";
+    case PixelFormat::Uyvy: return "UYVY";
     case PixelFormat::Mjpeg: return "MJPEG";
     case PixelFormat::Bgr24: return "BGR24";
+    case PixelFormat::Bgr32: return "BGR32";
+    case PixelFormat::Rgb24: return "RGB24";
     case PixelFormat::P010: return "P010";
     }
     return "?";
@@ -275,8 +323,11 @@ uint32_t FourccFor(PixelFormat format) {
     switch (format) {
     case PixelFormat::Nv12: return V4L2_PIX_FMT_NV12;
     case PixelFormat::Yuyv: return V4L2_PIX_FMT_YUYV;
+    case PixelFormat::Uyvy: return V4L2_PIX_FMT_UYVY;
     case PixelFormat::Mjpeg: return V4L2_PIX_FMT_MJPEG;
     case PixelFormat::Bgr24: return V4L2_PIX_FMT_BGR24;
+    case PixelFormat::Bgr32: return V4L2_PIX_FMT_XBGR32;
+    case PixelFormat::Rgb24: return V4L2_PIX_FMT_RGB24;
     case PixelFormat::P010: return V4L2_PIX_FMT_P010;
     }
     return 0;
@@ -284,6 +335,10 @@ uint32_t FourccFor(PixelFormat format) {
 
 bool IsCompressed(PixelFormat format) {
     return format == PixelFormat::Mjpeg;
+}
+
+bool IsRgb(PixelFormat format) {
+    return format == PixelFormat::Bgr24 || format == PixelFormat::Bgr32 || format == PixelFormat::Rgb24;
 }
 
 bool IsHdrOnly(PixelFormat format) {
@@ -343,9 +398,9 @@ const CaptureDevice* SelectDevice(const std::vector<CaptureDevice>& devices, con
         return nullptr;
     }
     const CaptureDevice* best = nullptr;
-    int bestScore = -1;
+    int bestScore = -2;
     for (const auto& device : devices) {
-        const int score = DeviceScore(device);
+        const int score = device.modes.empty() ? -1 : DeviceScore(device);
         if (score > bestScore) {
             best = &device;
             bestScore = score;
@@ -380,6 +435,20 @@ std::vector<PixelFormat> FormatsAt(const CaptureDevice& device, int width, int h
     return formats;
 }
 
+std::vector<std::string> UnsupportedFormatsAt(const CaptureDevice& device, int width, int height) {
+    std::vector<std::string> names;
+    for (const auto& format : device.unsupportedFormats) {
+        if (format.width == width && format.height == height) AppendUnique(names, format.name);
+    }
+    return names;
+}
+
+std::vector<std::string> UnsupportedFormatNames(const CaptureDevice& device) {
+    std::vector<std::string> names;
+    for (const auto& format : device.unsupportedFormats) AppendUnique(names, format.name);
+    return names;
+}
+
 std::vector<FrameRate> RatesAt(const CaptureDevice& device, int width, int height,
                                std::optional<PixelFormat> format) {
     std::vector<FrameRate> rates;
@@ -405,7 +474,9 @@ std::optional<ResolvedMode> ResolveMode(const CaptureDevice& device, const ModeR
     });
 
     const auto make = [&](const CaptureMode* mode, const FrameRate& rate) {
-        return ResolvedMode{mode->format, mode->width, mode->height, rate};
+        ResolvedMode resolved{mode->format, mode->width, mode->height, rate};
+        resolved.fourcc = mode->fourcc;
+        return resolved;
     };
 
     if (request.capture40Fps) {

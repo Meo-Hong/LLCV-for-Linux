@@ -1,3 +1,24 @@
+llcv (2.1.8) resolute; urgency=medium
+
+  * Follow the Windows LLCV 2.1.8 update.
+  * UYVY (8-bit 4:2:2) capture for playback, screenshots and recording. Auto
+    selection keeps NV12, then YUY2, first.
+  * 32-bit RGB (XBGR32, ABGR32 and BGR32, which UVC reports for RGB32) and
+    RGB24 capture besides BGR24, for playback, screenshots and recording.
+    Capture now sets the exact fourcc the device listed for the mode.
+  * CMAA2 checks its work-list capacities like the Windows adapter: when a
+    dense frame overflows the candidate, blend-item or location list, CMAA2
+    is skipped for that frame and NIS scales the unprocessed image instead of
+    a partly blended one. Invalid or unfinished blend lists are rejected.
+  * NIS viewport bounds checks match the Windows copy (exclusive end, signed
+    source coordinates); the viewport path is not compiled in.
+  * Devices that offer only pixel formats LLCV cannot use are listed, and
+    settings name those formats for the device or the selected resolution.
+    Auto device selection still prefers devices with supported modes. Each
+    skipped format is logged with its frame sizes.
+
+ -- Meohong <busimh001@gmail.com>  Mon, 26 Oct 2026 23:00:00 +0900
+
 llcv (2.1.7) resolute; urgency=medium
 
   * Follow the Windows LLCV 2.1.5 to 2.1.7 updates.

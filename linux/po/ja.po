@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-26 09:23+0900\n"
+"POT-Creation-Date: 2026-10-26 22:37+0900\n"
 "PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
@@ -14,6 +14,20 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"This device offers only pixel formats LLCV cannot use (%s). Select another "
+"device."
+msgstr "このデバイスはLLCVで使用できないピクセル形式（%s）のみを提供しています。別のデバイスを選択してください。"
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"At this resolution the device offers only pixel formats LLCV cannot use "
+"(%s). Select another resolution."
+msgstr "この解像度では、デバイスはLLCVで使用できないピクセル形式（%s）のみを提供しています。別の解像度を選択してください。"
 
 #: src/app/App.cpp
 msgid "The previous recording is still being finalized."
@@ -369,7 +383,10 @@ msgid ""
 "The device does not list %.2f fps for the selected resolution and format. A "
 "different rate is not used automatically. Select Auto or another supported "
 "rate."
-msgstr "デバイスは選択した解像度・フォーマットで%.2f fpsを一覧に示していません。別のFPSへ自動では切り替えません。「自動」または対応する別のFPSを選択してください。"
+msgstr ""
+"デバイスは選択した解像度・フォーマットで%.2f fpsを一覧に示していません。別の"
+"FPSへ自動では切り替えません。「自動」または対応する別のFPSを選択してくださ"
+"い。"
 
 #: src/app/App.cpp
 msgid "The device does not support the selected resolution and format."
@@ -425,7 +442,11 @@ msgid ""
 "Requested capture rate: %s fps. A different rate is not used automatically. "
 "Select Auto or another supported rate to retry. The diagnostic log shows the "
 "failed step."
-msgstr "\n\n要求したキャプチャFPS：%s fps。別のFPSへ自動では切り替えません。「自動」または対応する別のFPSで再試行してください。失敗した段階は診断ログで確認できます。"
+msgstr ""
+"\n"
+"\n"
+"要求したキャプチャFPS：%s fps。別のFPSへ自動では切り替えません。「自動」また"
+"は対応する別のFPSで再試行してください。失敗した段階は診断ログで確認できます。"
 
 #: src/app/App.cpp
 msgid "Could not start audio: "
@@ -742,29 +763,38 @@ msgstr "開始後、Tab診断の「実測FPS」を確認してください。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Auto uses the range the driver reports, or the format default."
-msgstr "「自動」はドライバーが報告する範囲を使い、ない場合はフォーマットの既定値を使います。"
+msgstr ""
+"「自動」はドライバーが報告する範囲を使い、ない場合はフォーマットの既定値を使"
+"います。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Choose Limited or Full only when blacks look crushed or washed out."
-msgstr "黒がつぶれたり白っぽく浮いたりする場合にのみ、LimitedまたはFullを選択してください。"
+msgstr ""
+"黒がつぶれたり白っぽく浮いたりする場合にのみ、LimitedまたはFullを選択してくだ"
+"さい。"
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
 "Applies to playback, screenshots and recording. P010 and HDR input keep "
 "their own range."
-msgstr "再生・スクリーンショット・録画に共通で適用されます。P010とHDR入力はそれぞれの範囲を維持します。"
+msgstr ""
+"再生・スクリーンショット・録画に共通で適用されます。P010とHDR入力はそれぞれの"
+"範囲を維持します。"
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
 "CMAA2 reduces jagged edges, then NIS enlarges the image. Default sharpness: "
 "0.15."
-msgstr "CMAA2でジャギーを軽減してから、NISで拡大します。既定のシャープネス：0.15。"
+msgstr ""
+"CMAA2でジャギーを軽減してから、NISで拡大します。既定のシャープネス：0.15。"
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
 "SDR only, for enlargement up to 2x per axis. HDR, native size and "
 "downscaling use the normal path."
-msgstr "SDRで、縦横それぞれ最大2倍までの拡大にのみ適用されます。HDR・原寸・縮小では通常の経路を使用します。"
+msgstr ""
+"SDRで、縦横それぞれ最大2倍までの拡大にのみ適用されます。HDR・原寸・縮小では通"
+"常の経路を使用します。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "F6 turns the method on and off without changing its sharpness."
@@ -774,11 +804,15 @@ msgstr "F6を押すと、シャープネスを変えずにオン・オフを切�
 msgid ""
 "Display only: recordings and screenshots keep the capture image. The OSD is "
 "drawn afterwards."
-msgstr "画面表示にのみ適用され、録画とスクリーンショットはキャプチャ画像のままです。OSDは処理後に描画します。"
+msgstr ""
+"画面表示にのみ適用され、録画とスクリーンショットはキャプチャ画像のままです。"
+"OSDは処理後に描画します。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Needs OpenGL 4.3 compute shaders. Otherwise the normal path is used."
-msgstr "OpenGL 4.3のコンピュートシェーダーが必要です。使えない場合は通常の経路を使用します。"
+msgstr ""
+"OpenGL 4.3のコンピュートシェーダーが必要です。使えない場合は通常の経路を使用"
+"します。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "MJPEG (compressed · high resolution/refresh)"
@@ -949,7 +983,9 @@ msgstr ""
 msgid ""
 "Selected FPS unavailable: select another rate. LLCV does not switch to a "
 "different rate on its own."
-msgstr "選択したFPSに非対応です。別のFPSを選択してください。LLCVが別のFPSへ自動で切り替えることはありません。"
+msgstr ""
+"選択したFPSに非対応です。別のFPSを選択してください。LLCVが別のFPSへ自動で切り"
+"替えることはありません。"
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
@@ -1048,7 +1084,9 @@ msgstr "NISのシャープネス"
 msgid ""
 "SDR only, enlargement up to 2x per axis. Default sharpness 0.15. F6 toggles "
 "it while playing."
-msgstr "SDR専用で、縦横それぞれ最大2倍まで拡大します。既定のシャープネスは0.15です。再生中はF6でオン・オフできます。"
+msgstr ""
+"SDR専用で、縦横それぞれ最大2倍まで拡大します。既定のシャープネスは0.15です。"
+"再生中はF6でオン・オフできます。"
 
 #: src/ui/SettingsScreen.cpp
 #, c-format

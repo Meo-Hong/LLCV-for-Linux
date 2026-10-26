@@ -18,6 +18,9 @@ nis/NIS_Scaler.h, LLCV changes:
   adds an unsigned tile index to the signed block origin, so the padding to the
   left of and above the image wrapped to a huge coordinate and sampled the
   right and bottom edges instead of the left and top ones.
+- The viewport bounds checks treat the end coordinate as exclusive and compare
+  possibly negative source coordinates as floats (unused here, kept in step
+  with the Windows copy).
 LLCV builds only the SDR scaler (NIS_SCALER 1, NIS_HDR_MODE 0, no viewport or
 NV12 support, output clamp on), with 128 threads per group on NVIDIA and 256
 elsewhere.
@@ -36,12 +39,18 @@ sRGB conversion, and source loads clamped to the image like the Windows
 adapter. LLCV additions: list writes past the end of the work buffers are
 skipped, and float to integer conversions follow the Direct3D rules the
 original relies on (negative positions clamp to zero, fmod keeps the sign).
+As in the Windows adapter, the dispatch-arguments pass records an overflow of
+the candidate, blend-item or location list in control word 0 (bits 1, 2, 4)
+and then skips AA for the whole frame, so NIS gets the unprocessed image
+instead of a partly blended one. The final apply also rejects invalid item
+indices and lists that are still unfinished after the iteration limit. The
+per-frame control-buffer clear restores CMAA2 on the next frame.
 Each pass was compared with the original CMAA2.hlsl compiled to GLSL with
 glslang and SPIRV-Cross; the results were identical.
 
 The host code (src/video/CmaaNisUpscaler.cpp) follows the Windows pipeline:
 BT.709-encoded SDR video is linearized, CMAA2 runs its five dispatches with
-full-size work buffers, the result is encoded again, and NIS enlarges it to the
+bounded work buffers, the result is encoded again, and NIS enlarges it to the
 display size. HDR input or output, native size, downscaling and enlargement
 beyond 2x per axis use the normal path. Recordings and screenshots are not
 processed.

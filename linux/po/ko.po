@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-26 09:23+0900\n"
+"POT-Creation-Date: 2026-10-26 22:37+0900\n"
 "PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
@@ -14,6 +14,20 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"This device offers only pixel formats LLCV cannot use (%s). Select another "
+"device."
+msgstr "이 장치는 LLCV가 사용할 수 없는 픽셀 형식(%s)만 제공합니다. 다른 장치를 선택하세요."
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"At this resolution the device offers only pixel formats LLCV cannot use "
+"(%s). Select another resolution."
+msgstr "이 해상도에서는 장치가 LLCV가 사용할 수 없는 픽셀 형식(%s)만 제공합니다. 다른 해상도를 선택하세요."
 
 #: src/app/App.cpp
 msgid "The previous recording is still being finalized."
@@ -366,7 +380,9 @@ msgid ""
 "The device does not list %.2f fps for the selected resolution and format. A "
 "different rate is not used automatically. Select Auto or another supported "
 "rate."
-msgstr "장치가 선택한 해상도·포맷에서 %.2f fps를 지원 목록에 올리지 않습니다. 다른 FPS로 자동 변경하지 않습니다. 자동 또는 지원되는 다른 FPS를 선택하세요."
+msgstr ""
+"장치가 선택한 해상도·포맷에서 %.2f fps를 지원 목록에 올리지 않습니다. 다른 "
+"FPS로 자동 변경하지 않습니다. 자동 또는 지원되는 다른 FPS를 선택하세요."
 
 #: src/app/App.cpp
 msgid "The device does not support the selected resolution and format."
@@ -421,7 +437,12 @@ msgid ""
 "Requested capture rate: %s fps. A different rate is not used automatically. "
 "Select Auto or another supported rate to retry. The diagnostic log shows the "
 "failed step."
-msgstr "\n\n요청한 캡처 FPS: %s fps. 다른 FPS로 자동 변경하지 않습니다. 자동 또는 지원되는 다른 FPS로 다시 시도하세요. 실패한 단계는 진단 로그에서 확인할 수 있습니다."
+msgstr ""
+"\n"
+"\n"
+"요청한 캡처 FPS: %s fps. 다른 FPS로 자동 변경하지 않습니다. 자동 또는 지원되"
+"는 다른 FPS로 다시 시도하세요. 실패한 단계는 진단 로그에서 확인할 수 있습니"
+"다."
 
 #: src/app/App.cpp
 msgid "Could not start audio: "
@@ -743,7 +764,9 @@ msgstr "검은색이 뭉개지거나 회색빛으로 뜰 때만 Limited 또는 F
 msgid ""
 "Applies to playback, screenshots and recording. P010 and HDR input keep "
 "their own range."
-msgstr "재생·스크린샷·녹화에 함께 적용됩니다. P010과 HDR 입력은 자체 범위를 유지합니다."
+msgstr ""
+"재생·스크린샷·녹화에 함께 적용됩니다. P010과 HDR 입력은 자체 범위를 유지합니"
+"다."
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
@@ -755,7 +778,9 @@ msgstr "CMAA2로 계단 현상을 줄인 뒤 NIS로 확대합니다. 기본 선�
 msgid ""
 "SDR only, for enlargement up to 2x per axis. HDR, native size and "
 "downscaling use the normal path."
-msgstr "SDR에서 가로·세로 최대 2배 확대에만 적용됩니다. HDR·원본 크기·축소는 기본 경로를 사용합니다."
+msgstr ""
+"SDR에서 가로·세로 최대 2배 확대에만 적용됩니다. HDR·원본 크기·축소는 기본 경"
+"로를 사용합니다."
 
 #: src/ui/SettingsScreen.cpp
 msgid "F6 turns the method on and off without changing its sharpness."
@@ -765,7 +790,9 @@ msgstr "F6은 선명도를 바꾸지 않고 켜고 끕니다."
 msgid ""
 "Display only: recordings and screenshots keep the capture image. The OSD is "
 "drawn afterwards."
-msgstr "화면 표시에만 적용되며 녹화·스크린샷은 캡처 원본을 유지합니다. OSD는 처리 후에 그립니다."
+msgstr ""
+"화면 표시에만 적용되며 녹화·스크린샷은 캡처 원본을 유지합니다. OSD는 처리 후"
+"에 그립니다."
 
 #: src/ui/SettingsScreen.cpp
 msgid "Needs OpenGL 4.3 compute shaders. Otherwise the normal path is used."
@@ -937,7 +964,9 @@ msgstr ""
 msgid ""
 "Selected FPS unavailable: select another rate. LLCV does not switch to a "
 "different rate on its own."
-msgstr "선택한 FPS 미지원 · 다른 FPS를 선택하세요. LLCV는 다른 FPS로 스스로 바꾸지 않습니다."
+msgstr ""
+"선택한 FPS 미지원 · 다른 FPS를 선택하세요. LLCV는 다른 FPS로 스스로 바꾸지 않"
+"습니다."
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
@@ -1035,7 +1064,9 @@ msgstr "NIS 선명도"
 msgid ""
 "SDR only, enlargement up to 2x per axis. Default sharpness 0.15. F6 toggles "
 "it while playing."
-msgstr "SDR 전용 · 가로·세로 최대 2배 확대. 기본 선명도 0.15. 재생 중 F6으로 켜고 끕니다."
+msgstr ""
+"SDR 전용 · 가로·세로 최대 2배 확대. 기본 선명도 0.15. 재생 중 F6으로 켜고 끕"
+"니다."
 
 #: src/ui/SettingsScreen.cpp
 #, c-format

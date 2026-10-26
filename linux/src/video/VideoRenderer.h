@@ -60,7 +60,7 @@ public:
     std::string UpscalingIssue() const { return upscaler_.Failed() ? upscaler_.Error() : upscaleIssue_; }
 
 private:
-    enum ProgramIndex { kNv12, kP010, kYuyv, kYuv3, kRgb, kDisplay, kCompose, kProgramCount };
+    enum ProgramIndex { kNv12, kP010, kYuyv, kUyvy, kYuv3, kRgb, kDisplay, kCompose, kProgramCount };
 
     struct Program {
         GLuint id = 0;

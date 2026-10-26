@@ -31,6 +31,29 @@ using diagnostics::Log;
 using platform::Format;
 using ui::T;
 
+std::string JoinFormatNames(const std::vector<std::string>& names) {
+    constexpr size_t kShownNames = 3;
+    std::string text;
+    for (size_t i = 0; i < names.size() && i < kShownNames; ++i) text += (i ? ", " : "") + names[i];
+    if (names.size() > kShownNames) text += ", …";
+    return text;
+}
+
+std::string UnsupportedFormatNotice(const capture::CaptureDevice& device, int width, int height) {
+    if (device.modes.empty()) {
+        const auto names = capture::UnsupportedFormatNames(device);
+        if (names.empty()) return {};
+        return Format(T("This device offers only pixel formats LLCV cannot use (%s). Select another device."),
+                      JoinFormatNames(names).c_str());
+    }
+    if (!capture::FormatsAt(device, width, height).empty()) return {};
+    const auto names = capture::UnsupportedFormatsAt(device, width, height);
+    if (names.empty()) return {};
+    return Format(T("At this resolution the device offers only pixel formats LLCV cannot use (%s). "
+                    "Select another resolution."),
+                  JoinFormatNames(names).c_str());
+}
+
 constexpr int kSettingsWidth = 1000;
 constexpr int kSettingsHeight = 680;
 constexpr uint64_t kCursorHideMs = 2000;
@@ -1100,6 +1123,11 @@ ui::SettingsContext App::BuildSettingsContext() {
                                      : T("with audio"));
     } else if (SelectedFpsUnavailable(*device, settings_)) {
         context.startSummary = T("Selected FPS unavailable: select another rate.");
+    } else if (const std::string notice =
+                   UnsupportedFormatNotice(*device, settings_.videoWidth, settings_.videoHeight);
+               !notice.empty()) {
+        context.formatNotice = notice;
+        context.startSummary = notice;
     } else {
         context.startSummary = T("The device does not support the selected mode.");
     }
@@ -1169,6 +1197,10 @@ bool App::StartSession(std::string& error) {
                                  "A different rate is not used automatically. Select Auto or another supported "
                                  "rate."),
                                settings_.frameRateMilli / 1000.0);
+            } else if (const std::string notice =
+                           UnsupportedFormatNotice(*device, settings_.videoWidth, settings_.videoHeight);
+                       !notice.empty()) {
+                error = notice;
             } else {
                 error = T("The device does not support the selected resolution and format.");
             }
@@ -1186,6 +1218,7 @@ bool App::StartSession(std::string& error) {
         capture::CaptureConfig config;
         config.devicePath = device->id;
         config.format = activeMode_->format;
+        config.fourcc = activeMode_->fourcc;
         config.width = activeMode_->width;
         config.height = activeMode_->height;
         config.rate = activeMode_->rate;
