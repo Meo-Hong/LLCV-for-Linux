@@ -19,7 +19,7 @@ foreach ($directory in @("docs", "tests")) {
 }
 
 # Keep this root list in sync with the installer and CMake install rules.
-$rootFiles = @("README.md", "README.ko.md", "LICENSE", "실행안내.txt", "DEPENDENCIES.txt")
+$rootFiles = @("README.md", "README.ko.md", "README.en.md", "LICENSE", "실행안내.txt", "DEPENDENCIES.txt")
 foreach ($relative in $rootFiles) {
     if (-not (Test-Path -LiteralPath (Join-Path $source $relative) -PathType Leaf)) {
         throw "Missing required package input: $relative"
@@ -36,6 +36,7 @@ $excludedDocs = @("rounded-corners-validation.md", "TEST-BLT.ko.md",
     "SPATIAL_UPSCALING_EXPERIMENT.md", "SPATIAL_UPSCALING_EXTENDED_COMPARISON.md",
     "SPATIAL_UPSCALING_FHD_RECOMPARISON.md",
     "UPSCALING_BOUNDARY_SAFETY.md", "UPSCALING_OVERFLOW_DIAGNOSTIC.md", "UYVY_HDYC_SUPPORT.md",
+    "RGB_CAPTURE_SUPPORT.md",
     "images/viewer.png")
 
 New-Item -ItemType Directory -Force -Path $destination | Out-Null
