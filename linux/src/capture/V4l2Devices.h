@@ -77,6 +77,8 @@ uint32_t FourccFor(PixelFormat format);
 bool IsCompressed(PixelFormat format);
 bool IsHdrOnly(PixelFormat format);
 bool IsRgb(PixelFormat format);
+bool AutoSelectable(PixelFormat format);
+int MinimumRowBytes(PixelFormat format, int width);
 std::string FormatRate(const FrameRate& rate);
 bool IsFortyFps(const FrameRate& rate);
 bool IsThirtyFps(const FrameRate& rate);

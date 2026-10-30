@@ -150,9 +150,11 @@ void main() {
 constexpr const char* kRgbBody = R"(
 uniform sampler2D uPlane0;
 uniform int uSwapRedBlue;
+uniform int uLimitedRgb;
 void main() {
     vec3 rgb = texelFetch(uPlane0, ivec2(gl_FragCoord.xy), 0).rgb;
     if (uSwapRedBlue == 1) rgb = rgb.bgr;
+    if (uLimitedRgb == 1) rgb = clamp((rgb - 16.0 / 255.0) * (255.0 / 219.0), 0.0, 1.0);
     fragColor = vec4(finish(rgb), 1.0);
 }
 )";
@@ -337,6 +339,7 @@ bool VideoRenderer::BuildProgram(ProgramIndex index, const std::string& fragment
     program.videoRect = gl.GetUniformLocation(id, "uVideoRect");
     program.hasVideo = gl.GetUniformLocation(id, "uHasVideo");
     program.swapRedBlue = gl.GetUniformLocation(id, "uSwapRedBlue");
+    program.limitedRgb = gl.GetUniformLocation(id, "uLimitedRgb");
     program.chromaOffset = gl.GetUniformLocation(id, "uChromaOffset");
     program.samplers = {gl.GetUniformLocation(id, "uPlane0"), gl.GetUniformLocation(id, "uPlane1"),
                         gl.GetUniformLocation(id, "uPlane2")};
@@ -444,6 +447,9 @@ void VideoRenderer::Convert(Target& target, OutputMode output) {
     if (program.output >= 0) gl.Uniform1i(program.output, output == OutputMode::Pq ? 1 : 0);
     if (program.sdrWhite >= 0) gl.Uniform1f(program.sdrWhite, sdrWhite_);
     if (program.swapRedBlue >= 0) gl.Uniform1i(program.swapRedBlue, sourceBgr_ ? 1 : 0);
+    if (program.limitedRgb >= 0) {
+        gl.Uniform1i(program.limitedRgb, sourceRgbCapture_ && sourceColor_.range == Range::Limited ? 1 : 0);
+    }
     if (program.chromaOffset >= 0) {
         float offsetX = 0.0f;
         float offsetY = 0.0f;
@@ -475,6 +481,7 @@ void VideoRenderer::Upload(const capture::VideoFrame& frame) {
     sourceBits_ = 8;
     sourceMsbAligned_ = false;
     sourceBgr_ = false;
+    sourceRgbCapture_ = false;
     switch (frame.layout) {
     case capture::FrameLayout::Nv12:
         UploadPlane(0, frame.planes[0], GL_R8, GL_RED, GL_UNSIGNED_BYTE, 1);
@@ -506,15 +513,18 @@ void VideoRenderer::Upload(const capture::VideoFrame& frame) {
         UploadPlane(0, frame.planes[0], GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE, 3);
         sourceProgram_ = kRgb;
         sourceBgr_ = true;
+        sourceRgbCapture_ = true;
         break;
     case capture::FrameLayout::Bgr32:
         UploadPlane(0, frame.planes[0], GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4);
         sourceProgram_ = kRgb;
         sourceBgr_ = true;
+        sourceRgbCapture_ = true;
         break;
     case capture::FrameLayout::Rgb24:
         UploadPlane(0, frame.planes[0], GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE, 3);
         sourceProgram_ = kRgb;
+        sourceRgbCapture_ = frame.sourceFormat == capture::PixelFormat::Rgb24;
         break;
     }
     sourceColor_ = frame.color;

@@ -11,7 +11,7 @@
 %endif
 
 Name:           llcv
-Version:        2.1.8
+Version:        2.1.9
 Release:        1
 Summary:        Low-latency viewer for USB HDMI capture devices
 
@@ -124,10 +124,12 @@ cp -p third_party/upscaling/NOTICE.txt upscaling-NOTICE.txt
 %{_prefix}/lib/udev/rules.d/70-llcv-elgato-hid.rules
 
 %changelog
-* Mon Oct 26 2026 Meohong <busimh001@gmail.com> - 2.1.8-1
-- Follow the Windows LLCV 2.1.8 update.
+* Fri Oct 30 2026 Meohong <busimh001@gmail.com> - 2.1.9-1
+- Follow the Windows LLCV 2.1.8 and 2.1.9 updates.
 - UYVY capture for playback, screenshots and recording.
-- 32-bit RGB (BGR32) and RGB24 capture besides BGR24.
+- 32-bit RGB (BGR32) and RGB24 capture besides BGR24, selected manually,
+  with the SDR color range applied; recorded as BT.709 Limited 4:2:0 after
+  a conversion-speed check.
 - CMAA2 skips a frame that overflows its work buffers; NIS keeps scaling.
 - Devices with only unsupported pixel formats are listed with a notice.
 

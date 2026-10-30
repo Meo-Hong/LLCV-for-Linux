@@ -13,7 +13,16 @@
 namespace llcv::recording {
 
 enum class Phase { Idle, Starting, Recording, Finalizing };
-enum class Failure { None, DiskFull, WriteFailed, Overload, EncoderFailed, StorageUnavailable, FinalizeFailed };
+enum class Failure {
+    None,
+    DiskFull,
+    WriteFailed,
+    Overload,
+    EncoderFailed,
+    StorageUnavailable,
+    FinalizeFailed,
+    ConversionTooSlow,
+};
 enum class StartError { None, Busy, Unavailable, UnsupportedFormat, HdrInput, StorageUnavailable, DiskFull };
 
 struct VideoInput {

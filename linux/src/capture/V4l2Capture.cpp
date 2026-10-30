@@ -189,22 +189,21 @@ bool V4l2Capture::OpenDevice(std::string& error) {
         CloseDevice();
         return false;
     }
+    const int minimumRowBytes = MinimumRowBytes(config_.format, config_.width);
     bytesPerLine_ = format.fmt.pix.bytesperline;
-    if (bytesPerLine_ == 0) {
-        switch (config_.format) {
-        case PixelFormat::Nv12: bytesPerLine_ = static_cast<uint32_t>(config_.width); break;
-        case PixelFormat::Yuyv:
-        case PixelFormat::Uyvy: bytesPerLine_ = static_cast<uint32_t>(config_.width) * 2; break;
-        case PixelFormat::Bgr24:
-        case PixelFormat::Rgb24: bytesPerLine_ = static_cast<uint32_t>(config_.width) * 3; break;
-        case PixelFormat::Bgr32: bytesPerLine_ = static_cast<uint32_t>(config_.width) * 4; break;
-        case PixelFormat::P010: bytesPerLine_ = static_cast<uint32_t>(config_.width) * 2; break;
-        case PixelFormat::Mjpeg: break;
-        }
+    if (bytesPerLine_ == 0) bytesPerLine_ = static_cast<uint32_t>(minimumRowBytes);
+    if (bytesPerLine_ < static_cast<uint32_t>(minimumRowBytes)) {
+        error = platform::Format("capture mode rejected: %s %dx%d reports %u bytes per row, at least %d are needed",
+                                 FourccText(fourcc).c_str(), config_.width, config_.height, bytesPerLine_,
+                                 minimumRowBytes);
+        CloseDevice();
+        return false;
     }
 
-    ConfigureHardwareToneMapping(fd_, config_.devicePath, config_.format,
-                                 config_.hdrInput == video::HdrInput::ForceHdr10);
+    if (!IsRgb(config_.format)) {
+        ConfigureHardwareToneMapping(fd_, config_.devicePath, config_.format,
+                                     config_.hdrInput == video::HdrInput::ForceHdr10);
+    }
 
     NegotiatedFormat negotiated;
     negotiated.format = config_.format;
@@ -306,6 +305,7 @@ bool V4l2Capture::OpenDevice(std::string& error) {
     }
     streaming_ = true;
     haveSequence_ = false;
+    rejectedFrameLogged_ = false;
     negotiated.bufferCount = static_cast<int>(request.count);
     v4l2_format active{};
     active.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -466,7 +466,16 @@ bool V4l2Capture::DrainAndPublish() {
             }
         }
     }
-    if (!usable) counters_.corrupt.fetch_add(1, std::memory_order_relaxed);
+    if (!usable) {
+        counters_.corrupt.fetch_add(1, std::memory_order_relaxed);
+        if (!rejectedFrameLogged_) {
+            rejectedFrameLogged_ = true;
+            diagnostics::Log("[capture] frame rejected: %u bytes%s, %s %dx%d, %u bytes per row (later rejections are "
+                             "counted, not logged)",
+                             latest.bytesused, (latest.flags & V4L2_BUF_FLAG_ERROR) ? ", driver error flag" : "",
+                             PixelFormatName(config_.format), config_.width, config_.height, bytesPerLine_);
+        }
+    }
     return Requeue(latest.index);
 }
 

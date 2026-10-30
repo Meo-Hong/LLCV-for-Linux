@@ -74,6 +74,7 @@ private:
         GLint videoRect = -1;
         GLint hasVideo = -1;
         GLint swapRedBlue = -1;
+        GLint limitedRgb = -1;
         GLint chromaOffset = -1;
         std::array<GLint, 3> samplers{-1, -1, -1};
     };
@@ -113,6 +114,7 @@ private:
     bool gles_ = false;
     bool sixteenBitTextures_ = true;
     bool sourceBgr_ = false;
+    bool sourceRgbCapture_ = false;
     ProgramIndex sourceProgram_ = kNv12;
     ColorSpec sourceColor_;
     int sourceBits_ = 8;

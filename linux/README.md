@@ -3,7 +3,7 @@
 > [한국어](README.ko.md)
 
 LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices with low
-latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.1.8 viewer
+latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.1.9 viewer
 by [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer). The
 reference device is the AVerMedia Live Gamer ULTRA S GC553Pro. The reference
 desktop is Ubuntu 26.04 (GNOME, Wayland).
@@ -16,12 +16,13 @@ desktop is Ubuntu 26.04 (GNOME, Wayland).
 > [this repository's issues](https://github.com/Meo-Hong/LLCV-for-Linux/issues),
 > not in the original repository.
 
-## What's new in 2.1.8
+## What's new in 2.1.9
 
-- **UYVY (8-bit 4:2:2) input** for playback, screenshots and recording. Auto
-  still prefers NV12, then YUY2.
-- **More RGB input**: 32-bit RGB (BGR32, which UVC devices report for RGB32)
-  and RGB24, besides the existing BGR24. These are Linux-only additions.
+- **RGB input** (BGR24, BGR32 and RGB24) for playback, screenshots and
+  recording. Select RGB under **Pixel format**; Auto now picks only NV12,
+  YUY2 or UYVY. **SDR color range** applies to RGB too. Recording converts RGB
+  to BT.709 Limited 4:2:0 and first checks that the conversion keeps up.
+- **UYVY (8-bit 4:2:2) input** for playback, screenshots and recording.
 - **Safer CMAA2 → NIS upscaling**: if a very dense frame overflows the CMAA2
   work buffers, that frame skips CMAA2 instead of getting partial
   anti-aliasing, while NIS keeps scaling.
@@ -29,7 +30,7 @@ desktop is Ubuntu 26.04 (GNOME, Wayland).
   and settings name those formats instead of hiding the device. The log lists
   every skipped format.
 
-Full list: [release notes](release-notes/v2.1.8.md). 2.1.7 added
+Full list: [release notes](release-notes/v2.1.9.md). 2.1.7 added
 [CMAA2 → NIS upscaling](#upscaling) (F6), a separate SDR color range and strict
 explicit frame rates ([2.1.7 notes](release-notes/v2.1.7.md)). 2.1.4 made F2 open the
 default settings page and fixed lost packets at the end of a recording
@@ -68,11 +69,11 @@ Download the file for your system from
 
 | File | Install on | Command |
 | --- | --- | --- |
-| `llcv_2.1.8_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.8_amd64.deb` |
-| `llcv_2.1.8_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.1.8_arm64.deb` |
-| `llcv_2.1.8_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.1.8_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.1.8-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.1.8-1.x86_64.rpm` |
-| `llcv-2.1.8-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.8-1-x86_64.pkg.tar.zst` |
+| `llcv_2.1.9_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.9_amd64.deb` |
+| `llcv_2.1.9_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.1.9_arm64.deb` |
+| `llcv_2.1.9_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.1.9_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.1.9-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.1.9-1.x86_64.rpm` |
+| `llcv-2.1.9-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.9-1-x86_64.pkg.tar.zst` |
 
 - Installing a `.deb` also registers the LLCV APT repository, so later
   versions arrive through `apt upgrade` or Software Updater. For `.rpm` and
@@ -199,7 +200,7 @@ accent color.
 - **Color matrix** (Auto / BT.709 / BT.601) chooses how YUV is converted to RGB.
 - **SDR color range** (Auto / Limited / Full) chooses whether black and white
   sit at 16-235 or 0-255. Auto uses the range the driver reports, or the format
-  default. Choose Limited or Full only when blacks look crushed or washed out.
+  default (Full for RGB input). Choose Limited or Full only when blacks look crushed or washed out.
 
 Both apply to playback, screenshots and recording. P010 and HDR input keep
 their own range. Settings from earlier versions (one combined color option)
@@ -244,6 +245,12 @@ stop and finish the file. The options are under **Settings → Recording**.
 - **Input.** NV12, YUY2, UYVY, MJPEG, BGR24, BGR32 and RGB24 SDR video with 16-bit stereo capture
   audio. HDR input (P010 or Force HDR10) is not recorded. MJPEG is decoded a
   second time for the recording, which uses more CPU.
+- **RGB input** is recorded as BT.709 Limited 4:2:0, not lossless RGB. Before
+  the file is created, the recording thread times the RGB conversion; if it
+  takes more than 75 % of the frame time on average, or longer than one frame
+  in any sample, recording does not start and asks for a lower recording
+  resolution or frame limit. The selected frame rate is never lowered on its
+  own. This short check does not guarantee the rate under changing load.
 - **Codec and encoder.** H.264, HEVC or AV1. **Automatic hardware** tries
   NVIDIA NVENC, then VA-API (AMD, Intel). **CPU** uses x264, x265 or SVT-AV1
   from the system FFmpeg. Opening the Recording page checks which encoders
@@ -392,8 +399,9 @@ P010 input look shifted; **Left** and **Top-left** are compatibility overrides
 for devices that place the chroma samples differently.
 
 At each start LLCV asks a supported capture device to tone map HDR to SDR
-itself for 8-bit formats (NV12, YUY2, UYVY, MJPEG and the RGB formats), and to pass HDR through
-for P010 or **Force HDR10**, like the Windows build. This covers AVerMedia
+itself for 8-bit YUV formats (NV12, YUY2, UYVY, MJPEG), and to pass HDR through
+for P010 or **Force HDR10**, like the Windows build. RGB input sends no
+request, as in Windows 2.1.9. This covers AVerMedia
 devices with the AVerMedia UVC extension control and the Elgato HD60 S+, HD60 X
 and HD60 X Rev.2. The packages install a udev rule that lets the logged-in user
 reach the Elgato HID interface; reconnect the device once after installing. The GC553Pro has no such control, so nothing is

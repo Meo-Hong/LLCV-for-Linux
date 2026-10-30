@@ -337,6 +337,24 @@ bool IsCompressed(PixelFormat format) {
     return format == PixelFormat::Mjpeg;
 }
 
+bool AutoSelectable(PixelFormat format) {
+    return !IsHdrOnly(format) && !IsRgb(format);
+}
+
+int MinimumRowBytes(PixelFormat format, int width) {
+    switch (format) {
+    case PixelFormat::Nv12: return width;
+    case PixelFormat::Yuyv:
+    case PixelFormat::Uyvy:
+    case PixelFormat::P010: return width * 2;
+    case PixelFormat::Bgr24:
+    case PixelFormat::Rgb24: return width * 3;
+    case PixelFormat::Bgr32: return width * 4;
+    case PixelFormat::Mjpeg: break;
+    }
+    return 0;
+}
+
 bool IsRgb(PixelFormat format) {
     return format == PixelFormat::Bgr24 || format == PixelFormat::Bgr32 || format == PixelFormat::Rgb24;
 }
@@ -454,7 +472,7 @@ std::vector<FrameRate> RatesAt(const CaptureDevice& device, int width, int heigh
     std::vector<FrameRate> rates;
     for (const auto& mode : device.modes) {
         if (mode.width != width || mode.height != height) continue;
-        if (format ? mode.format != *format : IsHdrOnly(mode.format)) continue;
+        if (format ? mode.format != *format : !AutoSelectable(mode.format)) continue;
         rates.insert(rates.end(), mode.rates.begin(), mode.rates.end());
     }
     SortRates(rates);
@@ -465,7 +483,7 @@ std::optional<ResolvedMode> ResolveMode(const CaptureDevice& device, const ModeR
     std::vector<const CaptureMode*> candidates;
     for (const auto& mode : device.modes) {
         if (mode.width != request.width || mode.height != request.height) continue;
-        if (request.format ? mode.format != *request.format : IsHdrOnly(mode.format)) continue;
+        if (request.format ? mode.format != *request.format : !AutoSelectable(mode.format)) continue;
         candidates.push_back(&mode);
     }
     if (candidates.empty()) return std::nullopt;

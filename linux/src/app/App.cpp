@@ -131,6 +131,9 @@ std::string FailureText(recording::Failure failure) {
     case recording::Failure::EncoderFailed: return T("Recording stopped: the encoder reported an error.");
     case recording::Failure::StorageUnavailable: return T("The recording folder is unavailable.");
     case recording::Failure::FinalizeFailed: return T("The recording file could not be finalized.");
+    case recording::Failure::ConversionTooSlow:
+        return T("Recording did not start: RGB conversion is too slow for this resolution and frame rate. Lower the "
+                 "recording resolution or frame limit.");
     case recording::Failure::None: break;
     }
     return T("Recording could not be completed.");
@@ -1944,6 +1947,10 @@ void App::PollRecording() {
                 message = FailureText(event->failure) + " " + T("The part before the stop was saved.");
                 lastRecordingText_ = event->path.string();
                 lastRecordingPath_ = event->path;
+            } else if (event->failure == recording::Failure::ConversionTooSlow && !event->detail.empty()) {
+                message = Format(T("Recording did not start: RGB conversion takes %s per frame, too slow for this "
+                                   "resolution and frame rate. Lower the recording resolution or frame limit."),
+                                 event->detail.c_str());
             } else if (event->failure == recording::Failure::EncoderFailed && !event->detail.empty()) {
                 message = Format(T("Recording could not start: %s"), event->detail.c_str());
             } else {

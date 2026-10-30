@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-26 22:37+0900\n"
+"POT-Creation-Date: 2026-10-30 21:29+0900\n"
 "PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
@@ -20,14 +20,18 @@ msgstr ""
 msgid ""
 "This device offers only pixel formats LLCV cannot use (%s). Select another "
 "device."
-msgstr "Este dispositivo solo ofrece formatos de píxel que LLCV no puede usar (%s). Selecciona otro dispositivo."
+msgstr ""
+"Este dispositivo solo ofrece formatos de píxel que LLCV no puede usar (%s). "
+"Selecciona otro dispositivo."
 
 #: src/app/App.cpp
 #, c-format
 msgid ""
 "At this resolution the device offers only pixel formats LLCV cannot use "
 "(%s). Select another resolution."
-msgstr "En esta resolución, el dispositivo solo ofrece formatos de píxel que LLCV no puede usar (%s). Selecciona otra resolución."
+msgstr ""
+"En esta resolución, el dispositivo solo ofrece formatos de píxel que LLCV no "
+"puede usar (%s). Selecciona otra resolución."
 
 #: src/app/App.cpp
 msgid "The previous recording is still being finalized."
@@ -80,6 +84,12 @@ msgstr "Grabación detenida: el codificador informó un error."
 #: src/app/App.cpp
 msgid "The recording file could not be finalized."
 msgstr "No se pudo finalizar el archivo de grabación."
+
+#: src/app/App.cpp
+msgid ""
+"Recording did not start: RGB conversion is too slow for this resolution and "
+"frame rate. Lower the recording resolution or frame limit."
+msgstr "La grabación no se inició: la conversión RGB es demasiado lenta para esta resolución y velocidad de fotogramas. Baja el límite de resolución o de fotogramas de la grabación."
 
 #: src/app/App.cpp
 msgid "Recording could not be completed."
@@ -631,6 +641,14 @@ msgstr " (%d archivos)"
 #: src/app/App.cpp
 msgid "The part before the stop was saved."
 msgstr "Se guardó la parte anterior a la interrupción."
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"Recording did not start: RGB conversion takes %s per frame, too slow for "
+"this resolution and frame rate. Lower the recording resolution or frame "
+"limit."
+msgstr "La grabación no se inició: la conversión RGB tarda %s por fotograma, demasiado para esta resolución y velocidad de fotogramas. Baja el límite de resolución o de fotogramas de la grabación."
 
 #: src/app/App.cpp
 #, c-format

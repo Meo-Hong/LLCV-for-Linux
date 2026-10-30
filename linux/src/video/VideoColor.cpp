@@ -105,7 +105,15 @@ void ApplyOverrides(ColorSpec& spec, MatrixOverride matrixOverride, RangeOverrid
 
 ColorSpec ResolveV4l2Color(const ColorInput& input, MatrixOverride matrixOverride, RangeOverride rangeOverride,
                            HdrInput hdrInput) {
-    if (input.rgb) return {};
+    if (input.rgb) {
+        ColorSpec spec;
+        spec.range = input.quantization == V4L2_QUANTIZATION_LIM_RANGE ? Range::Limited : Range::Full;
+        if (input.quantization == V4L2_QUANTIZATION_LIM_RANGE || input.quantization == V4L2_QUANTIZATION_FULL_RANGE) {
+            spec.rangeSource = ColorSource::Driver;
+        }
+        ApplyOverrides(spec, MatrixOverride::Auto, rangeOverride, false);
+        return spec;
+    }
 
     const bool driverPq = input.transferFunction == V4L2_XFER_FUNC_SMPTE2084;
     bool pq = false;

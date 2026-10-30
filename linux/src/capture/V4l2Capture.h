@@ -114,6 +114,7 @@ private:
     std::vector<MappedBuffer> buffers_;
     uint32_t bytesPerLine_ = 0;
     bool haveSequence_ = false;
+    bool rejectedFrameLogged_ = false;
     uint32_t lastSequence_ = 0;
     std::thread thread_;
     std::atomic<bool> stopping_{false};

@@ -3,6 +3,7 @@
 #include "diagnostics/Logger.h"
 #include "platform/Clock.h"
 #include "platform/Paths.h"
+#include "platform/Strings.h"
 #include "recording/FfmpegEncoder.h"
 #include "recording/RecordingStorage.h"
 #include "video/MjpegDecoder.h"
@@ -21,6 +22,7 @@ extern "C" {
 }
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -52,6 +54,9 @@ constexpr size_t kMaxQueuedAudioFrames = kSampleRate * 3;
 constexpr uint64_t kStorageCheckNs = 2000000000ull;
 constexpr size_t kSilenceChunkFrames = kSampleRate;
 constexpr AVRational kNanoseconds{1, 1000000000};
+constexpr int kRgbCheckWarmups = 1;
+constexpr int kRgbCheckSamples = 6;
+constexpr double kRgbCheckMeanShare = 0.75;
 
 struct VideoBuffer {
     std::vector<uint8_t> data;
@@ -127,7 +132,7 @@ size_t VideoPoolSize(const StartRequest& request) {
 video::ColorSpec OutputColor(const VideoInput& input) {
     video::ColorSpec color = input.color;
     if (capture::IsRgb(input.format)) {
-        color.matrix = input.height < 720 ? video::Matrix::Bt601 : video::Matrix::Bt709;
+        color.matrix = video::Matrix::Bt709;
         color.range = video::Range::Limited;
     }
     color.transfer = video::Transfer::Sdr;
@@ -215,6 +220,7 @@ public:
     Session& operator=(const Session&) = delete;
 
     bool Open(std::string& error);
+    Failure StartFailure() const { return failure_ == Failure::None ? Failure::EncoderFailed : failure_; }
     void Loop();
     Event Finalize();
     void Abort();
@@ -242,7 +248,9 @@ private:
 
     void ProcessVideo(const VideoBuffer& buffer);
     bool BuildSource(const VideoBuffer& buffer, SourceImage& source);
+    void ExpandLimitedRgb(SourceImage& source, int bytesPerPixel);
     bool Scale(const SourceImage& source, const video::ColorSpec& color);
+    bool RgbConversionFits(std::string& detail);
     bool SendVideo(int64_t pts);
 
     bool Drain(AVCodecContext* context, bool isVideo);
@@ -274,6 +282,7 @@ private:
     video::ColorSpec swsColor_;
     video::MjpegDecoder decoder_;
     capture::VideoFrame decoded_;
+    std::vector<uint8_t> rgbScratch_;
 
     int outWidth_ = 0;
     int outHeight_ = 0;
@@ -362,6 +371,17 @@ bool Recorder::Impl::Session::Open(std::string& error) {
     if (result < 0) {
         error = "frame buffer: " + ffmpeg::ErrorText(result);
         return false;
+    }
+    if (capture::IsRgb(input_.format)) {
+        std::string detail;
+        if (!RgbConversionFits(detail)) {
+            if (failure_ == Failure::None) {
+                failure_ = Failure::ConversionTooSlow;
+                detail_ = detail;
+            }
+            error = detail_;
+            return false;
+        }
     }
     if (!OpenSegment(currentPath_, error)) return false;
     freeBytes_ = FreeBytes(currentPath_.parent_path());
@@ -753,6 +773,7 @@ bool Recorder::Impl::Session::BuildSource(const VideoBuffer& buffer, SourceImage
         source.planes[0] = data;
         source.strides[0] = stride;
         source.rgb = true;
+        if (buffer.color.range == video::Range::Limited) ExpandLimitedRgb(source, 3);
         return true;
     case capture::PixelFormat::Bgr32:
         if (stride < width * 4 || buffer.size < static_cast<size_t>(stride) * static_cast<size_t>(height)) return false;
@@ -760,6 +781,7 @@ bool Recorder::Impl::Session::BuildSource(const VideoBuffer& buffer, SourceImage
         source.planes[0] = data;
         source.strides[0] = stride;
         source.rgb = true;
+        if (buffer.color.range == video::Range::Limited) ExpandLimitedRgb(source, 4);
         return true;
     case capture::PixelFormat::Mjpeg:
         if (!decoder_.Decode(data, buffer.size, decoded_) || decoded_.width <= 0 || decoded_.height <= 0) return false;
@@ -783,6 +805,64 @@ bool Recorder::Impl::Session::BuildSource(const VideoBuffer& buffer, SourceImage
         break;
     }
     return false;
+}
+
+void Recorder::Impl::Session::ExpandLimitedRgb(SourceImage& source, int bytesPerPixel) {
+    static const auto kTable = [] {
+        std::array<uint8_t, 256> table{};
+        for (int value = 0; value < 256; ++value) {
+            table[static_cast<size_t>(value)] =
+                static_cast<uint8_t>(std::clamp(((value - 16) * 255 + 109) / 219, 0, 255));
+        }
+        return table;
+    }();
+    const size_t rowBytes = static_cast<size_t>(source.width) * static_cast<size_t>(bytesPerPixel);
+    rgbScratch_.resize(rowBytes * static_cast<size_t>(source.height));
+    for (int row = 0; row < source.height; ++row) {
+        const uint8_t* from = source.planes[0] + static_cast<size_t>(row) * static_cast<size_t>(source.strides[0]);
+        uint8_t* to = rgbScratch_.data() + static_cast<size_t>(row) * rowBytes;
+        for (size_t i = 0; i < rowBytes; ++i) to[i] = kTable[from[i]];
+    }
+    source.planes[0] = rgbScratch_.data();
+    source.strides[0] = static_cast<int>(rowBytes);
+}
+
+bool Recorder::Impl::Session::RgbConversionFits(std::string& detail) {
+    const int bytesPerPixel = input_.format == capture::PixelFormat::Bgr32 ? 4 : 3;
+    VideoBuffer probe;
+    probe.stride = input_.width * bytesPerPixel;
+    probe.size = static_cast<size_t>(probe.stride) * static_cast<size_t>(input_.height);
+    probe.data.resize(probe.size);
+    uint32_t seed = 0x9E3779B9u;
+    for (uint8_t& byte : probe.data) {
+        seed = seed * 1664525u + 1013904223u;
+        byte = static_cast<uint8_t>(seed >> 24);
+    }
+    probe.color = input_.color;
+    const double budgetMs = 1000.0 / fps_;
+    double totalMs = 0.0;
+    double worstMs = 0.0;
+    for (int run = 0; run < kRgbCheckWarmups + kRgbCheckSamples; ++run) {
+        const uint64_t startNs = platform::MonotonicNs();
+        SourceImage source;
+        if (!BuildSource(probe, source)) return true;
+        if (!Scale(source, probe.color)) {
+            detail = detail_;
+            return false;
+        }
+        const double ms = static_cast<double>(platform::MonotonicNs() - startNs) / 1.0e6;
+        if (run < kRgbCheckWarmups) continue;
+        totalMs += ms;
+        worstMs = std::max(worstMs, ms);
+    }
+    const double meanMs = totalMs / kRgbCheckSamples;
+    const bool fits = meanMs <= budgetMs * kRgbCheckMeanShare && worstMs <= budgetMs;
+    diagnostics::Log("[recording] RGB conversion check %dx%d -> %dx%d: mean %.2f ms, max %.2f ms, frame time "
+                     "%.2f ms, %s",
+                     input_.width, input_.height, outWidth_, outHeight_, meanMs, worstMs, budgetMs,
+                     fits ? "accepted" : "too slow");
+    if (!fits) detail = platform::Format("%.1f ms", meanMs);
+    return fits;
 }
 
 bool Recorder::Impl::Session::Scale(const SourceImage& source, const video::ColorSpec& color) {
@@ -892,7 +972,7 @@ void Recorder::Impl::Run(StartRequest request, std::filesystem::path path) {
         session.Abort();
         Event event;
         event.kind = Event::Kind::Failed;
-        event.failure = Failure::EncoderFailed;
+        event.failure = session.StartFailure();
         event.path = path;
         event.detail = error;
         Finish(std::move(event));

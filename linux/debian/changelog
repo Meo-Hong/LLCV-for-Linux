@@ -1,11 +1,21 @@
-llcv (2.1.8) resolute; urgency=medium
+llcv (2.1.9) resolute; urgency=medium
 
-  * Follow the Windows LLCV 2.1.8 update.
-  * UYVY (8-bit 4:2:2) capture for playback, screenshots and recording. Auto
-    selection keeps NV12, then YUY2, first.
+  * Follow the Windows LLCV 2.1.8 and 2.1.9 updates.
+  * UYVY (8-bit 4:2:2) capture for playback, screenshots and recording.
   * 32-bit RGB (XBGR32, ABGR32 and BGR32, which UVC reports for RGB32) and
     RGB24 capture besides BGR24, for playback, screenshots and recording.
     Capture now sets the exact fourcc the device listed for the mode.
+  * RGB is selected manually: Auto picks only NV12, YUY2 or UYVY. The SDR
+    color range setting and the driver's quantization now apply to RGB
+    (default Full) in playback, screenshots and recording.
+  * RGB recording is converted to BT.709 Limited 4:2:0 (also below 720p).
+    Before the file is created, the worker times the conversion: one warm-up
+    and six samples; the mean must stay within 75 % of the frame time and no
+    sample may exceed it, otherwise recording does not start and asks for a
+    lower resolution or frame limit.
+  * No vendor HDR-to-SDR tone-mapping request is sent for RGB input.
+  * Capture rejects a mode whose bytes per row are too small for the format,
+    and the first rejected frame of a stream is logged with its size.
   * CMAA2 checks its work-list capacities like the Windows adapter: when a
     dense frame overflows the candidate, blend-item or location list, CMAA2
     is skipped for that frame and NIS scales the unprocessed image instead of
@@ -17,7 +27,7 @@ llcv (2.1.8) resolute; urgency=medium
     Auto device selection still prefers devices with supported modes. Each
     skipped format is logged with its frame sizes.
 
- -- Meohong <busimh001@gmail.com>  Mon, 26 Oct 2026 23:00:00 +0900
+ -- Meohong <busimh001@gmail.com>  Fri, 30 Oct 2026 12:00:00 +0900
 
 llcv (2.1.7) resolute; urgency=medium
 

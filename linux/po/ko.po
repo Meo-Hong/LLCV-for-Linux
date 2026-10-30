@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-26 22:37+0900\n"
+"POT-Creation-Date: 2026-10-30 21:29+0900\n"
 "PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
@@ -20,14 +20,18 @@ msgstr ""
 msgid ""
 "This device offers only pixel formats LLCV cannot use (%s). Select another "
 "device."
-msgstr "이 장치는 LLCV가 사용할 수 없는 픽셀 형식(%s)만 제공합니다. 다른 장치를 선택하세요."
+msgstr ""
+"이 장치는 LLCV가 사용할 수 없는 픽셀 형식(%s)만 제공합니다. 다른 장치를 선택"
+"하세요."
 
 #: src/app/App.cpp
 #, c-format
 msgid ""
 "At this resolution the device offers only pixel formats LLCV cannot use "
 "(%s). Select another resolution."
-msgstr "이 해상도에서는 장치가 LLCV가 사용할 수 없는 픽셀 형식(%s)만 제공합니다. 다른 해상도를 선택하세요."
+msgstr ""
+"이 해상도에서는 장치가 LLCV가 사용할 수 없는 픽셀 형식(%s)만 제공합니다. 다"
+"른 해상도를 선택하세요."
 
 #: src/app/App.cpp
 msgid "The previous recording is still being finalized."
@@ -80,6 +84,12 @@ msgstr "인코더 오류로 녹화를 중단했습니다."
 #: src/app/App.cpp
 msgid "The recording file could not be finalized."
 msgstr "녹화 파일 마무리에 실패했습니다."
+
+#: src/app/App.cpp
+msgid ""
+"Recording did not start: RGB conversion is too slow for this resolution and "
+"frame rate. Lower the recording resolution or frame limit."
+msgstr "RGB 변환이 이 해상도와 프레임레이트에 비해 너무 느려 녹화를 시작하지 않았습니다. 녹화 해상도나 프레임 상한을 낮추세요."
 
 #: src/app/App.cpp
 msgid "Recording could not be completed."
@@ -610,6 +620,14 @@ msgstr " (파일 %d개)"
 #: src/app/App.cpp
 msgid "The part before the stop was saved."
 msgstr "중단 전까지의 파일은 저장했습니다."
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"Recording did not start: RGB conversion takes %s per frame, too slow for "
+"this resolution and frame rate. Lower the recording resolution or frame "
+"limit."
+msgstr "RGB 변환에 프레임당 %s가 걸려 이 해상도와 프레임레이트에는 너무 느리므로 녹화를 시작하지 않았습니다. 녹화 해상도나 프레임 상한을 낮추세요."
 
 #: src/app/App.cpp
 #, c-format

@@ -4,7 +4,7 @@
 
 LLCV는 USB(UVC/V4L2) HDMI 캡처 장치의 영상과 소리를 낮은 지연으로 표시하는
 뷰어입니다. 이 폴더는 [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer)의
-Windows용 LLCV 2.1.8을 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
+Windows용 LLCV 2.1.9를 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
 기준 장치는 AVerMedia Live Gamer ULTRA S GC553Pro이고, 기준 데스크톱은
 Ubuntu 26.04(GNOME, Wayland)입니다.
 
@@ -15,19 +15,20 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 > [이 저장소의 이슈](https://github.com/Meo-Hong/LLCV-for-Linux/issues)에
 > 남겨 주세요.
 
-## 2.1.8 새 기능
+## 2.1.9 새 기능
 
-- **UYVY(8비트 4:2:2) 입력**을 재생·스크린샷·녹화에 지원합니다. 자동 선택은
-  그대로 NV12, YUY2 순서입니다.
-- **RGB 입력 추가**: 기존 BGR24에 더해 32비트 RGB(UVC 장치가 RGB32를 보고하는
-  BGR32)와 RGB24를 지원합니다. 리눅스판에만 있는 기능입니다.
+- **RGB 입력**(BGR24, BGR32, RGB24)을 재생·스크린샷·녹화에 지원합니다. RGB는
+  **픽셀 형식**에서 직접 고르고, 자동 선택은 이제 NV12, YUY2, UYVY만 고릅니다.
+  **SDR 색 범위**도 RGB에 적용됩니다. 녹화는 RGB를 BT.709 Limited 4:2:0으로
+  변환하며, 시작 전에 변환 속도가 따라가는지 확인합니다.
+- **UYVY(8비트 4:2:2) 입력**을 재생·스크린샷·녹화에 지원합니다.
 - **CMAA2 → NIS 업스케일링 안정성**: 아주 조밀한 프레임이 CMAA2 작업 버퍼를
   넘치면, 일부만 안티에일리어싱하지 않고 그 프레임만 CMAA2를 건너뜁니다. NIS
   확대는 계속합니다.
 - LLCV가 쓸 수 없는 픽셀 형식만 제공하는 장치도 목록에 남고, 설정 화면이 장치를
   숨기는 대신 그 형식 이름을 알려 줍니다. 건너뛴 형식은 모두 로그에 남습니다.
 
-전체 목록: [릴리스 노트](release-notes/v2.1.8.md). 2.1.7에서는
+전체 목록: [릴리스 노트](release-notes/v2.1.9.md). 2.1.7에서는
 [CMAA2 → NIS 업스케일링](#업스케일링)(F6), SDR 색 범위 분리, 직접 고른 FPS 엄격
 적용이 추가되었습니다([2.1.7 릴리스 노트](release-notes/v2.1.7.md)). 2.1.4에서는 F2가 기본 설정
 화면을 열고 녹화 끝부분 데이터 누락을 고쳤습니다([2.1.4 릴리스 노트](release-notes/v2.1.4.md)).
@@ -64,11 +65,11 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 
 | 파일 | 설치할 OS | 명령 |
 | --- | --- | --- |
-| `llcv_2.1.8_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.8_amd64.deb` |
-| `llcv_2.1.8_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.1.8_arm64.deb` |
-| `llcv_2.1.8_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.1.8_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.1.8-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.1.8-1.x86_64.rpm` |
-| `llcv-2.1.8-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.8-1-x86_64.pkg.tar.zst` |
+| `llcv_2.1.9_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.9_amd64.deb` |
+| `llcv_2.1.9_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.1.9_arm64.deb` |
+| `llcv_2.1.9_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.1.9_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.1.9-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.1.9-1.x86_64.rpm` |
+| `llcv-2.1.9-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.9-1-x86_64.pkg.tar.zst` |
 
 - `.deb`를 설치하면 LLCV APT 저장소도 함께 등록되어, 다음 버전부터는
   `apt upgrade`나 소프트웨어 업데이트로 받습니다. `.rpm`과 Arch는 Releases에서
@@ -186,7 +187,8 @@ HDR을 쓸 수 없는 환경이면 앱이 그 사실과 이유를 직접 알려�
 
 - **색 공간**(자동 / BT.709 / BT.601)은 YUV를 RGB로 바꾸는 방식을 고릅니다.
 - **SDR 색 범위**(자동 / Limited / Full)는 검은색과 흰색이 16-235인지 0-255인지
-  고릅니다. 자동은 드라이버가 알려 준 범위를 쓰고, 없으면 형식 기본값을 씁니다.
+  고릅니다. 자동은 드라이버가 알려 준 범위를 쓰고, 없으면 형식 기본값(RGB 입력은
+  Full)을 씁니다.
   검은색이 뭉개지거나 회색빛으로 뜰 때만 Limited나 Full을 고르세요.
 
 두 옵션 모두 재생·스크린샷·녹화에 함께 적용되며, P010과 HDR 입력은 자체 범위를
@@ -228,6 +230,11 @@ HDR을 쓸 수 없는 환경이면 앱이 그 사실과 이유를 직접 알려�
 - **입력.** NV12, YUY2, UYVY, MJPEG, BGR24, BGR32, RGB24 SDR 영상과 16비트 스테레오 캡처 오디오.
   HDR 입력(P010 또는 HDR10 강제)은 녹화하지 않습니다. MJPEG는 녹화용으로 한 번
   더 디코딩하므로 CPU를 더 씁니다.
+- **RGB 입력**은 무손실 RGB가 아니라 BT.709 Limited 4:2:0으로 녹화합니다. 파일을
+  만들기 전에 녹화 스레드가 RGB 변환 시간을 재서, 평균이 프레임 시간의 75 %를
+  넘거나 한 번이라도 한 프레임 시간을 넘으면 녹화를 시작하지 않고 녹화 해상도나
+  프레임 상한을 낮추라고 안내합니다. 고른 프레임레이트를 알아서 낮추지는 않습니다.
+  짧은 확인이라 부하가 바뀌면 계속 따라간다는 보장은 없습니다.
 - **코덱과 인코더.** H.264, HEVC, AV1. **자동 하드웨어**는 NVIDIA NVENC,
   VA-API(AMD, Intel) 순서로 시도합니다. **CPU**는 시스템 FFmpeg의 x264, x265,
   SVT-AV1을 씁니다. 녹화 탭을 처음 열면 쓸 수 있는 인코더를 확인하고 나머지는
@@ -364,9 +371,10 @@ HDR 입력의 스크린샷은 항상 SDR PNG로 저장됩니다.
 **자동**으로 두세요. **좌측**과 **좌측 상단**은 크로마 샘플 위치가 다른 장치를 위한
 호환용 설정입니다.
 
-LLCV는 시작할 때마다 지원하는 캡처 장치에, 8비트 형식(NV12, YUY2, UYVY, MJPEG, RGB 형식)에서는
+LLCV는 시작할 때마다 지원하는 캡처 장치에, 8비트 YUV 형식(NV12, YUY2, UYVY, MJPEG)에서는
 장치가 직접 HDR을 SDR로 톤매핑하고 P010이나 **HDR10 강제**에서는 HDR을 그대로 보내도록
-Windows판과 같은 요청을 보냅니다. 대상은 AVerMedia UVC 확장 제어가 있는 AVerMedia
+Windows판과 같은 요청을 보냅니다. RGB 입력에는 Windows 2.1.9처럼 요청을 보내지
+않습니다. 대상은 AVerMedia UVC 확장 제어가 있는 AVerMedia
 장치와 Elgato HD60 S+, HD60 X, HD60 X Rev.2입니다. 패키지는 로그인한 사용자가 Elgato
 HID 인터페이스에 접근할 수 있도록 udev 규칙을 설치합니다. 설치 후 장치를 한 번 다시
 연결하세요. GC553Pro에는 해당 제어가

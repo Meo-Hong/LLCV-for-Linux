@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-26 22:37+0900\n"
+"POT-Creation-Date: 2026-10-30 21:29+0900\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -77,6 +77,12 @@ msgstr ""
 
 #: src/app/App.cpp
 msgid "The recording file could not be finalized."
+msgstr ""
+
+#: src/app/App.cpp
+msgid ""
+"Recording did not start: RGB conversion is too slow for this resolution and "
+"frame rate. Lower the recording resolution or frame limit."
 msgstr ""
 
 #: src/app/App.cpp
@@ -577,6 +583,14 @@ msgstr ""
 
 #: src/app/App.cpp
 msgid "The part before the stop was saved."
+msgstr ""
+
+#: src/app/App.cpp
+#, c-format
+msgid ""
+"Recording did not start: RGB conversion takes %s per frame, too slow for "
+"this resolution and frame rate. Lower the recording resolution or frame "
+"limit."
 msgstr ""
 
 #: src/app/App.cpp
