@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-30 21:29+0900\n"
+"POT-Creation-Date: 2026-11-02 02:05+0900\n"
 "PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
@@ -90,7 +90,10 @@ msgstr "Não foi possível finalizar o arquivo de gravação."
 msgid ""
 "Recording did not start: RGB conversion is too slow for this resolution and "
 "frame rate. Lower the recording resolution or frame limit."
-msgstr "A gravação não foi iniciada: a conversão RGB é lenta demais para esta resolução e taxa de quadros. Reduza o limite de resolução ou de quadros da gravação."
+msgstr ""
+"A gravação não foi iniciada: a conversão RGB é lenta demais para esta "
+"resolução e taxa de quadros. Reduza o limite de resolução ou de quadros da "
+"gravação."
 
 #: src/app/App.cpp
 msgid "Recording could not be completed."
@@ -595,6 +598,26 @@ msgid " · copied to clipboard"
 msgstr " · copiada para a área de transferência"
 
 #: src/app/App.cpp
+msgid "Creating the report…"
+msgstr "Criando o relatório…"
+
+#: src/app/App.cpp
+#, c-format
+msgid "The report could not be created: %s"
+msgstr "Não foi possível criar o relatório: %s"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Saved %s (%d log files). Read it before sharing."
+msgstr ""
+"%s foi salvo (%d arquivos de log). Confira o conteúdo antes de compartilhar."
+
+#: src/app/App.cpp
+#, c-format
+msgid "Could not open the browser: %s"
+msgstr "Não foi possível abrir o navegador: %s"
+
+#: src/app/App.cpp
 #, c-format
 msgid "Could not open the folder: %s"
 msgstr "Não foi possível abrir a pasta: %s"
@@ -646,7 +669,10 @@ msgid ""
 "Recording did not start: RGB conversion takes %s per frame, too slow for "
 "this resolution and frame rate. Lower the recording resolution or frame "
 "limit."
-msgstr "A gravação não foi iniciada: a conversão RGB leva %s por quadro, lenta demais para esta resolução e taxa de quadros. Reduza o limite de resolução ou de quadros da gravação."
+msgstr ""
+"A gravação não foi iniciada: a conversão RGB leva %s por quadro, lenta "
+"demais para esta resolução e taxa de quadros. Reduza o limite de resolução "
+"ou de quadros da gravação."
 
 #: src/app/App.cpp
 #, c-format
@@ -670,8 +696,8 @@ msgid "CMAA2 → NIS ON · F6: off"
 msgstr "CMAA2 → NIS ON · F6: desativar"
 
 #: src/app/App.cpp
-msgid "CMAA2 → NIS bypass · SDR only"
-msgstr "CMAA2 → NIS ignorado · somente SDR"
+msgid "NIS (HDR10) ON · F6: off"
+msgstr "NIS (HDR10) ON · F6: desativar"
 
 #: src/app/App.cpp
 msgid "CMAA2 → NIS bypass · enlargement up to 2x only"
@@ -687,12 +713,21 @@ msgstr "Desativado"
 
 #: src/app/App.cpp
 #, c-format
-msgid "CMAA2 → NIS · ON · sharpness %.2f"
-msgstr "CMAA2 → NIS · ON · nitidez %.2f"
+msgid "CMAA2 (%s) → NIS · ON · sharpness %.2f"
+msgstr "CMAA2 (%s) → NIS · ON · nitidez %.2f"
 
 #: src/app/App.cpp
-msgid "CMAA2 → NIS · bypass (SDR only)"
-msgstr "CMAA2 → NIS · ignorado (somente SDR)"
+msgid "High"
+msgstr "Alta"
+
+#: src/app/App.cpp
+msgid "Preserve"
+msgstr "Preservar"
+
+#: src/app/App.cpp
+#, c-format
+msgid "NIS (HDR10) · ON · sharpness %.2f"
+msgstr "NIS (HDR10) · ON · nitidez %.2f"
 
 #: src/app/App.cpp
 msgid "CMAA2 → NIS · bypass (enlargement up to 2x only)"
@@ -814,19 +849,36 @@ msgstr ""
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
-"CMAA2 reduces jagged edges, then NIS enlarges the image. Default sharpness: "
-"0.15."
+"SDR: CMAA2 reduces jagged edges, then NIS enlarges the image. Default "
+"sharpness: 0.15."
 msgstr ""
-"O CMAA2 reduz o serrilhado e depois o NIS amplia a imagem. Nitidez padrão: "
-"0.15."
+"SDR: o CMAA2 reduz o serrilhado e depois o NIS amplia a imagem. Nitidez "
+"padrão: 0.15."
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
-"SDR only, for enlargement up to 2x per axis. HDR, native size and "
-"downscaling use the normal path."
+"CMAA2 correction: High smooths more edges; Preserve keeps more of the "
+"original text and thin lines."
 msgstr ""
-"Somente SDR, para ampliações de até 2x por eixo. HDR, tamanho original e "
-"redução usam o caminho normal."
+"Correção CMAA2: Alta suaviza mais bordas; Preservar mantém melhor a forma "
+"original de textos e linhas finas."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"HDR10 output: NIS only, limited to small changes from the original image so "
+"contours stay intact. CMAA2 is skipped and its setting is kept for SDR."
+msgstr ""
+"Saída HDR10: somente NIS, limitado a pequenas mudanças em relação à imagem "
+"original para não deformar os contornos. O CMAA2 é ignorado e sua "
+"configuração é mantida para SDR."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Enlargement up to 2x per axis only. Native size and downscaling use the "
+"normal path."
+msgstr ""
+"Somente ao ampliar até 2x por eixo. O tamanho original e a redução usam o "
+"caminho normal."
 
 #: src/ui/SettingsScreen.cpp
 msgid "F6 turns the method on and off without changing its sharpness."
@@ -1086,28 +1138,20 @@ msgid "Full (0-255)"
 msgstr "Full (0-255)"
 
 #: src/ui/SettingsScreen.cpp
-msgid "Screenshots (F12)"
-msgstr "Capturas de tela (F12)"
-
-#: src/ui/SettingsScreen.cpp
-msgid "Save location"
-msgstr "Local de salvamento"
-
-#: src/ui/SettingsScreen.cpp
-msgid "Open folder##shots"
-msgstr "Abrir pasta##shots"
-
-#: src/ui/SettingsScreen.cpp
-msgid "Also copy the PNG to the clipboard"
-msgstr "Copiar também o PNG para a área de transferência"
-
-#: src/ui/SettingsScreen.cpp
-msgid "Saved as PNG at the capture resolution."
-msgstr "Salva como PNG na resolução de captura."
-
-#: src/ui/SettingsScreen.cpp
 msgid "CMAA2 → NIS"
 msgstr "CMAA2 → NIS"
+
+#: src/ui/SettingsScreen.cpp
+msgid "CMAA2 correction"
+msgstr "Correção CMAA2"
+
+#: src/ui/SettingsScreen.cpp
+msgid "High (more edge smoothing)"
+msgstr "Alta (suaviza mais bordas)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Preserve (text and thin lines)"
+msgstr "Preservar (textos e linhas finas)"
 
 #: src/ui/SettingsScreen.cpp
 msgid "NIS sharpness"
@@ -1115,11 +1159,11 @@ msgstr "Nitidez do NIS"
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
-"SDR only, enlargement up to 2x per axis. Default sharpness 0.15. F6 toggles "
-"it while playing."
+"Enlargement up to 2x per axis. HDR10 output uses NIS only. Default sharpness "
+"0.15. F6 toggles it while playing."
 msgstr ""
-"Somente SDR, ampliação de até 2x por eixo. Nitidez padrão: 0.15. F6 liga e "
-"desliga durante a reprodução."
+"Ao ampliar até 2x por eixo. A saída HDR10 usa somente NIS. Nitidez padrão "
+"0.15. F6 liga e desliga durante a reprodução."
 
 #: src/ui/SettingsScreen.cpp
 #, c-format
@@ -1647,6 +1691,10 @@ msgid "%.1f GB free"
 msgstr "%.1f GB livres"
 
 #: src/ui/SettingsScreen.cpp
+msgid "Checking…"
+msgstr "Verificando…"
+
+#: src/ui/SettingsScreen.cpp
 msgid "Unavailable"
 msgstr "Indisponível"
 
@@ -1798,6 +1846,25 @@ msgid "Open logs folder##logs"
 msgstr "Abrir pasta de logs##logs"
 
 #: src/ui/SettingsScreen.cpp
+msgid "Report"
+msgstr "Relatório"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Create report ZIP##report"
+msgstr "Criar ZIP do relatório##report"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Collects recent logs, settings, versions, devices and errors into a ZIP. The "
+"home folder, recording folder and device serial numbers are masked; nothing "
+"is uploaded. Read it before sharing."
+msgstr ""
+"Reúne em um ZIP os logs recentes, as configurações, as versões, os "
+"dispositivos e os erros. A pasta pessoal, a pasta de gravação e os números "
+"de série são ocultados; nada é enviado. Confira o conteúdo antes de "
+"compartilhar."
+
+#: src/ui/SettingsScreen.cpp
 msgid "Unlisted 30 fps requests"
 msgstr "Solicitações de 30 fps não listados"
 
@@ -1921,12 +1988,36 @@ msgstr ""
 "o vídeo e não consegue bloquear a suspensão automática."
 
 #: src/ui/SettingsScreen.cpp
+msgid "Screenshots (F12)"
+msgstr "Capturas de tela (F12)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Save location"
+msgstr "Local de salvamento"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Open folder##shots"
+msgstr "Abrir pasta##shots"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Also copy the PNG to the clipboard"
+msgstr "Copiar também o PNG para a área de transferência"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Saved as PNG at the capture resolution."
+msgstr "Salva como PNG na resolução de captura."
+
+#: src/ui/SettingsScreen.cpp
 msgid "About"
 msgstr "Sobre"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Version"
 msgstr "Versão"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Release notes##releaseNotes"
+msgstr "Notas da versão##releaseNotes"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Components"
@@ -2254,3 +2345,34 @@ msgstr "driver + padrão"
 #: src/video/VideoColor.cpp
 msgid "default"
 msgstr "padrão"
+
+#~ msgid "CMAA2 → NIS bypass · SDR only"
+#~ msgstr "CMAA2 → NIS ignorado · somente SDR"
+
+#, c-format
+#~ msgid "CMAA2 → NIS · ON · sharpness %.2f"
+#~ msgstr "CMAA2 → NIS · ON · nitidez %.2f"
+
+#~ msgid "CMAA2 → NIS · bypass (SDR only)"
+#~ msgstr "CMAA2 → NIS · ignorado (somente SDR)"
+
+#~ msgid ""
+#~ "CMAA2 reduces jagged edges, then NIS enlarges the image. Default "
+#~ "sharpness: 0.15."
+#~ msgstr ""
+#~ "O CMAA2 reduz o serrilhado e depois o NIS amplia a imagem. Nitidez "
+#~ "padrão: 0.15."
+
+#~ msgid ""
+#~ "SDR only, for enlargement up to 2x per axis. HDR, native size and "
+#~ "downscaling use the normal path."
+#~ msgstr ""
+#~ "Somente SDR, para ampliações de até 2x por eixo. HDR, tamanho original e "
+#~ "redução usam o caminho normal."
+
+#~ msgid ""
+#~ "SDR only, enlargement up to 2x per axis. Default sharpness 0.15. F6 "
+#~ "toggles it while playing."
+#~ msgstr ""
+#~ "Somente SDR, ampliação de até 2x por eixo. Nitidez padrão: 0.15. F6 liga "
+#~ "e desliga durante a reprodução."

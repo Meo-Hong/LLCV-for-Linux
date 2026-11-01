@@ -11,7 +11,7 @@
 %endif
 
 Name:           llcv
-Version:        2.1.9
+Version:        2.2.1
 Release:        1
 Summary:        Low-latency viewer for USB HDMI capture devices
 
@@ -124,6 +124,13 @@ cp -p third_party/upscaling/NOTICE.txt upscaling-NOTICE.txt
 %{_prefix}/lib/udev/rules.d/70-llcv-elgato-hid.rules
 
 %changelog
+* Mon Nov 02 2026 Meohong <busimh001@gmail.com> - 2.2.1-1
+- Follow the Windows LLCV 2.2.0 and 2.2.1 updates.
+- CMAA2 High/Preserve correction for SDR upscaling.
+- HDR10 output upscaling with NIS and an original-image contour bound.
+- Diagnostic report ZIP under Guide & logs, with masked paths and serials.
+- Screenshot settings moved to App, plus a Release notes button.
+
 * Fri Oct 30 2026 Meohong <busimh001@gmail.com> - 2.1.9-1
 - Follow the Windows LLCV 2.1.8 and 2.1.9 updates.
 - UYVY capture for playback, screenshots and recording.

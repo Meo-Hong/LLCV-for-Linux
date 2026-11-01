@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22...3.25)
-project(llcv VERSION 2.1.9 LANGUAGES C CXX)
+project(llcv VERSION 2.2.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -142,6 +142,7 @@ add_executable(llcv
     src/capture/V4l2Capture.cpp
     src/capture/V4l2Devices.cpp
     src/capture/VideoFrame.cpp
+    src/diagnostics/DiagnosticReport.cpp
     src/diagnostics/Logger.cpp
     src/input/Shortcuts.cpp
     src/platform/Paths.cpp

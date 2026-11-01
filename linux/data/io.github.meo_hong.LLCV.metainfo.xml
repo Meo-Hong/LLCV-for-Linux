@@ -41,6 +41,17 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="2.2.1" date="2026-11-02">
+      <description>
+        <p>Follows the Windows LLCV 2.2.0 and 2.2.1 updates.</p>
+        <ul>
+          <li>CMAA2 correction for SDR upscaling: High or Preserve.</li>
+          <li>HDR10 upscaling with NIS, kept close to the original image so contours stay intact.</li>
+          <li>A report ZIP with recent logs, settings and device information, with personal paths and serial numbers masked.</li>
+          <li>Screenshot settings moved to the App page, which also opens the release notes.</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.1.9" date="2026-10-30">
       <description>
         <p>Follows the Windows LLCV 2.1.8 and 2.1.9 updates.</p>

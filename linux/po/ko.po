@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-10-30 21:29+0900\n"
+"POT-Creation-Date: 2026-11-02 02:05+0900\n"
 "PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
@@ -89,7 +89,9 @@ msgstr "녹화 파일 마무리에 실패했습니다."
 msgid ""
 "Recording did not start: RGB conversion is too slow for this resolution and "
 "frame rate. Lower the recording resolution or frame limit."
-msgstr "RGB 변환이 이 해상도와 프레임레이트에 비해 너무 느려 녹화를 시작하지 않았습니다. 녹화 해상도나 프레임 상한을 낮추세요."
+msgstr ""
+"RGB 변환이 이 해상도와 프레임레이트에 비해 너무 느려 녹화를 시작하지 않았습니"
+"다. 녹화 해상도나 프레임 상한을 낮추세요."
 
 #: src/app/App.cpp
 msgid "Recording could not be completed."
@@ -578,6 +580,26 @@ msgid " · copied to clipboard"
 msgstr " · 클립보드 복사됨"
 
 #: src/app/App.cpp
+msgid "Creating the report…"
+msgstr "보고서를 만드는 중…"
+
+#: src/app/App.cpp
+#, c-format
+msgid "The report could not be created: %s"
+msgstr "보고서를 만들지 못했습니다: %s"
+
+#: src/app/App.cpp
+#, c-format
+msgid "Saved %s (%d log files). Read it before sharing."
+msgstr ""
+"%s 파일을 저장했습니다(로그 파일 %d개). 공유하기 전에 내용을 확인하세요."
+
+#: src/app/App.cpp
+#, c-format
+msgid "Could not open the browser: %s"
+msgstr "브라우저를 열지 못했습니다: %s"
+
+#: src/app/App.cpp
 #, c-format
 msgid "Could not open the folder: %s"
 msgstr "폴더를 열지 못했습니다: %s"
@@ -627,7 +649,9 @@ msgid ""
 "Recording did not start: RGB conversion takes %s per frame, too slow for "
 "this resolution and frame rate. Lower the recording resolution or frame "
 "limit."
-msgstr "RGB 변환에 프레임당 %s가 걸려 이 해상도와 프레임레이트에는 너무 느리므로 녹화를 시작하지 않았습니다. 녹화 해상도나 프레임 상한을 낮추세요."
+msgstr ""
+"RGB 변환에 프레임당 %s가 걸려 이 해상도와 프레임레이트에는 너무 느리므로 녹화"
+"를 시작하지 않았습니다. 녹화 해상도나 프레임 상한을 낮추세요."
 
 #: src/app/App.cpp
 #, c-format
@@ -651,8 +675,8 @@ msgid "CMAA2 → NIS ON · F6: off"
 msgstr "CMAA2 → NIS ON · F6: 끄기"
 
 #: src/app/App.cpp
-msgid "CMAA2 → NIS bypass · SDR only"
-msgstr "CMAA2 → NIS 적용 제외 · SDR 전용"
+msgid "NIS (HDR10) ON · F6: off"
+msgstr "NIS (HDR10) ON · F6: 끄기"
 
 #: src/app/App.cpp
 msgid "CMAA2 → NIS bypass · enlargement up to 2x only"
@@ -668,12 +692,21 @@ msgstr "끄기"
 
 #: src/app/App.cpp
 #, c-format
-msgid "CMAA2 → NIS · ON · sharpness %.2f"
-msgstr "CMAA2 → NIS · ON · 선명도 %.2f"
+msgid "CMAA2 (%s) → NIS · ON · sharpness %.2f"
+msgstr "CMAA2 (%s) → NIS · ON · 선명도 %.2f"
 
 #: src/app/App.cpp
-msgid "CMAA2 → NIS · bypass (SDR only)"
-msgstr "CMAA2 → NIS · 적용 제외 (SDR 전용)"
+msgid "High"
+msgstr "높음"
+
+#: src/app/App.cpp
+msgid "Preserve"
+msgstr "보존형"
+
+#: src/app/App.cpp
+#, c-format
+msgid "NIS (HDR10) · ON · sharpness %.2f"
+msgstr "NIS (HDR10) · ON · 선명도 %.2f"
 
 #: src/app/App.cpp
 msgid "CMAA2 → NIS · bypass (enlargement up to 2x only)"
@@ -788,17 +821,33 @@ msgstr ""
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
-"CMAA2 reduces jagged edges, then NIS enlarges the image. Default sharpness: "
-"0.15."
-msgstr "CMAA2로 계단 현상을 줄인 뒤 NIS로 확대합니다. 기본 선명도: 0.15."
+"SDR: CMAA2 reduces jagged edges, then NIS enlarges the image. Default "
+"sharpness: 0.15."
+msgstr "SDR: CMAA2로 계단 현상을 줄인 뒤 NIS로 확대합니다. 기본 선명도: 0.15."
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
-"SDR only, for enlargement up to 2x per axis. HDR, native size and "
-"downscaling use the normal path."
+"CMAA2 correction: High smooths more edges; Preserve keeps more of the "
+"original text and thin lines."
 msgstr ""
-"SDR에서 가로·세로 최대 2배 확대에만 적용됩니다. HDR·원본 크기·축소는 기본 경"
-"로를 사용합니다."
+"CMAA2 보정: 높음은 경계를 더 적극적으로 다듬고, 보존형은 글씨와 얇은 선의 원"
+"래 모양을 더 유지합니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"HDR10 output: NIS only, limited to small changes from the original image so "
+"contours stay intact. CMAA2 is skipped and its setting is kept for SDR."
+msgstr ""
+"HDR10 출력: NIS만 쓰고, 윤곽이 망가지지 않도록 원본 영상과의 차이를 작게 제한"
+"합니다. CMAA2는 건너뛰며 그 설정은 SDR용으로 유지됩니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Enlargement up to 2x per axis only. Native size and downscaling use the "
+"normal path."
+msgstr ""
+"가로·세로 최대 2배 확대에만 적용됩니다. 원본 크기와 축소는 기본 경로를 사용합"
+"니다."
 
 #: src/ui/SettingsScreen.cpp
 msgid "F6 turns the method on and off without changing its sharpness."
@@ -1051,28 +1100,20 @@ msgid "Full (0-255)"
 msgstr "Full (0-255)"
 
 #: src/ui/SettingsScreen.cpp
-msgid "Screenshots (F12)"
-msgstr "스크린샷 (F12)"
-
-#: src/ui/SettingsScreen.cpp
-msgid "Save location"
-msgstr "저장 위치"
-
-#: src/ui/SettingsScreen.cpp
-msgid "Open folder##shots"
-msgstr "폴더 열기##shots"
-
-#: src/ui/SettingsScreen.cpp
-msgid "Also copy the PNG to the clipboard"
-msgstr "클립보드에도 PNG 복사"
-
-#: src/ui/SettingsScreen.cpp
-msgid "Saved as PNG at the capture resolution."
-msgstr "입력 해상도 그대로 PNG로 저장합니다."
-
-#: src/ui/SettingsScreen.cpp
 msgid "CMAA2 → NIS"
 msgstr "CMAA2 → NIS"
+
+#: src/ui/SettingsScreen.cpp
+msgid "CMAA2 correction"
+msgstr "CMAA2 보정"
+
+#: src/ui/SettingsScreen.cpp
+msgid "High (more edge smoothing)"
+msgstr "높음 (경계를 더 부드럽게)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Preserve (text and thin lines)"
+msgstr "보존형 (글씨·얇은 선 유지)"
 
 #: src/ui/SettingsScreen.cpp
 msgid "NIS sharpness"
@@ -1080,11 +1121,11 @@ msgstr "NIS 선명도"
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
-"SDR only, enlargement up to 2x per axis. Default sharpness 0.15. F6 toggles "
-"it while playing."
+"Enlargement up to 2x per axis. HDR10 output uses NIS only. Default sharpness "
+"0.15. F6 toggles it while playing."
 msgstr ""
-"SDR 전용 · 가로·세로 최대 2배 확대. 기본 선명도 0.15. 재생 중 F6으로 켜고 끕"
-"니다."
+"가로·세로 최대 2배 확대에 적용됩니다. HDR10 출력에서는 NIS만 씁니다. 기본 선"
+"명도 0.15. 재생 중 F6으로 켜고 끕니다."
 
 #: src/ui/SettingsScreen.cpp
 #, c-format
@@ -1596,6 +1637,10 @@ msgid "%.1f GB free"
 msgstr "%.1f GB 남음"
 
 #: src/ui/SettingsScreen.cpp
+msgid "Checking…"
+msgstr "확인 중…"
+
+#: src/ui/SettingsScreen.cpp
 msgid "Unavailable"
 msgstr "확인할 수 없음"
 
@@ -1740,6 +1785,24 @@ msgid "Open logs folder##logs"
 msgstr "로그 폴더 열기##logs"
 
 #: src/ui/SettingsScreen.cpp
+msgid "Report"
+msgstr "보고서"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Create report ZIP##report"
+msgstr "보고서 ZIP 만들기##report"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Collects recent logs, settings, versions, devices and errors into a ZIP. The "
+"home folder, recording folder and device serial numbers are masked; nothing "
+"is uploaded. Read it before sharing."
+msgstr ""
+"최근 로그, 설정, 버전, 장치, 오류 정보를 ZIP으로 모읍니다. 홈 폴더, 녹화 폴"
+"더, 장치 일련번호는 가리고 자동으로 전송하지 않습니다. 공유하기 전에 내용을 "
+"확인하세요."
+
+#: src/ui/SettingsScreen.cpp
 msgid "Unlisted 30 fps requests"
 msgstr "목록에 없는 30fps 요청"
 
@@ -1852,12 +1915,36 @@ msgstr ""
 "은 막지 못합니다."
 
 #: src/ui/SettingsScreen.cpp
+msgid "Screenshots (F12)"
+msgstr "스크린샷 (F12)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Save location"
+msgstr "저장 위치"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Open folder##shots"
+msgstr "폴더 열기##shots"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Also copy the PNG to the clipboard"
+msgstr "클립보드에도 PNG 복사"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Saved as PNG at the capture resolution."
+msgstr "입력 해상도 그대로 PNG로 저장합니다."
+
+#: src/ui/SettingsScreen.cpp
 msgid "About"
 msgstr "정보"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Version"
 msgstr "버전"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Release notes##releaseNotes"
+msgstr "릴리스 노트##releaseNotes"
 
 #: src/ui/SettingsScreen.cpp
 msgid "Components"
@@ -2181,3 +2268,32 @@ msgstr "드라이버 + 기본값"
 #: src/video/VideoColor.cpp
 msgid "default"
 msgstr "기본값"
+
+#~ msgid "CMAA2 → NIS bypass · SDR only"
+#~ msgstr "CMAA2 → NIS 적용 제외 · SDR 전용"
+
+#, c-format
+#~ msgid "CMAA2 → NIS · ON · sharpness %.2f"
+#~ msgstr "CMAA2 → NIS · ON · 선명도 %.2f"
+
+#~ msgid "CMAA2 → NIS · bypass (SDR only)"
+#~ msgstr "CMAA2 → NIS · 적용 제외 (SDR 전용)"
+
+#~ msgid ""
+#~ "CMAA2 reduces jagged edges, then NIS enlarges the image. Default "
+#~ "sharpness: 0.15."
+#~ msgstr "CMAA2로 계단 현상을 줄인 뒤 NIS로 확대합니다. 기본 선명도: 0.15."
+
+#~ msgid ""
+#~ "SDR only, for enlargement up to 2x per axis. HDR, native size and "
+#~ "downscaling use the normal path."
+#~ msgstr ""
+#~ "SDR에서 가로·세로 최대 2배 확대에만 적용됩니다. HDR·원본 크기·축소는 기본 "
+#~ "경로를 사용합니다."
+
+#~ msgid ""
+#~ "SDR only, enlargement up to 2x per axis. Default sharpness 0.15. F6 "
+#~ "toggles it while playing."
+#~ msgstr ""
+#~ "SDR 전용 · 가로·세로 최대 2배 확대. 기본 선명도 0.15. 재생 중 F6으로 켜고 "
+#~ "끕니다."

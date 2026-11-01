@@ -35,9 +35,10 @@ public:
     void Configure(OutputMode output, float sdrWhiteNits);
     void SetPlacement(const Placement& placement) { placement_ = placement; }
     void SetP010ChromaSiting(ChromaSiting siting) { p010Siting_ = siting; }
-    void SetUpscaling(bool enabled, float sharpness) {
+    void SetUpscaling(bool enabled, float sharpness, bool preserve) {
         upscaleRequested_ = enabled;
         upscaleSharpness_ = sharpness;
+        upscalePreserve_ = preserve;
     }
     void Upload(const capture::VideoFrame& frame);
     void Draw(int targetWidth, int targetHeight, bool sharp);
@@ -130,6 +131,7 @@ private:
     CmaaNisUpscaler upscaler_;
     bool upscaleRequested_ = false;
     float upscaleSharpness_ = 0.15f;
+    bool upscalePreserve_ = false;
     bool upscaleSupported_ = false;
     std::string upscaleIssue_;
     UpscaleState upscaleState_ = UpscaleState::Off;

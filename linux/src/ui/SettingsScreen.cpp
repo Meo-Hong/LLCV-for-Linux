@@ -165,8 +165,11 @@ constexpr const char* kSdrRangeGuide[] = {
 };
 
 constexpr const char* kUpscalingGuide[] = {
-    N_("CMAA2 reduces jagged edges, then NIS enlarges the image. Default sharpness: 0.15."),
-    N_("SDR only, for enlargement up to 2x per axis. HDR, native size and downscaling use the normal path."),
+    N_("SDR: CMAA2 reduces jagged edges, then NIS enlarges the image. Default sharpness: 0.15."),
+    N_("CMAA2 correction: High smooths more edges; Preserve keeps more of the original text and thin lines."),
+    N_("HDR10 output: NIS only, limited to small changes from the original image so contours stay intact. "
+       "CMAA2 is skipped and its setting is kept for SDR."),
+    N_("Enlargement up to 2x per axis only. Native size and downscaling use the normal path."),
     N_("F6 turns the method on and off without changing its sharpness."),
     N_("Display only: recordings and screenshots keep the capture image. The OSD is drawn afterwards."),
     N_("Needs OpenGL 4.3 compute shaders. Otherwise the normal path is used."),
@@ -585,19 +588,6 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
     EndCard(table);
 
     DrawHdr(s, context);
-
-    table = BeginCard("##screenshot", Keys(T("Screenshots (F12)")).c_str());
-    if (table) {
-        bool open = false;
-        PathRow(T("Save location"), context.screenshotDirectory,
-                T("Open folder##shots"), open);
-        if (open) action_ = SettingsAction::OpenScreenshotFolder;
-        ValueRow();
-        ImGui::Checkbox(T("Also copy the PNG to the clipboard"), &s.screenshotClipboard);
-        ValueRow();
-        Note(T("Saved as PNG at the capture resolution."));
-    }
-    EndCard(table);
 }
 
 void SettingsScreen::DrawUpscaling(AppSettings& s, const SettingsContext& context) {
@@ -610,6 +600,9 @@ void SettingsScreen::DrawUpscaling(AppSettings& s, const SettingsContext& contex
     ImGui::SameLine();
     HelpMarker(kUpscalingGuide, std::size(kUpscalingGuide));
     if (!s.upscaling) return;
+    Row(T("CMAA2 correction"));
+    EnumCombo<bool>("##cmaaCorrection", s.cmaaPreserve,
+                    {{false, T("High (more edge smoothing)")}, {true, T("Preserve (text and thin lines)")}});
     Row(T("NIS sharpness"));
     float sharpness = static_cast<float>(s.nisSharpnessPercent) / 100.0f;
     if (ImGui::SliderFloat("##nisSharpness", &sharpness, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
@@ -617,7 +610,8 @@ void SettingsScreen::DrawUpscaling(AppSettings& s, const SettingsContext& contex
     }
     ValueRow();
     if (context.upscalingSupported) {
-        Note(Keys(T("SDR only, enlargement up to 2x per axis. Default sharpness 0.15. F6 toggles it while playing.")));
+        Note(Keys(T("Enlargement up to 2x per axis. HDR10 output uses NIS only. Default sharpness 0.15. "
+                    "F6 toggles it while playing.")));
     } else {
         Note(platform::Format(T("Not available with this GPU driver (%s). The normal path is used."),
                               context.upscalingIssue.c_str()),
@@ -1033,6 +1027,8 @@ void SettingsScreen::DrawRecording(AppSettings& s, const SettingsContext& contex
         if (context.recordingFreeBytes) {
             const double gib = static_cast<double>(*context.recordingFreeBytes) / (1024.0 * 1024.0 * 1024.0);
             ImGui::Text(T("%.1f GB free"), gib);
+        } else if (context.recordingFreeBytesPending) {
+            ImGui::TextUnformatted(T("Checking…"));
         } else {
             ImGui::TextUnformatted(T("Unavailable"));
         }
@@ -1219,6 +1215,16 @@ void SettingsScreen::DrawGuide(AppSettings& s, const SettingsContext& context) {
         PathRow(T("Log location"), context.logDirectory,
                 T("Open logs folder##logs"), open);
         if (open) action_ = SettingsAction::OpenLogFolder;
+        Row(T("Report"));
+        ImGui::BeginDisabled(context.reportBusy);
+        if (ImGui::Button(T("Create report ZIP##report"))) action_ = SettingsAction::CreateReport;
+        ImGui::EndDisabled();
+        ValueRow();
+        Note(context.reportStatus.empty()
+                 ? std::string(T("Collects recent logs, settings, versions, devices and errors into a ZIP. The home "
+                                 "folder, recording folder and device serial numbers are masked; nothing is uploaded. "
+                                 "Read it before sharing."))
+                 : context.reportStatus);
     }
     EndCard(table);
 
@@ -1323,11 +1329,28 @@ void SettingsScreen::DrawApp(AppSettings& s, const SettingsContext& context) {
     }
     EndCard(table);
 
+    table = BeginCard("##screenshot", Keys(T("Screenshots (F12)")).c_str());
+    if (table) {
+        bool open = false;
+        PathRow(T("Save location"), context.screenshotDirectory,
+                T("Open folder##shots"), open);
+        if (open) action_ = SettingsAction::OpenScreenshotFolder;
+        ValueRow();
+        ImGui::Checkbox(T("Also copy the PNG to the clipboard"), &s.screenshotClipboard);
+        ValueRow();
+        Note(T("Saved as PNG at the capture resolution."));
+    }
+    EndCard(table);
+
     table = BeginCard("##about", T("About"));
     if (table) {
         Row(T("Version"));
+        const char* notes = T("Release notes##releaseNotes");
+        const float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
         ImGui::AlignTextToFramePadding();
         ImGui::Text("%s %s · Linux", app::kAppName, app::kVersion);
+        ImGui::SameLine(rightEdge - ButtonWidth(notes));
+        if (ImGui::Button(notes)) action_ = SettingsAction::OpenReleaseNotes;
         Row(T("Components"));
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(context.recordingAvailable

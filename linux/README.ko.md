@@ -4,7 +4,7 @@
 
 LLCV는 USB(UVC/V4L2) HDMI 캡처 장치의 영상과 소리를 낮은 지연으로 표시하는
 뷰어입니다. 이 폴더는 [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer)의
-Windows용 LLCV 2.1.9를 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
+Windows용 LLCV 2.2.1을 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
 기준 장치는 AVerMedia Live Gamer ULTRA S GC553Pro이고, 기준 데스크톱은
 Ubuntu 26.04(GNOME, Wayland)입니다.
 
@@ -15,20 +15,19 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 > [이 저장소의 이슈](https://github.com/Meo-Hong/LLCV-for-Linux/issues)에
 > 남겨 주세요.
 
-## 2.1.9 새 기능
+## 2.2.1 새 기능
 
-- **RGB 입력**(BGR24, BGR32, RGB24)을 재생·스크린샷·녹화에 지원합니다. RGB는
-  **픽셀 형식**에서 직접 고르고, 자동 선택은 이제 NV12, YUY2, UYVY만 고릅니다.
-  **SDR 색 범위**도 RGB에 적용됩니다. 녹화는 RGB를 BT.709 Limited 4:2:0으로
-  변환하며, 시작 전에 변환 속도가 따라가는지 확인합니다.
-- **UYVY(8비트 4:2:2) 입력**을 재생·스크린샷·녹화에 지원합니다.
-- **CMAA2 → NIS 업스케일링 안정성**: 아주 조밀한 프레임이 CMAA2 작업 버퍼를
-  넘치면, 일부만 안티에일리어싱하지 않고 그 프레임만 CMAA2를 건너뜁니다. NIS
-  확대는 계속합니다.
-- LLCV가 쓸 수 없는 픽셀 형식만 제공하는 장치도 목록에 남고, 설정 화면이 장치를
-  숨기는 대신 그 형식 이름을 알려 줍니다. 건너뛴 형식은 모두 로그에 남습니다.
+- [업스케일링](#업스케일링)에 **CMAA2 보정**이 생겼습니다. **높음**은 경계를 더
+  부드럽게 다듬고, **보존형**은 글씨와 얇은 선의 원래 모양을 더 유지합니다.
+- **HDR10 업스케일링**: HDR 출력에서는 NIS로 확대하되, 윤곽이 망가지지 않도록
+  원본 영상과의 차이를 작게 제한합니다. HDR에서는 CMAA2를 쓰지 않습니다.
+- **안내 · 로그**의 **보고서 ZIP**이 최근 로그, 설정, 버전, 장치, 오류 정보를
+  모읍니다. 개인 경로와 일련번호는 가립니다.
+- 스크린샷 설정을 **앱**으로 옮겼고, 앱에 **릴리스 노트** 버튼을 넣었습니다. 녹화
+  폴더의 남은 공간은 백그라운드에서 읽습니다.
 
-전체 목록: [릴리스 노트](release-notes/v2.1.9.md). 2.1.7에서는
+전체 목록: [릴리스 노트](release-notes/v2.2.1.md). 2.1.9에서는 RGB·UYVY 입력이
+추가되었습니다([2.1.9 릴리스 노트](release-notes/v2.1.9.md)). 2.1.7에서는
 [CMAA2 → NIS 업스케일링](#업스케일링)(F6), SDR 색 범위 분리, 직접 고른 FPS 엄격
 적용이 추가되었습니다([2.1.7 릴리스 노트](release-notes/v2.1.7.md)). 2.1.4에서는 F2가 기본 설정
 화면을 열고 녹화 끝부분 데이터 누락을 고쳤습니다([2.1.4 릴리스 노트](release-notes/v2.1.4.md)).
@@ -65,11 +64,11 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 
 | 파일 | 설치할 OS | 명령 |
 | --- | --- | --- |
-| `llcv_2.1.9_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.9_amd64.deb` |
-| `llcv_2.1.9_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.1.9_arm64.deb` |
-| `llcv_2.1.9_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.1.9_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.1.9-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.1.9-1.x86_64.rpm` |
-| `llcv-2.1.9-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.9-1-x86_64.pkg.tar.zst` |
+| `llcv_2.2.1_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.2.1_amd64.deb` |
+| `llcv_2.2.1_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.2.1_arm64.deb` |
+| `llcv_2.2.1_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.2.1_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.2.1-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.2.1-1.x86_64.rpm` |
+| `llcv-2.2.1-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.2.1-1-x86_64.pkg.tar.zst` |
 
 - `.deb`를 설치하면 LLCV APT 저장소도 함께 등록되어, 다음 버전부터는
   `apt upgrade`나 소프트웨어 업데이트로 받습니다. `.rpm`과 Arch는 Releases에서
@@ -201,18 +200,26 @@ HDR을 쓸 수 없는 환경이면 앱이 그 사실과 이유를 직접 알려�
 켜 두면 영상을 가로·세로 1배 초과 2배 이하로 확대할 때(예: 1440p 창의 1080p,
 4K 모니터 전체화면의 1080p) 다음 순서로 처리합니다.
 
-1. **CMAA2**(Intel Conservative Morphological Anti-Aliasing 2, High 프리셋)가
-   선형광 SDR 영상에서 계단 현상을 줄입니다. 평평한 영역과 곧은 경계는 흐리게
-   하지 않습니다.
+1. **CMAA2**(Intel Conservative Morphological Anti-Aliasing 2)가 선형광 SDR
+   영상에서 계단 현상을 줄입니다. 평평한 영역과 곧은 경계는 흐리게 하지
+   않습니다. **CMAA2 보정**에서 **높음**(기본, 경계를 더 부드럽게)이나
+   **보존형**(CMAA2의 extra sharpness 설정, 글씨와 얇은 선의 원래 모양을 더
+   유지)을 고릅니다.
 2. **NIS**(NVIDIA Image Scaling 1.0.3)가 확대하고 선명하게 합니다. **NIS
    선명도**는 0.00~1.00이며 기본값은 0.15입니다.
+
+HDR10 출력에서는 CMAA2를 건너뛰고 NIS를 PQ 모드로 HDR 영상에 적용합니다. 그다음
+출력의 각 채널을 원본 영상 bilinear 샘플의 2 %(최소 10비트 반 단계) 안으로
+제한해서, NIS가 가는 윤곽을 어둡게 하거나 깎지 못하게 합니다. CMAA2 보정 설정은
+SDR용으로 유지됩니다.
 
 - **F6**(또는 **Alt → 보기 → CMAA2 → NIS 업스케일링**)으로 선명도를 유지한 채
   켜고 끕니다. 켜짐, 꺼짐, 적용 제외 이유가 알림으로 표시됩니다.
 - 화면 표시에만 적용됩니다. 녹화와 스크린샷은 캡처 원본을 유지하고, 오버레이는
   처리 후에 그립니다.
-- SDR 전용입니다. HDR 입력, HDR 출력, P010, 원본 크기, 축소, 2배를 넘는 확대는
-  기존 경로를 사용합니다. 현재 상태는 Tab 진단의 **업스케일링**에서 확인하세요.
+- 원본 크기, 축소, 2배를 넘는 확대는 기존 경로를 사용합니다. SDR 화면에 보이는
+  HDR 입력은 먼저 톤매핑한 뒤 SDR 경로를 탑니다. 현재 상태는 Tab 진단의
+  **업스케일링**에서 확인하세요.
 - OpenGL 컴퓨트 셰이더가 필요합니다(OpenGL 4.3, 또는 컴퓨트·이미지 읽기/쓰기·
   스토리지 버퍼 확장이 있는 3.3). 없거나 OpenGL ES이면 사용할 수 없다고 표시하고
   기존 경로를 씁니다. GeForce RTX 2070에서 1080p → 1440p는 프레임당 약 1 ms입니다.
@@ -488,6 +495,11 @@ Alt(메뉴 막대)와 Alt+Enter(전체화면)는 고정입니다.
 
 ## 문제 해결
 
+- **문제 신고.** **설정 → 안내 · 로그**에서 **진단 로그 저장**을 켜고 문제를
+  재현한 뒤, 같은 카드의 **보고서 ZIP 만들기**를 누르세요. ZIP은
+  `~/.local/state/llcv/reports/`에 저장되며 최근 로그, `settings.ini`, 버전,
+  장치 목록, 현재 오류가 들어 있습니다. 홈 폴더, 녹화 폴더, USB 일련번호는
+  가리고 자동으로 전송하지 않습니다. 이슈에 첨부하기 전에 내용을 확인하세요.
 - **영상이 안 나옴.** OBS 등 같은 캡처 장치를 쓰는 앱을 종료하세요.
 - **프레임레이트가 60까지만 보임.** 장치가 높은 프레임레이트를 일부 해상도에서만
   제공합니다. 120 fps는 1920 × 1080(NV12), 120·144 fps는 2560 × 1440에서

@@ -1,3 +1,22 @@
+llcv (2.2.1) resolute; urgency=medium
+
+  * Follow the Windows LLCV 2.2.0 and 2.2.1 updates.
+  * CMAA2 correction for SDR upscaling: High (default) or Preserve, which is
+    CMAA2's extra-sharpness variant and keeps more text and thin-line shape.
+  * HDR10 output upscaling: NIS in PQ mode without CMAA2, then every channel
+    is bounded to +/- max(2 %, half a 10-bit step) of a bilinear sample of
+    the original image. HDR input on an SDR display gets the SDR path after
+    tone mapping.
+  * Guide & logs can create a report ZIP (recent logs, settings.ini,
+    versions, devices, current errors) under ~/.local/state/llcv/reports.
+    The home folder, recording folder and USB serial numbers are masked;
+    nothing is uploaded.
+  * Screenshot settings moved to the App page, which also gets a Release
+    notes button for the current version.
+  * The recording folder's free space is read on a background thread.
+
+ -- Meohong <busimh001@gmail.com>  Mon, 02 Nov 2026 12:00:00 +0900
+
 llcv (2.1.9) resolute; urgency=medium
 
   * Follow the Windows LLCV 2.1.8 and 2.1.9 updates.

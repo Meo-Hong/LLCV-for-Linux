@@ -35,11 +35,14 @@ struct SettingsContext {
     recording::EncoderSupport encoders;
     std::string recordingDirectory;
     std::optional<uint64_t> recordingFreeBytes;
+    bool recordingFreeBytesPending = false;
     std::string lastRecording;
     bool canCancel = false;
     bool canStart = false;
     std::string startSummary;
     std::string formatNotice;
+    std::string reportStatus;
+    bool reportBusy = false;
     HdrSupport hdr;
     int framebufferBits = 8;
     bool upscalingSupported = false;
@@ -61,6 +64,8 @@ enum class SettingsAction {
     OpenRecordingFolder,
     ChooseRecordingFolder,
     OpenLastRecording,
+    OpenReleaseNotes,
+    CreateReport,
     Cancel,
 };
 

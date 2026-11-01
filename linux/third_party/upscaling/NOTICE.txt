@@ -21,9 +21,9 @@ nis/NIS_Scaler.h, LLCV changes:
 - The viewport bounds checks treat the end coordinate as exclusive and compare
   possibly negative source coordinates as floats (unused here, kept in step
   with the Windows copy).
-LLCV builds only the SDR scaler (NIS_SCALER 1, NIS_HDR_MODE 0, no viewport or
-NV12 support, output clamp on), with 128 threads per group on NVIDIA and 256
-elsewhere.
+LLCV builds the scaler only (NIS_SCALER 1, no viewport or NV12 support, output
+clamp on) in two variants: NIS_HDR_MODE 0 for SDR and NIS_HDR_MODE 2 (PQ) for
+HDR10 output, with 128 threads per group on NVIDIA and 256 elsewhere.
 
 Conservative Morphological Anti-Aliasing 2 (CMAA2)
 Copyright (c) 2018 Intel Corporation. Apache License 2.0.
@@ -33,10 +33,12 @@ Windows LLCV adapter changes in windows/third_party/upscaling/cmaa2).
 See cmaa2/license.txt.
 cmaa2/CMAA2.glsl is an OpenGL 4.3 GLSL port of CMAA2.hlsl, reduced to the
 configuration the Windows build compiles: High preset, color edge detection
-(path 0), Extra Sharpness off, FP32, single sample, direct candidate
+(path 0), FP32, single sample, direct candidate
 processing (CMAA2_COLLECT_EXPAND_BLEND_ITEMS 0), typed FP16 output without
 sRGB conversion, and source loads clamped to the image like the Windows
-adapter. LLCV additions: list writes past the end of the work buffers are
+adapter. CMAA2_EXTRA_SHARPNESS is kept as a define: 0 for the High correction
+and 1 for Preserve, with the original CMAA2 constants for each.
+LLCV additions: list writes past the end of the work buffers are
 skipped, and float to integer conversions follow the Direct3D rules the
 original relies on (negative positions clamp to zero, fmod keeps the sign).
 As in the Windows adapter, the dispatch-arguments pass records an overflow of
@@ -51,6 +53,9 @@ glslang and SPIRV-Cross; the results were identical.
 The host code (src/video/CmaaNisUpscaler.cpp) follows the Windows pipeline:
 BT.709-encoded SDR video is linearized, CMAA2 runs its five dispatches with
 bounded work buffers, the result is encoded again, and NIS enlarges it to the
-display size. HDR input or output, native size, downscaling and enlargement
+display size. For HDR10 output, CMAA2 is skipped: the PQ BT.2020 image goes
+straight to the PQ NIS variant, and a final pass keeps every channel within
+2 % (at least half a 10-bit step) of a bilinear sample of the original image,
+as in the Windows 2.2.1 adapter. Native size, downscaling and enlargement
 beyond 2x per axis use the normal path. Recordings and screenshots are not
 processed.

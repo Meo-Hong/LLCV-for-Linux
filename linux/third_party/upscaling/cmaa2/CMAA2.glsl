@@ -35,10 +35,19 @@
 
 const uint c_maxLineLength = 86u;
 const float g_CMAA2_EdgeThreshold = 0.07;
+#ifndef CMAA2_EXTRA_SHARPNESS
+#define CMAA2_EXTRA_SHARPNESS 0
+#endif
+#if CMAA2_EXTRA_SHARPNESS
+const float g_CMAA2_LocalContrastAdaptationAmount = 0.15;
+const float g_CMAA2_SimpleShapeBlurinessAmount = 0.07;
+const float c_dampeningEffect = 0.11;
+#else
 const float g_CMAA2_LocalContrastAdaptationAmount = 0.10;
 const float g_CMAA2_SimpleShapeBlurinessAmount = 0.10;
-const float c_symmetryCorrectionOffset = 0.22;
 const float c_dampeningEffect = 0.15;
+#endif
+const float c_symmetryCorrectionOffset = 0.22;
 
 layout(binding = 0) uniform sampler2D g_inoutColorReadonly;
 layout(binding = 0, rgba16f) uniform writeonly image2D g_inoutColorWriteonly;
@@ -187,7 +196,11 @@ vec4 ComputeSimpleShapeBlendValues(vec4 edges, vec4 edgesLeft, vec4 edgesRight, 
         fromAbove += k * (edges.r * edgesLeft.a * (1.0 - edgesBottom.r) + edges.b * edgesRight.a * (1.0 - edgesBottom.b));
     }
 
+#if CMAA2_EXTRA_SHARPNESS
+    blurCoeff *= Saturate(1.15 - numberOfEdgesAllAround / 8.0);
+#else
     blurCoeff *= Saturate(1.30 - numberOfEdgesAllAround / 10.0);
+#endif
 
     return vec4(fromLeft, fromAbove, fromRight, fromBelow) * blurCoeff;
 }
@@ -406,7 +419,11 @@ void FindZLineLengths(out float lineLengthLeft, out float lineLengthRight, ivec2
 
         if (!continueLeft && !continueRight) maxLR = float(c_maxLineLength);
 
+#if CMAA2_EXTRA_SHARPNESS
+        if (maxLR >= min(float(c_maxLineLength), (1.20 * min(lineLengthRight, lineLengthLeft) - 0.20))) break;
+#else
         if (maxLR >= min(float(c_maxLineLength), (1.25 * min(lineLengthRight, lineLengthLeft) - 0.25))) break;
+#endif
     }
 }
 
@@ -522,7 +539,11 @@ void main() {
         }
 
         if (maxScore > 0.0) {
+#if CMAA2_EXTRA_SHARPNESS
+            float shapeQualityScore = roundEven(clamp(4.0 - maxScore, 0.0, 3.0));
+#else
             float shapeQualityScore = floor(clamp(4.0 - maxScore, 0.0, 3.0));
+#endif
 
             vec2 stepRight = horizontal ? vec2(1.0, 0.0) : vec2(0.0, -1.0);
             float lineLengthLeft, lineLengthRight;

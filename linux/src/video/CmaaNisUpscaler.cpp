@@ -39,12 +39,37 @@ void main() {
 }
 )";
 
+constexpr const char* kGuardShader = R"(
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+layout(binding = 0) uniform sampler2D uFiltered;
+layout(binding = 1) uniform sampler2D uOriginal;
+layout(binding = 0, rgba16f) uniform writeonly image2D uTarget;
+void main() {
+    ivec2 position = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(uTarget);
+    if (any(greaterThanEqual(position, size))) return;
+    vec3 filtered = texelFetch(uFiltered, position, 0).rgb;
+    ivec2 sourceSize = textureSize(uOriginal, 0);
+    vec2 coord = (vec2(position) + 0.5) / vec2(size) * vec2(sourceSize) - 0.5;
+    ivec2 base = ivec2(floor(coord));
+    vec2 f = coord - vec2(base);
+    ivec2 last = sourceSize - 1;
+    vec3 a = texelFetch(uOriginal, clamp(base, ivec2(0), last), 0).rgb;
+    vec3 b = texelFetch(uOriginal, clamp(base + ivec2(1, 0), ivec2(0), last), 0).rgb;
+    vec3 c = texelFetch(uOriginal, clamp(base + ivec2(0, 1), ivec2(0), last), 0).rgb;
+    vec3 d = texelFetch(uOriginal, clamp(base + ivec2(1, 1), ivec2(0), last), 0).rgb;
+    vec3 reference = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    vec3 bound = max(reference * 0.02, vec3(0.5 / 1023.0));
+    vec3 guarded = clamp(filtered, max(reference - bound, 0.0), min(reference + bound, 1.0));
+    imageStore(uTarget, position, vec4(guarded, 1.0));
+}
+)";
+
 constexpr const char* kNisDeclarations = R"(
 #define NIS_HLSL 0
 #define NIS_HLSL_6_2 0
 #define NIS_GLSL 1
 #define NIS_SCALER 1
-#define NIS_HDR_MODE 0
 #define NIS_NV12_SUPPORT 0
 #define NIS_VIEWPORT_SUPPORT 0
 #define NIS_CLAMP_OUTPUT 1
@@ -213,6 +238,49 @@ void CmaaNisUpscaler::Fail(const std::string& error) {
     diagnostics::Log("[upscaling] CMAA2 -> NIS unavailable: %s; using the normal path", error.c_str());
 }
 
+bool CmaaNisUpscaler::BuildCmaa(CmaaPrograms& programs, bool preserve, std::string& error) {
+    const std::string prefix =
+        std::string(kShaderVersion) + platform::Format("#define CMAA2_EXTRA_SHARPNESS %d\n", preserve ? 1 : 0);
+    const std::string cmaa(shaders::kCmaa2Glsl);
+    programs.edges = BuildCompute("CMAA2 edges", prefix + "#define CMAA2_PASS_EDGES 1\n" + cmaa, error);
+    if (programs.edges) {
+        programs.dispatchArgs =
+            BuildCompute("CMAA2 dispatch", prefix + "#define CMAA2_PASS_DISPATCH_ARGS 1\n" + cmaa, error);
+    }
+    if (programs.dispatchArgs) {
+        programs.candidates =
+            BuildCompute("CMAA2 candidates", prefix + "#define CMAA2_PASS_PROCESS_CANDIDATES 1\n" + cmaa, error);
+    }
+    if (programs.candidates) {
+        programs.apply = BuildCompute("CMAA2 apply", prefix + "#define CMAA2_PASS_DEFERRED_APPLY 1\n" + cmaa, error);
+    }
+    return programs.apply != 0;
+}
+
+GLuint CmaaNisUpscaler::BuildNis(bool hdr, std::string& error) const {
+    return BuildCompute(hdr ? "NIS (PQ)" : "NIS",
+                        std::string(kShaderVersion) + platform::Format("#define NIS_THREAD_GROUP_SIZE %d\n", nisGroup_) +
+                            platform::Format("#define NIS_HDR_MODE %d\n", hdr ? 2 : 0) + kNisDeclarations +
+                            shaders::kNisScalerGlsl + kNisMain,
+                        error);
+}
+
+bool CmaaNisUpscaler::EnsurePrograms(bool hdr, bool preserve) {
+    std::string error;
+    if (hdr) {
+        if (!nisPq_) nisPq_ = BuildNis(true, error);
+        if (nisPq_ && !guard_) {
+            guard_ = BuildCompute("HDR contour guard", std::string(kShaderVersion) + kGuardShader, error);
+        }
+        if (guard_) return true;
+    } else {
+        CmaaPrograms& programs = preserve ? preserve_ : high_;
+        if (programs.apply || BuildCmaa(programs, preserve, error)) return true;
+    }
+    Fail(error);
+    return false;
+}
+
 bool CmaaNisUpscaler::Initialize() {
     initialized_ = true;
     std::string missing;
@@ -222,34 +290,12 @@ bool CmaaNisUpscaler::Initialize() {
     }
     const auto* vendor = reinterpret_cast<const char*>(gl.GetString(GL_VENDOR));
     const bool nvidia = vendor && std::strstr(vendor, "NVIDIA") != nullptr;
-    const std::string cmaa(shaders::kCmaa2Glsl);
+    nisGroup_ = nvidia ? 128 : 256;
     const std::string transfer(kTransferShader);
     std::string error;
     decode_ = BuildCompute("decode", std::string(kShaderVersion) + "#define DECODE 1\n" + transfer, error);
     if (decode_) encode_ = BuildCompute("encode", std::string(kShaderVersion) + transfer, error);
-    if (encode_) {
-        edges_ = BuildCompute("CMAA2 edges", std::string(kShaderVersion) + "#define CMAA2_PASS_EDGES 1\n" + cmaa,
-                              error);
-    }
-    if (edges_) {
-        dispatchArgs_ = BuildCompute("CMAA2 dispatch",
-                                     std::string(kShaderVersion) + "#define CMAA2_PASS_DISPATCH_ARGS 1\n" + cmaa, error);
-    }
-    if (dispatchArgs_) {
-        candidates_ = BuildCompute(
-            "CMAA2 candidates", std::string(kShaderVersion) + "#define CMAA2_PASS_PROCESS_CANDIDATES 1\n" + cmaa, error);
-    }
-    if (candidates_) {
-        apply_ = BuildCompute("CMAA2 apply", std::string(kShaderVersion) + "#define CMAA2_PASS_DEFERRED_APPLY 1\n" + cmaa,
-                              error);
-    }
-    if (apply_) {
-        nis_ = BuildCompute("NIS",
-                            std::string(kShaderVersion) +
-                                platform::Format("#define NIS_THREAD_GROUP_SIZE %d\n", nvidia ? 128 : 256) +
-                                kNisDeclarations + shaders::kNisScalerGlsl + kNisMain,
-                            error);
-    }
+    if (encode_) nis_ = BuildNis(false, error);
     if (!nis_) {
         Fail(error);
         return false;
@@ -262,8 +308,7 @@ bool CmaaNisUpscaler::Initialize() {
     gl.BindBuffer(GL_UNIFORM_BUFFER, 0);
     CreateStorage(control_, 16 * sizeof(uint32_t));
     CreateStorage(indirect_, 4 * sizeof(uint32_t));
-    diagnostics::Log("[upscaling] CMAA2 -> NIS shaders ready (NIS group %d, %s)", nvidia ? 128 : 256,
-                     vendor ? vendor : "?");
+    diagnostics::Log("[upscaling] CMAA2 -> NIS shaders ready (NIS group %d, %s)", nisGroup_, vendor ? vendor : "?");
     return true;
 }
 
@@ -288,14 +333,17 @@ bool CmaaNisUpscaler::EnsureSource(int width, int height) {
     return true;
 }
 
-bool CmaaNisUpscaler::EnsureOutput(int width, int height, float sharpness) {
-    if (output_.width == width && output_.height == height && sharpness == sharpness_) return true;
+bool CmaaNisUpscaler::EnsureOutput(int width, int height, float sharpness, bool hdr) {
+    if (output_.width == width && output_.height == height && sharpness == sharpness_ && hdr == configHdr_ &&
+        (!hdr || guarded_.texture)) {
+        return true;
+    }
     NISConfig config{};
-    if (!NVScalerUpdateConfig(config, sharpness, 0, 0, static_cast<uint32_t>(linear_.width),
-                              static_cast<uint32_t>(linear_.height), static_cast<uint32_t>(linear_.width),
-                              static_cast<uint32_t>(linear_.height), 0, 0, static_cast<uint32_t>(width),
+    if (!NVScalerUpdateConfig(config, sharpness, 0, 0, static_cast<uint32_t>(sourceWidth_),
+                              static_cast<uint32_t>(sourceHeight_), static_cast<uint32_t>(sourceWidth_),
+                              static_cast<uint32_t>(sourceHeight_), 0, 0, static_cast<uint32_t>(width),
                               static_cast<uint32_t>(height), static_cast<uint32_t>(width),
-                              static_cast<uint32_t>(height), NISHDRMode::None)) {
+                              static_cast<uint32_t>(height), hdr ? NISHDRMode::PQ : NISHDRMode::None)) {
         return false;
     }
     gl.BindBuffer(GL_UNIFORM_BUFFER, nisConfig_);
@@ -305,28 +353,92 @@ bool CmaaNisUpscaler::EnsureOutput(int width, int height, float sharpness) {
         CreateTexture(output_.texture, width, height, GL_RGBA16F, GL_RGBA, GL_FLOAT, GL_NEAREST);
         output_.width = width;
         output_.height = height;
+        DeleteTexture(guarded_.texture);
+        guarded_ = {};
+    }
+    if (hdr && !guarded_.texture) {
+        CreateTexture(guarded_.texture, width, height, GL_RGBA16F, GL_RGBA, GL_FLOAT, GL_NEAREST);
+        guarded_.width = width;
+        guarded_.height = height;
     }
     sharpness_ = sharpness;
+    configHdr_ = hdr;
     processed_ = false;
     return true;
 }
 
 GLuint CmaaNisUpscaler::Process(GLuint source, int width, int height, int outputWidth, int outputHeight,
-                                float sharpness, uint64_t generation) {
+                                float sharpness, bool preserve, bool hdr, uint64_t generation) {
     if (failed_ || !UpscalingEligible(width, height, outputWidth, outputHeight)) return 0;
     if (!initialized_ && !Initialize()) return 0;
-    const bool sourceChanged = linear_.width != width || linear_.height != height;
-    if (!EnsureSource(width, height)) return 0;
-    if (sourceChanged) output_.width = output_.height = 0;
-    if (!EnsureOutput(outputWidth, outputHeight, std::clamp(sharpness, 0.0f, 1.0f))) return 0;
-    if (processed_ && processedGeneration_ == generation) return output_.texture;
-    Run(source);
+    if (!EnsurePrograms(hdr, preserve)) return 0;
+    if (sourceWidth_ != width || sourceHeight_ != height) {
+        sourceWidth_ = width;
+        sourceHeight_ = height;
+        output_.width = output_.height = 0;
+    }
+    if (!hdr && !EnsureSource(width, height)) return 0;
+    if (!EnsureOutput(outputWidth, outputHeight, std::clamp(sharpness, 0.0f, 1.0f), hdr)) return 0;
+    const GLuint result = hdr ? guarded_.texture : output_.texture;
+    if (processed_ && processedGeneration_ == generation && processedPreserve_ == preserve) return result;
+    if (hdr) {
+        RunHdr(source);
+    } else {
+        Run(source, preserve ? preserve_ : high_);
+    }
     processed_ = true;
     processedGeneration_ = generation;
-    return output_.texture;
+    processedPreserve_ = preserve;
+    return result;
 }
 
-void CmaaNisUpscaler::Run(GLuint source) {
+void CmaaNisUpscaler::RunNis(GLuint program, GLuint input) {
+    gl.ActiveTexture(GL_TEXTURE0);
+    gl.BindTexture(GL_TEXTURE_2D, input);
+    gl.ActiveTexture(GL_TEXTURE1);
+    gl.BindTexture(GL_TEXTURE_2D, coefScale_);
+    gl.ActiveTexture(GL_TEXTURE2);
+    gl.BindTexture(GL_TEXTURE_2D, coefUsm_);
+    gl.BindBufferBase(GL_UNIFORM_BUFFER, 0, nisConfig_);
+    gl.BindImageTexture(0, output_.texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA16F);
+    gl.UseProgram(program);
+    gl.DispatchCompute(Groups(output_.width, kNisBlockWidth), Groups(output_.height, kNisBlockHeight), 1);
+    gl.MemoryBarrier(GL_ALL_BARRIER_BITS);
+
+    gl.UseProgram(0);
+    gl.BindBufferBase(GL_UNIFORM_BUFFER, 0, 0);
+    gl.BindImageTexture(0, 0, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA16F);
+    gl.BindTexture(GL_TEXTURE_2D, 0);
+    gl.ActiveTexture(GL_TEXTURE1);
+    gl.BindTexture(GL_TEXTURE_2D, 0);
+    gl.ActiveTexture(GL_TEXTURE0);
+    gl.BindTexture(GL_TEXTURE_2D, 0);
+}
+
+void CmaaNisUpscaler::RunHdr(GLuint source) {
+    gl.ActiveTexture(GL_TEXTURE0);
+    gl.BindTexture(GL_TEXTURE_2D, source);
+    gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    gl.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    RunNis(nisPq_, source);
+
+    gl.ActiveTexture(GL_TEXTURE0);
+    gl.BindTexture(GL_TEXTURE_2D, output_.texture);
+    gl.ActiveTexture(GL_TEXTURE1);
+    gl.BindTexture(GL_TEXTURE_2D, source);
+    gl.BindImageTexture(0, guarded_.texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA16F);
+    gl.UseProgram(guard_);
+    gl.DispatchCompute(Groups(guarded_.width, kTransferGroup), Groups(guarded_.height, kTransferGroup), 1);
+    gl.MemoryBarrier(GL_ALL_BARRIER_BITS);
+
+    gl.UseProgram(0);
+    gl.BindImageTexture(0, 0, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA16F);
+    gl.BindTexture(GL_TEXTURE_2D, 0);
+    gl.ActiveTexture(GL_TEXTURE0);
+    gl.BindTexture(GL_TEXTURE_2D, 0);
+}
+
+void CmaaNisUpscaler::Run(GLuint source, const CmaaPrograms& cmaa) {
     const int width = linear_.width;
     const int height = linear_.height;
     static constexpr uint32_t kZeros[16] = {};
@@ -354,22 +466,22 @@ void CmaaNisUpscaler::Run(GLuint source) {
     gl.BindBuffer(GL_DISPATCH_INDIRECT_BUFFER, indirect_);
     gl.MemoryBarrier(GL_ALL_BARRIER_BITS);
 
-    gl.UseProgram(edges_);
+    gl.UseProgram(cmaa.edges);
     gl.DispatchCompute(Groups(width, kEdgeBlock), Groups(height, kEdgeBlock), 1);
     gl.MemoryBarrier(GL_ALL_BARRIER_BITS);
-    gl.UseProgram(dispatchArgs_);
+    gl.UseProgram(cmaa.dispatchArgs);
     gl.DispatchCompute(2, 1, 1);
     gl.MemoryBarrier(GL_ALL_BARRIER_BITS);
-    gl.UseProgram(candidates_);
+    gl.UseProgram(cmaa.candidates);
     gl.DispatchComputeIndirect(0);
     gl.MemoryBarrier(GL_ALL_BARRIER_BITS);
-    gl.UseProgram(dispatchArgs_);
+    gl.UseProgram(cmaa.dispatchArgs);
     gl.DispatchCompute(1, 2, 1);
     gl.MemoryBarrier(GL_ALL_BARRIER_BITS);
 
     gl.BindTexture(GL_TEXTURE_2D, 0);
     gl.BindImageTexture(0, linear_.texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA16F);
-    gl.UseProgram(apply_);
+    gl.UseProgram(cmaa.apply);
     gl.DispatchComputeIndirect(0);
     gl.MemoryBarrier(GL_ALL_BARRIER_BITS);
 
@@ -383,26 +495,11 @@ void CmaaNisUpscaler::Run(GLuint source) {
     gl.UseProgram(encode_);
     gl.DispatchCompute(Groups(width, kTransferGroup), Groups(height, kTransferGroup), 1);
     gl.MemoryBarrier(GL_ALL_BARRIER_BITS);
-
-    gl.BindTexture(GL_TEXTURE_2D, encoded_.texture);
-    gl.ActiveTexture(GL_TEXTURE1);
-    gl.BindTexture(GL_TEXTURE_2D, coefScale_);
-    gl.ActiveTexture(GL_TEXTURE2);
-    gl.BindTexture(GL_TEXTURE_2D, coefUsm_);
-    gl.BindBufferBase(GL_UNIFORM_BUFFER, 0, nisConfig_);
-    gl.BindImageTexture(0, output_.texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA16F);
-    gl.UseProgram(nis_);
-    gl.DispatchCompute(Groups(output_.width, kNisBlockWidth), Groups(output_.height, kNisBlockHeight), 1);
-    gl.MemoryBarrier(GL_ALL_BARRIER_BITS);
-
     gl.UseProgram(0);
-    gl.BindBufferBase(GL_UNIFORM_BUFFER, 0, 0);
     gl.BindImageTexture(0, 0, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA16F);
     gl.BindTexture(GL_TEXTURE_2D, 0);
-    gl.ActiveTexture(GL_TEXTURE1);
-    gl.BindTexture(GL_TEXTURE_2D, 0);
-    gl.ActiveTexture(GL_TEXTURE0);
-    gl.BindTexture(GL_TEXTURE_2D, 0);
+
+    RunNis(nis_, encoded_.texture);
 }
 
 void CmaaNisUpscaler::ReleaseSource() {
@@ -411,10 +508,12 @@ void CmaaNisUpscaler::ReleaseSource() {
     DeleteTexture(edgeImage_.texture);
     DeleteTexture(heads_.texture);
     DeleteTexture(output_.texture);
+    DeleteTexture(guarded_.texture);
     DeleteBuffer(shapeCandidates_);
     DeleteBuffer(blendLocations_);
     DeleteBuffer(blendItems_);
-    linear_ = encoded_ = edgeImage_ = heads_ = output_ = {};
+    linear_ = encoded_ = edgeImage_ = heads_ = output_ = guarded_ = {};
+    sourceWidth_ = sourceHeight_ = 0;
 }
 
 void CmaaNisUpscaler::Shutdown() {
@@ -424,13 +523,17 @@ void CmaaNisUpscaler::Shutdown() {
     DeleteBuffer(nisConfig_);
     DeleteTexture(coefScale_);
     DeleteTexture(coefUsm_);
-    for (GLuint* program : {&decode_, &encode_, &edges_, &dispatchArgs_, &candidates_, &apply_, &nis_}) {
-        DeleteProgram(*program);
+    for (CmaaPrograms* programs : {&high_, &preserve_}) {
+        for (GLuint* program : {&programs->edges, &programs->dispatchArgs, &programs->candidates, &programs->apply}) {
+            DeleteProgram(*program);
+        }
     }
+    for (GLuint* program : {&decode_, &encode_, &nis_, &nisPq_, &guard_}) DeleteProgram(*program);
     initialized_ = false;
     failed_ = false;
     error_.clear();
     sharpness_ = -1.0f;
+    configHdr_ = false;
     processed_ = false;
 }
 

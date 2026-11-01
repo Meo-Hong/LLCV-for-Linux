@@ -49,6 +49,7 @@ struct AppSettings {
     video::RangeOverride sdrRange = video::RangeOverride::Auto;
     bool upscaling = false;
     int nisSharpnessPercent = 15;
+    bool cmaaPreserve = false;
     video::HdrInput hdrInput = video::HdrInput::Auto;
     HdrOutputMode hdrOutput = HdrOutputMode::Auto;
     HdrChromaLocation hdrChromaLocation = HdrChromaLocation::Auto;

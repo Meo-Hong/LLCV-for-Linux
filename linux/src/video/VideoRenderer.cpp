@@ -549,17 +549,18 @@ GLuint VideoRenderer::UpscaledTexture(const PixelRect& rect) {
         upscaleState_ = UpscaleState::Unavailable;
         return 0;
     }
-    if (output_ != OutputMode::Sdr || SourceIsPq() || sourceProgram_ == kP010) {
-        upscaleState_ = UpscaleState::SdrOnly;
-        return 0;
-    }
     if (!UpscalingEligible(sourceWidth_, sourceHeight_, rect.width, rect.height)) {
         upscaleState_ = UpscaleState::ScaleRange;
         return 0;
     }
+    const bool hdr = output_ == OutputMode::Pq;
     const GLuint texture = upscaler_.Process(video_.texture, sourceWidth_, sourceHeight_, rect.width, rect.height,
-                                             upscaleSharpness_, imageGeneration_);
-    upscaleState_ = texture ? UpscaleState::Active : UpscaleState::Unavailable;
+                                             upscaleSharpness_, upscalePreserve_, hdr, imageGeneration_);
+    if (!texture) {
+        upscaleState_ = UpscaleState::Unavailable;
+    } else {
+        upscaleState_ = hdr ? UpscaleState::ActiveHdr : UpscaleState::Active;
+    }
     return texture;
 }
 
@@ -603,11 +604,14 @@ void VideoRenderer::ComposeHdr(int targetWidth, int targetHeight, bool sharp) {
     gl.Viewport(0, 0, targetWidth, targetHeight);
     lastRect_ = FitRect(targetWidth, targetHeight);
     const bool video = output_ == OutputMode::Pq && lastRect_.width > 0 && lastRect_.height > 0;
-    upscaleState_ = upscaleRequested_ && video ? UpscaleState::SdrOnly : UpscaleState::Off;
+    upscaleState_ = UpscaleState::Off;
+    const GLuint upscaled = video ? UpscaledTexture(lastRect_) : 0;
+    gl.BindFramebuffer(GL_FRAMEBUFFER, 0);
+    gl.Viewport(0, 0, targetWidth, targetHeight);
 
     gl.ActiveTexture(GL_TEXTURE0);
     if (video) {
-        SetFilter(video_.texture, sharp);
+        SetFilter(upscaled ? upscaled : video_.texture, upscaled ? true : sharp);
     } else {
         gl.BindTexture(GL_TEXTURE_2D, 0);
     }

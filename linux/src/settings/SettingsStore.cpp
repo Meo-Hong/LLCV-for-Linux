@@ -48,6 +48,7 @@ constexpr EnumName<video::RangeOverride> kSdrRanges[] = {
     {video::RangeOverride::Auto, "auto"}, {video::RangeOverride::Limited, "limited"},
     {video::RangeOverride::Full, "full"}};
 constexpr EnumName<bool> kUpscaling[] = {{false, "off"}, {true, "cmaa2-nis"}};
+constexpr EnumName<bool> kCmaaCorrection[] = {{false, "high"}, {true, "preserve"}};
 constexpr EnumName<video::HdrInput> kHdrInput[] = {
     {video::HdrInput::Auto, "auto"}, {video::HdrInput::ForceHdr10, "hdr10"}, {video::HdrInput::ForceSdr, "sdr"}};
 constexpr EnumName<HdrOutputMode> kHdrOutput[] = {
@@ -214,6 +215,7 @@ AppSettings LoadSettings(const std::filesystem::path& path) {
     }
     s.upscaling = ReadEnum(v, "Video.Upscaling", kUpscaling, s.upscaling);
     s.nisSharpnessPercent = ReadInt(v, "Video.NisSharpness", s.nisSharpnessPercent, 0, 100);
+    s.cmaaPreserve = ReadEnum(v, "Video.CmaaCorrection", kCmaaCorrection, s.cmaaPreserve);
     s.hdrInput = ReadEnum(v, "Video.HdrInput", kHdrInput, s.hdrInput);
     s.hdrOutput = ReadEnum(v, "Video.HdrOutput", kHdrOutput, s.hdrOutput);
     s.hdrChromaLocation = ReadEnum(v, "Video.HdrChroma", kHdrChroma, s.hdrChromaLocation);
@@ -302,6 +304,7 @@ bool SaveSettings(const std::filesystem::path& path, const AppSettings& s) {
              << "SdrRange=" << EnumText(s.sdrRange, kSdrRanges) << "\n"
              << "Upscaling=" << EnumText(s.upscaling, kUpscaling) << "\n"
              << "NisSharpness=" << std::clamp(s.nisSharpnessPercent, 0, 100) << "\n"
+             << "CmaaCorrection=" << EnumText(s.cmaaPreserve, kCmaaCorrection) << "\n"
              << "HdrInput=" << EnumText(s.hdrInput, kHdrInput) << "\n"
              << "HdrOutput=" << EnumText(s.hdrOutput, kHdrOutput) << "\n"
              << "HdrChroma=" << EnumText(s.hdrChromaLocation, kHdrChroma) << "\n"

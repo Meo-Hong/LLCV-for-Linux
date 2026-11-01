@@ -5,6 +5,7 @@
 #include "capture/V4l2Capture.h"
 #include "capture/V4l2Devices.h"
 #include "diagnostics/CaptureFrameRateMonitor.h"
+#include "diagnostics/DiagnosticReport.h"
 #include "platform/SleepInhibitor.h"
 #include "recording/EncoderSupport.h"
 #include "recording/Recorder.h"
@@ -24,6 +25,7 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <future>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -96,6 +98,7 @@ private:
     void RememberWindowDisplay();
     void FollowDisplayChange();
     void OpenLastRecording();
+    void OpenReleaseNotes();
     static SDL_HitTestResult SDLCALL AudioOnlyHitTest(SDL_Window* window, const SDL_Point* point, void* data);
     void ApplyWindowConstraints();
     void PositionOnPreferredDisplay();
@@ -131,6 +134,11 @@ private:
     void ApplyPlacement();
     void RequestScreenshot();
     void PollScreenshots();
+    void CreateReport();
+    void PollReport();
+    void PollFreeBytes();
+    std::string ReportSummary() const;
+    std::optional<uint64_t> RecordingFreeBytes(const std::filesystem::path& directory);
     void CopyPngToClipboard(std::vector<uint8_t> png);
     void ShowToast(std::string text, bool error = false);
     void OpenFolder(const std::filesystem::path& path);
@@ -193,6 +201,12 @@ private:
     std::optional<capture::CaptureDevice> activeDevice_;
     std::string captureAudioName_;
     std::string audioError_;
+    std::future<diagnostics::ReportResult> reportJob_;
+    std::string reportStatus_;
+    std::future<std::pair<std::filesystem::path, std::optional<uint64_t>>> freeBytesJob_;
+    std::optional<uint64_t> freeBytes_;
+    std::filesystem::path freeBytesDirectory_;
+    uint64_t freeBytesCheckedMs_ = 0;
     bool audioWanted_ = false;
     uint64_t audioRetryMs_ = 0;
     uint64_t sessionStartMs_ = 0;

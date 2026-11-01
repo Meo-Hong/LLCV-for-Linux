@@ -3,6 +3,7 @@
 #include "app/AppInfo.h"
 #include "app/ModeSelection.h"
 #include "capture/UvcDescriptors.h"
+#include "diagnostics/DiagnosticReport.h"
 #include "diagnostics/Logger.h"
 #include "input/Shortcuts.h"
 #include "platform/Clock.h"
@@ -16,10 +17,14 @@
 
 #include <backends/imgui_impl_opengl3.h>
 
+#include <sys/utsname.h>
+#include <time.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <initializer_list>
 #include <string>
 #include <system_error>
@@ -626,6 +631,8 @@ void App::HandleAudioDeviceRemoved(const SDL_AudioDeviceEvent& event) {
 void App::Update() {
     const uint64_t now = platform::MonotonicMs();
     PollScreenshots();
+    PollReport();
+    PollFreeBytes();
     PollRecording();
     {
         std::lock_guard<std::mutex> lock(folderMutex_);
@@ -786,7 +793,8 @@ void App::RenderFrame() {
     ImGui::Render();
 
     const bool sharp = settings_.scalingMode == settings::ScalingMode::Sharp;
-    renderer_.SetUpscaling(settings_.upscaling, static_cast<float>(settings_.nisSharpnessPercent) / 100.0f);
+    renderer_.SetUpscaling(settings_.upscaling, static_cast<float>(settings_.nisSharpnessPercent) / 100.0f,
+                           settings_.cmaaPreserve);
     if (screen_ == Screen::Video && hdrActive_) {
         renderer_.BeginUiLayer(width, height);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -853,6 +861,12 @@ void App::DrawSettings() {
         break;
     case ui::SettingsAction::OpenLastRecording:
         OpenLastRecording();
+        break;
+    case ui::SettingsAction::OpenReleaseNotes:
+        OpenReleaseNotes();
+        break;
+    case ui::SettingsAction::CreateReport:
+        CreateReport();
         break;
     case ui::SettingsAction::Cancel:
         if (settingsBeforeEdit_) {
@@ -1093,7 +1107,10 @@ ui::SettingsContext App::BuildSettingsContext() {
     context.encoders = encoderProbe_.Snapshot();
     const std::filesystem::path recordingDirectory = recording::RecordingDirectory(settings_.recording);
     context.recordingDirectory = recordingDirectory.string();
-    context.recordingFreeBytes = recording::FreeBytes(recordingDirectory);
+    context.recordingFreeBytes = RecordingFreeBytes(recordingDirectory);
+    context.recordingFreeBytesPending = freeBytesJob_.valid();
+    context.reportStatus = reportStatus_;
+    context.reportBusy = reportJob_.valid();
     context.lastRecording = lastRecordingText_;
     context.canCancel = settingsBeforeEdit_.has_value();
     context.fonts = fonts_;
@@ -1696,6 +1713,165 @@ void App::ShowToast(std::string text, bool error) {
     redrawFrames_ = std::max(redrawFrames_, 1);
 }
 
+void App::PollFreeBytes() {
+    if (!freeBytesJob_.valid() || freeBytesJob_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+    auto [checked, bytes] = freeBytesJob_.get();
+    if (checked == freeBytesDirectory_) freeBytes_ = bytes;
+    if (screen_ == Screen::Settings) redrawFrames_ = std::max(redrawFrames_, 1);
+}
+
+std::optional<uint64_t> App::RecordingFreeBytes(const std::filesystem::path& directory) {
+    constexpr uint64_t kRefreshMs = 2000;
+    const uint64_t now = platform::MonotonicMs();
+    if (directory != freeBytesDirectory_) {
+        freeBytesDirectory_ = directory;
+        freeBytes_.reset();
+        freeBytesCheckedMs_ = 0;
+    }
+    if (!freeBytesJob_.valid() && (freeBytesCheckedMs_ == 0 || now - freeBytesCheckedMs_ >= kRefreshMs)) {
+        freeBytesCheckedMs_ = now;
+        freeBytesJob_ = std::async(std::launch::async,
+                                   [directory] { return std::make_pair(directory, recording::FreeBytes(directory)); });
+    }
+    return freeBytes_;
+}
+
+std::string App::ReportSummary() const {
+    const auto line = [](std::string& out, const char* label, const std::string& value) {
+        out += label;
+        out += ": ";
+        out += value.empty() ? "-" : value;
+        out += "\n";
+    };
+    const auto glText = [](GLenum name) {
+        const auto* text = reinterpret_cast<const char*>(video::gl.GetString(name));
+        return std::string(text ? text : "?");
+    };
+    std::string out = "LLCV for Linux diagnostic report\n\n";
+    const time_t now = time(nullptr);
+    char created[64] = {};
+    tm local{};
+    localtime_r(&now, &local);
+    strftime(created, sizeof(created), "%Y-%m-%d %H:%M:%S %z", &local);
+    line(out, "Created", created);
+    line(out, "Version", Format("%s %s, recording %s", kAppName, app::kVersion,
+                                recording::RecordingAvailable() ? "available" : "not built"));
+    std::string distro;
+    std::ifstream release("/etc/os-release");
+    for (std::string text; std::getline(release, text);) {
+        if (text.rfind("PRETTY_NAME=", 0) == 0) distro = text.substr(12);
+    }
+    utsname system{};
+    const std::string kernel = uname(&system) == 0 ? Format("%s %s", system.release, system.machine) : "?";
+    line(out, "System", distro + ", kernel " + kernel);
+    const char* session = SDL_getenv("XDG_SESSION_TYPE");
+    const char* desktop = SDL_getenv("XDG_CURRENT_DESKTOP");
+    const char* audioDriver = SDL_GetCurrentAudioDriver();
+    line(out, "Session", Format("%s, %s, SDL video %s, SDL audio %s", session ? session : "?",
+                                desktop ? desktop : "?", videoDriver_.c_str(), audioDriver ? audioDriver : "?"));
+    line(out, "OpenGL", Format("%s / %s / %s%s, %d-bit framebuffer", glText(GL_VENDOR).c_str(),
+                               glText(GL_RENDERER).c_str(), glText(GL_VERSION).c_str(), glEs_ ? " (ES)" : "",
+                               framebufferBits_));
+    line(out, "Upscaling", UpscalingText());
+    line(out, "Screen", screen_ == Screen::Settings ? "settings" : screen_ == Screen::Video ? "video" : "audio only");
+    line(out, "Settings file", settingsPath_.string());
+
+    out += "\nCapture devices:\n";
+    if (captureDevices_.empty()) out += "- none\n";
+    for (const auto& device : captureDevices_) {
+        std::vector<std::string> formats;
+        for (const auto& mode : device.modes) {
+            const std::string name = capture::PixelFormatName(mode.format);
+            if (std::find(formats.begin(), formats.end(), name) == formats.end()) formats.push_back(name);
+        }
+        std::string formatText;
+        for (const auto& name : formats) formatText += (formatText.empty() ? "" : ", ") + name;
+        std::string unsupported;
+        for (const auto& name : capture::UnsupportedFormatNames(device)) {
+            unsupported += (unsupported.empty() ? "" : ", ") + name;
+        }
+        out += Format("- %s, id %s, bus %s, %zu modes (%s)%s%s\n", device.DisplayName().c_str(), device.id.c_str(),
+                      device.busInfo.c_str(), device.modes.size(), formatText.c_str(),
+                      unsupported.empty() ? "" : ", unsupported: ", unsupported.c_str());
+    }
+
+    out += "\nSelection:\n";
+    line(out, "Capture device", settings_.captureDevice.empty() ? std::string("auto") : settings_.captureDevice);
+    const auto format = FormatFromChoice(settings_.pixelFormat);
+    line(out, "Requested mode",
+         Format("%dx%d, %s, %s fps%s", settings_.videoWidth, settings_.videoHeight,
+                format ? capture::PixelFormatName(*format) : "auto",
+                settings_.frameRateMilli > 0 ? Format("%.2f", settings_.frameRateMilli / 1000.0).c_str() : "auto",
+                settings_.capture40Fps ? ", 40 fps capture" : ""));
+    if (activeMode_) {
+        line(out, "Active mode", Format("%dx%d, %s, %s fps", activeMode_->width, activeMode_->height,
+                                        capture::PixelFormatName(activeMode_->format),
+                                        capture::FormatRate(activeMode_->rate).c_str()));
+    }
+    line(out, "Capture audio", captureAudioName_.empty() ? settings_.captureAudioDevice : captureAudioName_);
+    line(out, "Audio output", settings_.audioOutputDevice.empty() ? std::string("default") : settings_.audioOutputDevice);
+    line(out, "Audio only", settings_.audioOnly ? "yes" : "no");
+
+    out += "\nErrors:\n";
+    line(out, "Last error", errorMessage_);
+    line(out, "Audio", audioError_);
+    line(out, "Settings save", settingsSaveError_);
+    return out;
+}
+
+void App::CreateReport() {
+    if (reportJob_.valid()) return;
+    diagnostics::ReportInput input;
+    input.directory = platform::StateDirectory() / "reports";
+    input.settingsFile = settingsPath_;
+    for (const char* name : {"llcv.log", "llcv.log.1"}) input.logs.push_back(platform::LogDirectory() / name);
+    input.summary = ReportSummary();
+    const std::string recordingFolder = recording::RecordingDirectory(settings_.recording).string();
+    if (recordingFolder.size() > 1) input.masks.emplace_back(recordingFolder, "<recording folder>");
+    const std::string home = platform::HomeDirectory().string();
+    if (home.size() > 1) input.masks.emplace_back(home, "~");
+    for (const char* pattern : {"/sys/class/video4linux", "/sys/class/sound"}) {
+        std::error_code error;
+        for (const auto& entry : std::filesystem::directory_iterator(pattern, error)) {
+            std::ifstream file(entry.path() / "device" / ".." / "serial");
+            std::string serial;
+            std::getline(file, serial);
+            serial = platform::Trim(serial);
+            const bool repeated = serial.find_first_not_of(serial.empty() ? ' ' : serial.front()) == std::string::npos;
+            if (serial.size() >= 6 && !repeated) input.masks.emplace_back(serial, "<serial>");
+        }
+    }
+    reportStatus_ = T("Creating the report…");
+    Log("[report] creating diagnostic report");
+    reportJob_ = std::async(std::launch::async, [input] { return diagnostics::CreateReport(input); });
+}
+
+void App::PollReport() {
+    if (!reportJob_.valid() || reportJob_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+    const diagnostics::ReportResult result = reportJob_.get();
+    if (!result.ok) {
+        Log("[report] failed: %s", result.error.c_str());
+        reportStatus_.clear();
+        errorMessage_ = Format(T("The report could not be created: %s"), result.error.c_str());
+        redrawFrames_ = std::max(redrawFrames_, 2);
+        return;
+    }
+    Log("[report] saved %s (%d log files)", result.path.c_str(), result.logs);
+    reportStatus_ = Format(T("Saved %s (%d log files). Read it before sharing."), result.path.filename().c_str(),
+                           result.logs);
+    OpenFolder(result.path.parent_path());
+    redrawFrames_ = std::max(redrawFrames_, 2);
+}
+
+void App::OpenReleaseNotes() {
+    const std::string version = app::kVersion;
+    const bool plain = !version.empty() && version.find_first_not_of("0123456789.") == std::string::npos;
+    const std::string url = plain ? std::string(app::kReleasesUrl) + "/tag/linux-v" + version : app::kReleasesUrl;
+    if (SDL_OpenURL(url.c_str())) return;
+    Log("[app] could not open %s: %s", url.c_str(), SDL_GetError());
+    errorMessage_ = Format(T("Could not open the browser: %s"), url.c_str());
+}
+
 void App::OpenFolder(const std::filesystem::path& path) {
     platform::EnsureDirectory(path);
     if (SDL_OpenURL(platform::FileUrl(path).c_str())) return;
@@ -1971,8 +2147,8 @@ void App::ToggleUpscaling() {
     settings_.upscaling = !settings_.upscaling;
     upscalingToastPending_ = true;
     redrawFrames_ = std::max(redrawFrames_, 1);
-    Log("[upscaling] CMAA2 -> NIS %s (sharpness %.2f)", settings_.upscaling ? "on" : "off",
-        settings_.nisSharpnessPercent / 100.0);
+    Log("[upscaling] CMAA2 -> NIS %s (sharpness %.2f, CMAA2 %s)", settings_.upscaling ? "on" : "off",
+        settings_.nisSharpnessPercent / 100.0, settings_.cmaaPreserve ? "preserve" : "high");
 }
 
 void App::ReportUpscaling() {
@@ -1980,8 +2156,8 @@ void App::ReportUpscaling() {
     if (state != reportedUpscaleState_) {
         reportedUpscaleState_ = state;
         const auto rect = renderer_.LastVideoRect();
-        static constexpr const char* kStateNames[] = {"off", "active", "bypass (SDR only)", "bypass (scale)",
-                                                      "unavailable"};
+        static constexpr const char* kStateNames[] = {"off", "active", "active (HDR10 NIS + contour guard)",
+                                                      "bypass (scale)", "unavailable"};
         Log("[upscaling] CMAA2 -> NIS %s, %dx%d -> %dx%d%s%s", kStateNames[static_cast<int>(state)],
             renderer_.ImageWidth(), renderer_.ImageHeight(), rect.width, rect.height,
             state == video::UpscaleState::Unavailable ? ": " : "",
@@ -1998,7 +2174,7 @@ void App::ReportUpscaling() {
     switch (state) {
     case video::UpscaleState::Off: text = T("CMAA2 → NIS OFF · F6: on"); break;
     case video::UpscaleState::Active: text = T("CMAA2 → NIS ON · F6: off"); break;
-    case video::UpscaleState::SdrOnly: text = T("CMAA2 → NIS bypass · SDR only"); break;
+    case video::UpscaleState::ActiveHdr: text = T("NIS (HDR10) ON · F6: off"); break;
     case video::UpscaleState::ScaleRange: text = T("CMAA2 → NIS bypass · enlargement up to 2x only"); break;
     case video::UpscaleState::Unavailable:
         text = T("CMAA2 → NIS unavailable · using the normal path");
@@ -2015,8 +2191,10 @@ std::string App::UpscalingText() const {
     switch (renderer_.LastUpscaleState()) {
     case video::UpscaleState::Off:
         return settings_.upscaling ? std::string(T("CMAA2 → NIS · waiting for video")) : std::string(T("Off"));
-    case video::UpscaleState::Active: return Format(T("CMAA2 → NIS · ON · sharpness %.2f"), sharpness);
-    case video::UpscaleState::SdrOnly: return T("CMAA2 → NIS · bypass (SDR only)");
+    case video::UpscaleState::Active:
+        return Format(T("CMAA2 (%s) → NIS · ON · sharpness %.2f"),
+                      settings_.cmaaPreserve ? T("Preserve") : T("High"), sharpness);
+    case video::UpscaleState::ActiveHdr: return Format(T("NIS (HDR10) · ON · sharpness %.2f"), sharpness);
     case video::UpscaleState::ScaleRange: return T("CMAA2 → NIS · bypass (enlargement up to 2x only)");
     case video::UpscaleState::Unavailable:
         return Format(T("CMAA2 → NIS · unavailable (%s)"), renderer_.UpscalingIssue().c_str());

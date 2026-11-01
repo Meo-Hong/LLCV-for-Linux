@@ -3,7 +3,7 @@
 > [한국어](README.ko.md)
 
 LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices with low
-latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.1.9 viewer
+latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.2.1 viewer
 by [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer). The
 reference device is the AVerMedia Live Gamer ULTRA S GC553Pro. The reference
 desktop is Ubuntu 26.04 (GNOME, Wayland).
@@ -16,21 +16,20 @@ desktop is Ubuntu 26.04 (GNOME, Wayland).
 > [this repository's issues](https://github.com/Meo-Hong/LLCV-for-Linux/issues),
 > not in the original repository.
 
-## What's new in 2.1.9
+## What's new in 2.2.1
 
-- **RGB input** (BGR24, BGR32 and RGB24) for playback, screenshots and
-  recording. Select RGB under **Pixel format**; Auto now picks only NV12,
-  YUY2 or UYVY. **SDR color range** applies to RGB too. Recording converts RGB
-  to BT.709 Limited 4:2:0 and first checks that the conversion keeps up.
-- **UYVY (8-bit 4:2:2) input** for playback, screenshots and recording.
-- **Safer CMAA2 → NIS upscaling**: if a very dense frame overflows the CMAA2
-  work buffers, that frame skips CMAA2 instead of getting partial
-  anti-aliasing, while NIS keeps scaling.
-- Devices that offer only pixel formats LLCV cannot use now stay in the list,
-  and settings name those formats instead of hiding the device. The log lists
-  every skipped format.
+- **CMAA2 correction** for [upscaling](#upscaling): **High** smooths more
+  edges, **Preserve** keeps more of the original text and thin lines.
+- **HDR10 upscaling**: with HDR output, NIS enlarges the video and the result
+  stays close to the original image so contours are not damaged. CMAA2 is
+  skipped in HDR.
+- **Report ZIP** under **Guide & logs** collects recent logs, settings,
+  versions, devices and errors, with personal paths and serial numbers masked.
+- Screenshot settings moved to **App**, which also has a **Release notes**
+  button. The recording folder's free space is read in the background.
 
-Full list: [release notes](release-notes/v2.1.9.md). 2.1.7 added
+Full list: [release notes](release-notes/v2.2.1.md). 2.1.9 added RGB and UYVY
+input ([2.1.9 notes](release-notes/v2.1.9.md)). 2.1.7 added
 [CMAA2 → NIS upscaling](#upscaling) (F6), a separate SDR color range and strict
 explicit frame rates ([2.1.7 notes](release-notes/v2.1.7.md)). 2.1.4 made F2 open the
 default settings page and fixed lost packets at the end of a recording
@@ -69,11 +68,11 @@ Download the file for your system from
 
 | File | Install on | Command |
 | --- | --- | --- |
-| `llcv_2.1.9_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.1.9_amd64.deb` |
-| `llcv_2.1.9_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.1.9_arm64.deb` |
-| `llcv_2.1.9_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.1.9_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.1.9-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.1.9-1.x86_64.rpm` |
-| `llcv-2.1.9-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.1.9-1-x86_64.pkg.tar.zst` |
+| `llcv_2.2.1_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.2.1_amd64.deb` |
+| `llcv_2.2.1_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.2.1_arm64.deb` |
+| `llcv_2.2.1_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.2.1_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.2.1-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.2.1-1.x86_64.rpm` |
+| `llcv-2.2.1-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.2.1-1-x86_64.pkg.tar.zst` |
 
 - Installing a `.deb` also registers the LLCV APT repository, so later
   versions arrive through `apt upgrade` or Software Updater. For `.rpm` and
@@ -213,20 +212,27 @@ When it is on and the video is enlarged by more than 1× and up to 2× per axis
 (for example 1080p in a 1440p window, or 1080p fullscreen on a 4K monitor),
 LLCV runs:
 
-1. **CMAA2** (Intel Conservative Morphological Anti-Aliasing 2, High preset) on
+1. **CMAA2** (Intel Conservative Morphological Anti-Aliasing 2) on
    linear-light SDR video, smoothing jagged edges without blurring flat areas
-   or straight edges.
+   or straight edges. **CMAA2 correction** chooses **High** (default, more
+   edge smoothing) or **Preserve** (CMAA2's extra-sharpness variant, keeps
+   more of the original text and thin lines).
 2. **NIS** (NVIDIA Image Scaling 1.0.3) to enlarge and sharpen. **NIS
    sharpness** goes from 0.00 to 1.00; the default is 0.15.
+
+With HDR10 output, LLCV skips CMAA2 and runs NIS in its PQ mode on the HDR
+image. Each output channel is then kept within 2 % (at least half a 10-bit
+step) of a bilinear sample of the original image, so NIS cannot darken or
+erode fine contours. The CMAA2 correction setting is kept for SDR.
 
 - **F6** (or **Alt → View → CMAA2 → NIS upscaling**) turns it on and off
   without changing the sharpness. A notice shows the result: on, off, or why it
   is bypassed.
 - It is display only. Recordings and screenshots keep the capture image, and
   the overlays are drawn afterwards.
-- SDR only. HDR input, HDR output, P010, native size, downscaling and
-  enlargement beyond 2× use the normal path. The Tab diagnostics show the
-  current state under **Upscaling**.
+- Native size, downscaling and enlargement beyond 2× use the normal path. HDR
+  input shown on an SDR display is tone mapped first and then gets the SDR
+  path. The Tab diagnostics show the current state under **Upscaling**.
 - It needs OpenGL compute shaders (OpenGL 4.3, or 3.3 with the compute,
   image load/store and storage buffer extensions). Without them, or with
   OpenGL ES, the option reports that it is unavailable and the normal path is
@@ -522,6 +528,12 @@ and settings show the assigned keys.
 
 ## Troubleshooting
 
+- **Reporting a problem.** Turn on **Save diagnostic log** under **Settings →
+  Guide & logs**, reproduce the problem, then click **Create report ZIP** in
+  the same card. The ZIP goes to `~/.local/state/llcv/reports/` and holds the
+  recent logs, `settings.ini`, versions, the device list and current errors.
+  The home folder, the recording folder and USB serial numbers are masked, and
+  nothing is uploaded. Read it before attaching it to an issue.
 - **No picture.** Close OBS and any other application that uses the capture
   device.
 - **Only 60 fps in the list.** The device offers higher rates only at some
