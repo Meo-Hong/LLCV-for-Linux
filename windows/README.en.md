@@ -5,7 +5,7 @@
 A low-latency Windows viewer for video and audio from HDMI capture devices.
 Use it to play console games without OBS, or listen in audio-only mode.
 
-**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.1.9.md) · [한국어](README.md)
+**[Download](https://github.com/seria-aa/LowLatencyCaptureViewer/releases/latest)** · [User guide](docs/USAGE.md) · [Release notes](docs/release-notes-v2.2.1.md) · [한국어](README.md)
 
 <br>
 
@@ -17,12 +17,12 @@ Use it to play console games without OBS, or listen in audio-only mode.
 
 <br>
 
-## What's new in 2.1.9
+## What's new in 2.2.1
 
-Adds **RGB24 / XRGB (RGB32)** SDR playback, source screenshots, NVIDIA VSR requests and recording.
-RGB recording checks conversion headroom before creating a file and uses bounded frame-buffer memory.
-Format rejection diagnostics and crash-recovery verification have also been strengthened.
-[Video settings](docs/VIDEO.md) · [Full release notes](docs/release-notes-v2.1.9.md)
+Adds **High/Preserve CMAA2 correction for SDR** and **NIS with contour protection for HDR10**.
+Places upscaling controls side by side and moves screenshot preferences to App settings.
+Refines spacing, alignment and keyboard order, and adds a **Release notes** button in App settings.
+[Full release notes](docs/release-notes-v2.2.1.md)
 
 <br>
 
@@ -53,10 +53,11 @@ These are the default keys; change them under **Guide & logs**.
 - Optional 40 fps capture and unlisted 30 fps requests, subject to driver acceptance
 - SDR range Auto/Limited/Full, shared by playback, screenshots and recording
 - NVIDIA VSR (experimental), with separate or capture-matched display resolutions
-- CMAA2 → NIS upscaling for SDR enlargement; HDR retains the original output. Select Off/VSR, default sharpness 0.15
+- Upscaling: CMAA2 → NIS (High/Preserve) for SDR, NIS + contour protection for HDR10; Off/VSR selection, default sharpness 0.15
 - WASAPI Shared/Exclusive, ASIO, console LPCM 5.1, and audio-only mode
 - NV12/YUY2/MJPEG/RGB SDR/stereo MP4 recording — codec, quality, volume, pause and splitting
 - Source-resolution PNG screenshots with optional clipboard copy
+- Local diagnostic ZIPs with logs/settings and partial privacy masking; no automatic upload
 - Sleep prevention during playback, with display sleep allowed in audio-only mode
 - Dark/light themes, fullscreen, window size locking, volume controls/playback mute, Korean/English UI
 

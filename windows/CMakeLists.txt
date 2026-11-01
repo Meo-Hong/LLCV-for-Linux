@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(LowLatencyCaptureViewer VERSION 2.1.9 LANGUAGES CXX)
+project(LowLatencyCaptureViewer VERSION 2.2.1 LANGUAGES CXX)
 
 include(cmake/MsvcDependencies.cmake)
 
@@ -413,6 +413,11 @@ if (BUILD_TESTING)
     add_test(NAME RecordingHelpTests COMMAND RecordingHelpTests)
     set_tests_properties(RecordingHelpTests PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
     add_test(NAME ViewerHelpImeTests COMMAND ViewerHelpTests --with-ime)
+    add_test(NAME ViewerHelpDisplayTests COMMAND ViewerHelpTests --display-layout)
+    add_test(NAME RecordingHelpDisplayTests COMMAND RecordingHelpTests --display-layout)
+    # Each display test reflows 1,176 native-window cases, recreating fonts on
+    # every scale transition. Keep coverage serial and allow slow desktop hosts.
+    set_tests_properties(ViewerHelpDisplayTests RecordingHelpDisplayTests PROPERTIES TIMEOUT 240 RUN_SERIAL TRUE)
     # Each stress test opens/closes 320 native help windows. Preserve the full
     # coverage while allowing headroom alongside CPU-heavy parallel replays.
     set_tests_properties(ViewerHelpTests ViewerHelpImeTests PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
@@ -536,6 +541,11 @@ if (BUILD_TESTING)
     set_target_properties(SettingsModeCacheTests PROPERTIES WIN32_EXECUTABLE FALSE)
     add_test(NAME SettingsModeCacheTests COMMAND SettingsModeCacheTests)
     set_tests_properties(SettingsModeCacheTests PROPERTIES TIMEOUT 15)
+    add_executable(InitializationLeaseTests tests/InitializationLeaseTests.cpp)
+    target_include_directories(InitializationLeaseTests PRIVATE src)
+    set_target_properties(InitializationLeaseTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME InitializationLeaseTests COMMAND InitializationLeaseTests)
+    set_tests_properties(InitializationLeaseTests PROPERTIES TIMEOUT 15)
     # Native control creation is substantially slower than pure geometry tests,
     # especially when other replay tests run concurrently on CI.
     # Full language/DPI/option matrix takes ~150s even on the previous release.
@@ -621,10 +631,13 @@ if (BUILD_TESTING)
     get_target_property(audio_callback_sources LowLatencyCaptureViewer SOURCES)
     list(FILTER audio_callback_sources EXCLUDE REGEX "src/(main.cpp|app.rc|audio/AsioOutput.cpp)$")
     add_executable(CmaaNisTests tests/CmaaNisTests.cpp ${audio_callback_sources})
+    include(tests/HdrUpscalingReference.cmake)
     target_include_directories(CmaaNisTests PRIVATE $<TARGET_PROPERTY:LowLatencyCaptureViewer,INCLUDE_DIRECTORIES>)
     target_compile_definitions(CmaaNisTests PRIVATE LLCV_SETTINGS_MODE_TEST
         $<TARGET_PROPERTY:LowLatencyCaptureViewer,COMPILE_DEFINITIONS>)
     target_link_libraries(CmaaNisTests PRIVATE $<TARGET_PROPERTY:LowLatencyCaptureViewer,LINK_LIBRARIES>)
+    # Synthetic text/edge comparisons are manual test-only operations.
+    target_link_libraries(CmaaNisTests PRIVATE gdiplus)
     target_compile_options(CmaaNisTests PRIVATE /W4 /EHsc /permissive- /utf-8)
     set_target_properties(CmaaNisTests PROPERTIES WIN32_EXECUTABLE FALSE)
     set_property(SOURCE tests/CmaaNisTests.cpp APPEND PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
@@ -720,6 +733,8 @@ if (BUILD_TESTING)
         # Hidden-window interaction and worker handover timings are distorted
         # by concurrent UI/GPU replay suites. Keep the deadline, but isolate it.
         set_tests_properties(SettingsControllerTests PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE)
+        add_test(NAME StartupProbeTimeoutTests COMMAND VsrExperimentTests --startup-probe-timeouts)
+        set_tests_properties(StartupProbeTimeoutTests PROPERTIES TIMEOUT 25 RUN_SERIAL TRUE)
     endif()
     add_executable(AudioCallbackTests tests/AudioCallbackTests.cpp ${audio_callback_sources})
     target_include_directories(AudioCallbackTests PRIVATE
@@ -918,6 +933,15 @@ if (BUILD_TESTING)
         target_compile_options(LoggerTests PRIVATE /W4 /EHsc /permissive- /utf-8)
     endif()
     add_test(NAME LoggerTests COMMAND LoggerTests)
+    add_executable(DiagnosticReportTests tests/DiagnosticReportTests.cpp src/diagnostics/Logger.cpp)
+    target_include_directories(DiagnosticReportTests PRIVATE src)
+    target_compile_definitions(DiagnosticReportTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(DiagnosticReportTests PRIVATE /W4 /EHsc /permissive- /utf-8)
+    set_target_properties(DiagnosticReportTests PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME DiagnosticReportTests COMMAND DiagnosticReportTests)
+    add_test(NAME DiagnosticReportArchiveTests COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/tests/DiagnosticReportArchiveTests.ps1 -TestExe $<TARGET_FILE:DiagnosticReportTests>)
+    set_tests_properties(DiagnosticReportTests DiagnosticReportArchiveTests PROPERTIES TIMEOUT 30)
 
     add_executable(VideoColorTests
         tests/VideoColorTests.cpp
@@ -1516,6 +1540,9 @@ if(BUILD_TESTING AND LLCV_RECORDING)
 endif()
 # Fail-safe profile separation applies to direct .exe launches too, not only
 # CTest wrappers. Never propagate this definition into the normal application.
+if(BUILD_TESTING)
+    include(tests/CmaaLatency.cmake)
+endif()
 get_property(llcv_profile_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 foreach(llcv_target IN LISTS llcv_profile_targets)
     get_target_property(llcv_type ${llcv_target} TYPE)

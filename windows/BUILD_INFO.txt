@@ -1,4 +1,27 @@
-LLCV v2.1.9 x64 (continued from the v0.14.2 rework)
+LLCV v2.2.1 x64 (continued from the v0.14.2 rework)
+
+v2.2.1 SDR correction, HDR upscaling and settings layout
+-----------------------------------------------------
+- Adds High/Preserve CMAA2 correction for SDR without changing the saved sharpness.
+- Uses NIS + original-reference contour protection for HDR10, without HDR CMAA2 resources.
+- Retains SDR correction preference across HDR/SDR transitions and F6 toggles.
+- Aligns upscaling controls and moves screenshot preferences to App settings.
+- Matches native keyboard/reading order to the page layout and expands UI regression checks.
+- Opens current-version GitHub release notes from App settings, without an update query.
+- See tests/RELEASE_V2_2_1_AUDIT.md for preparation status and pending release gates.
+
+v2.2.0 Diagnostics, capture compatibility and settings stability
+-------------------------------------------------------------
+- Adds a local diagnostic ZIP with settings/logs, report-local device aliases and no automatic upload.
+- Connects upstream WDM crossbars during playback startup and applicable settings mode queries.
+- Preserves input routing and stops startup if a failed connection cannot restore the graph.
+- Fits F1 help to monitor work areas and reduces NIS sharpness choices while retaining custom values.
+- Bounds waits for outstanding settings probes and keeps recording-space queries off the UI thread.
+- Recovers invalid recording preferences per field, preserving other valid saved selections.
+- Selects the latest frame after DXGI readiness in Flip VSync; default/exclusive output stays unchanged.
+- Defers steady playback diagnostics and disables QuickEdit for the app-created console.
+- Cleans up code and expands regression coverage without changing recording defaults or capture formats.
+- See tests/RELEASE_V2_2_0_AUDIT.md for preparation status and pending release gates.
 
 v2.1.9 RGB input and recording safeguards
 ------------------------------------------

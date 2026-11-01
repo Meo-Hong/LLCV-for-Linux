@@ -55,6 +55,8 @@ static constexpr Member kMembers[] = {
     {&SettingsControls::appPreferencesSection, "appPreferencesSection"},
     {&SettingsControls::upscalerCombo, "upscalerCombo"},
     {&SettingsControls::upscalerLabel, "upscalerLabel"},
+    {&SettingsControls::cmaaQualityLabel, "cmaaQualityLabel"},
+    {&SettingsControls::cmaaQualityCombo, "cmaaQualityCombo"},
     {&SettingsControls::nisSharpnessLabel, "nisSharpnessLabel"},
     {&SettingsControls::nisSharpnessCombo, "nisSharpnessCombo"},
     {&SettingsControls::vsrGuideButton, "vsrGuideButton"},
@@ -68,6 +70,7 @@ static constexpr Member kMembers[] = {
     {&SettingsControls::guideDiagnosticsTitle, "guideDiagnosticsTitle"},
     {&SettingsControls::guideDiagnosticsText, "guideDiagnosticsText"},
     {&SettingsControls::guideLogFolderButton, "guideLogFolderButton"},
+    {&SettingsControls::guideReportButton, "guideReportButton"},
     {&SettingsControls::screenshotClipboardCheck, "screenshotClipboardCheck"},
     {&SettingsControls::screenshotTitle, "screenshotTitle"},
     {&SettingsControls::screenshotHelp, "screenshotHelp"},
@@ -75,6 +78,7 @@ static constexpr Member kMembers[] = {
     {&SettingsControls::updateTitle, "updateTitle"},
     {&SettingsControls::updateText, "updateText"},
     {&SettingsControls::updateNowButton, "updateNowButton"},
+    {&SettingsControls::releaseNotesButton, "releaseNotesButton"},
     {&SettingsControls::updateStatus, "updateStatus"},
     {&SettingsControls::audioOutputSection, "audioOutputSection"},
     {&SettingsControls::audioPlaybackSection, "audioPlaybackSection"},
@@ -180,9 +184,9 @@ static constexpr Geometry kGeometry[] = {
     {&SettingsControls::preventSleepCheck, "preventSleepCheck", 600, 204, 204, 376, 32},
     {&SettingsControls::skipStartupHint, "skipStartupHint", 212, 244, 244, 348, 56},
     {&SettingsControls::preventSleepHint, "preventSleepHint", 628, 244, 244, 348, 56},
-    {&SettingsControls::updateTitle, "updateTitle", 184, 328, 328, 792, 24},
-    {&SettingsControls::updateText, "updateText", 184, 360, 360, 730, 44},
-    {&SettingsControls::checkForUpdatesCheck, "checkForUpdatesCheck", 184, 416, 416, 760, 32},
+    {&SettingsControls::updateTitle, "updateTitle", 184, 328, 328, 376, 24},
+    {&SettingsControls::updateText, "updateText", 184, 360, 360, 376, 44},
+    {&SettingsControls::checkForUpdatesCheck, "checkForUpdatesCheck", 184, 416, 416, 376, 32},
     {&SettingsControls::updateStatus, "updateStatus", 184, 504, 504, 792, 48},
     {&SettingsControls::versionWatermark, "versionWatermark", 10, 608, 608, 132, 20},
     {&SettingsControls::startButton, "startButton", 762, 602, 602, 102, 34},
@@ -208,12 +212,16 @@ static constexpr Geometry kGeometry[] = {
     {&SettingsControls::capture40Help, "capture40Help", 520, 424, 424, 24, 24},
     {&SettingsControls::guideLsButton, "guideLsButton", 600, 348, 348, 376, 32},
     {&SettingsControls::upscalerCombo, "upscalerCombo", 600, 420, 420, 376, 30},
-    {&SettingsControls::vsrGuideButton, "vsrGuideButton", 952, 390, 390, 24, 24},
     {&SettingsControls::displayResolutionCombo, "displayResolutionCombo", 600, 356, 356, 376, 30},
+    {&SettingsControls::pixelCheck, "pixelCheck", 800, 326, 326, 176, 24},
+    {&SettingsControls::cmaaQualityLabel, "cmaaQualityLabel", 600, 456, 456, 180, 20},
+    {&SettingsControls::cmaaQualityCombo, "cmaaQualityCombo", 600, 484, 484, 180, 30},
+    {&SettingsControls::nisSharpnessLabel, "nisSharpnessLabel", 796, 456, 456, 180, 20},
+    {&SettingsControls::nisSharpnessCombo, "nisSharpnessCombo", 796, 484, 484, 180, 30},
     {&SettingsControls::vsrStatus, "vsrStatus", 600, 460, 460, 376, 30},
-    {&SettingsControls::screenshotTitle, "screenshotTitle", 600, 496, 496, 376, 20},
-    {&SettingsControls::screenshotHelp, "screenshotHelp", 600, 556, 556, 376, 18},
-    {&SettingsControls::screenshotFolderButton, "screenshotFolderButton", 794, 520, 520, 182, 30},
+    {&SettingsControls::screenshotTitle, "screenshotTitle", 600, 328, 328, 376, 24},
+    {&SettingsControls::screenshotHelp, "screenshotHelp", 600, 408, 408, 376, 18},
+    {&SettingsControls::screenshotFolderButton, "screenshotFolderButton", 794, 360, 360, 182, 30},
     {&SettingsControls::relativeSizeCheck, "relativeSizeCheck", 184, 140, 140, 376, 32},
     {&SettingsControls::borderlessCheck, "borderlessCheck", 184, 180, 180, 376, 32},
     {&SettingsControls::roundedCornersCheck, "roundedCornersCheck", 600, 140, 140, 376, 32},
@@ -227,7 +235,9 @@ static constexpr Geometry kGeometry[] = {
     {&SettingsControls::saveLogCheck, "saveLogCheck", 600, 196, 196, 376, 32},
     {&SettingsControls::showConsoleCheck, "showConsoleCheck", 600, 236, 236, 376, 32},
     {&SettingsControls::guideLogFolderButton, "guideLogFolderButton", 600, 284, 284, 185, 32},
-    {&SettingsControls::updateNowButton, "updateNowButton", 184, 460, 460, 185, 32},
+    {&SettingsControls::guideReportButton, "guideReportButton", 801, 284, 284, 175, 32},
+    {&SettingsControls::updateNowButton, "updateNowButton", 184, 460, 460, 180, 32},
+    {&SettingsControls::releaseNotesButton, "releaseNotesButton", 380, 460, 460, 180, 32},
 };
 static RECT ClientRectOf(HWND parent, HWND child) {
     RECT r{}; Check(GetWindowRect(child, &r) != FALSE, "read control rectangle");
@@ -287,8 +297,7 @@ static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
     const HWND centered[][2] = {
         {state.captureDeviceLabel, state.videoRefreshButton},
         {state.frameRateLabel, state.frameOptionsButton},
-        {state.scalingLabel, state.pixelCheck},
-        {state.upscalerLabel, state.vsrGuideButton},
+        {state.displayResolutionLabel, state.pixelCheck},
         {state.driftLabel, state.driftHelp},
         {state.pcmQueueLabel, state.pcmQueueHelp},
         {state.presentationLabel, state.presentationHelp},
@@ -307,9 +316,7 @@ static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
     const HWND inlineActions[][3] = {
         {state.captureDeviceLabel,state.videoRefreshButton,state.captureDeviceCombo},
         {state.frameRateLabel,state.frameOptionsButton,state.frameRateCombo},
-        {state.presentationLabel,state.presentationHelp,state.presentationCombo},
-        {state.scalingLabel,state.pixelCheck,state.scalingCombo},
-        {state.upscalerLabel,state.vsrGuideButton,state.upscalerCombo},
+        {state.displayResolutionLabel,state.pixelCheck,state.displayResolutionCombo},
         {state.driftLabel,state.driftHelp,state.driftCombo},
         {state.pcmQueueLabel,state.pcmQueueHelp,state.pcmQueueCombo},
     };
@@ -317,10 +324,25 @@ static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
         const auto label=ClientRectOf(parent,row[0]), action=ClientRectOf(parent,row[1]), field=ClientRectOf(parent,row[2]);
         Check(action.bottom-action.top==SettingsPixels(24,dpi) &&
             std::abs(field.top-action.bottom-SettingsPixels(6,dpi))<=1 &&
-            action.left-label.right==SettingsPixels(12,dpi),
+            std::abs(action.left-label.right-SettingsPixels(12,dpi))<=1,
             "inline actions have equal height, caption gutter and field clearance");
         Check(action.right==field.right,"inline actions align with the field's right edge");
     }
+    for(const auto& row : {std::array<HWND,3>{state.presentationLabel,state.presentationHelp,state.presentationCombo},
+                          std::array<HWND,3>{state.upscalerLabel,state.vsrGuideButton,state.upscalerCombo}}) {
+        const auto label=ClientRectOf(parent,row[0]),help=ClientRectOf(parent,row[1]),field=ClientRectOf(parent,row[2]);
+        Check(std::abs(help.left-label.right-SettingsPixels(12,dpi))<=1 &&
+              std::abs(field.top-help.bottom-SettingsPixels(row[1]==state.vsrGuideButton?5:6,dpi))<=1 &&
+              help.bottom-help.top==SettingsPixels(24,dpi),
+              "video help buttons keep consistent header spacing");
+        Check(help.right==field.right,"video help buttons align with the right field edge");
+    }
+    const auto help=ClientRectOf(parent,state.vsrGuideButton);
+    const auto previousField=ClientRectOf(parent,state.displayResolutionCombo);
+    const auto nextField=ClientRectOf(parent,state.upscalerCombo);
+    Check(std::abs((help.top-previousField.bottom)-(nextField.top-help.bottom))<=1 &&
+          std::abs(help.top-previousField.bottom-SettingsPixels(5,dpi))<=1,
+        "upscaling help has equal top and bottom clearance without moving either field");
     const struct { HWND label, field; } pairs[] = {
         {state.audioLabel, state.audioCombo},
         {state.audioOutputLabel, state.audioOutputCombo},
@@ -336,6 +358,8 @@ static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
         {state.presentationLabel, state.presentationCombo},
         {state.displayMonitorLabel, state.displayMonitorCombo},
         {state.scalingLabel, state.scalingCombo},
+        {state.cmaaQualityLabel,state.cmaaQualityCombo},
+        {state.nisSharpnessLabel,state.nisSharpnessCombo},
         {state.hdrChromaLabel, state.hdrChromaCombo},
         {state.mjpegColorLabel, state.mjpegColorCombo},
         {state.sdrRangeLabel, state.sdrRangeCombo},
@@ -355,7 +379,7 @@ static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
                 "HDR inline label remains aligned with the field above 40fps");
         } else {
             Check(field.left == label.left && field.top-label.bottom == SettingsPixels(8,dpi),
-                "all tabs share the video page's eight-DIP label-to-field gap");
+                "label gaps preserve full-size fields and the display tuning grid");
         }
         if (field.bottom - field.top != SettingsPixels(30, dpi)) {
             wchar_t name[128]{};
@@ -382,9 +406,9 @@ static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
     Check(ClientRectOf(parent, state.audioStabilitySection).top -
           ClientRectOf(parent, state.surround51Hint).bottom == SettingsPixels(24, dpi),
           "major audio sections have a twenty-four-DIP separation");
-    Check(std::abs(ClientRectOf(parent, state.screenshotTitle).top -
-          ClientRectOf(parent, state.vsrStatus).bottom - SettingsPixels(6, dpi)) <= 1,
-          "screenshot actions remain separated from conditional filter details");
+    Check(ClientRectOf(parent,state.screenshotTitle).top==ClientRectOf(parent,state.updateTitle).top &&
+          ClientRectOf(parent,state.screenshotTitle).left-ClientRectOf(parent,state.updateTitle).right==SettingsPixels(40,dpi),
+          "app preferences place screenshots beside updates on the section grid");
     const RECT screenshotHelp = ClientRectOf(parent, state.screenshotHelp);
     const RECT screenshotButton = ClientRectOf(parent, state.screenshotFolderButton);
     const RECT screenshotTitle = ClientRectOf(parent,state.screenshotTitle);
@@ -393,9 +417,9 @@ static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
           screenshotButton.left-screenshotCheck.right == SettingsPixels(12,dpi) &&
           std::abs((screenshotButton.top+screenshotButton.bottom)-(screenshotCheck.top+screenshotCheck.bottom))<=1,
           "screenshot actions retain aligned centers and a consistent gutter");
-    Check(std::abs(screenshotHelp.bottom - SettingsPixels(kSettingsFooterTopDip-16,dpi))<=1 &&
-          screenshotHelp.top-screenshotButton.bottom >= SettingsPixels(6,dpi)-1,
-          "screenshot group retains sixteen DIPs of footer margin without shrinking controls");
+    Check(screenshotHelp.bottom <= SettingsPixels(kSettingsFooterTopDip-16,dpi)+1 &&
+          screenshotHelp.top-screenshotButton.bottom >= SettingsPixels(16,dpi)-1,
+          "screenshot group retains spacious hint and footer margins without shrinking controls");
     const auto detected=ClientRectOf(parent,state.videoCapabilityStatus);
     const auto requested=ClientRectOf(parent,state.unlistedFpsStatus);
     const bool extra=GetWindowTextLengthW(state.unlistedFpsStatus)>0;
@@ -452,10 +476,8 @@ static void CheckFieldMetrics(SettingsControls& state, HWND parent, UINT dpi) {
         const auto field=ClientRectOf(parent,displayFields[row]);
         Check(field.left==SettingsPixels(600,dpi) && field.right==SettingsPixels(976,dpi) &&
             field.top-label.top==SettingsPixels(28,dpi),"display fields share width and label gap");
-        Check(label.top==ClientRectOf(parent,captureRows[row].label).top,
-            "capture and display columns share row baselines");
-        if(row) Check(std::abs(label.top-ClientRectOf(parent,displayLabels[row-1]).top-SettingsPixels(64,dpi))<=1,
-            "display fields keep the restored sixty-four-DIP rhythm");
+        Check(label.top==SettingsPixels(136+static_cast<int>(row)*64,dpi),
+            "display options retain the original sixty-four-DIP grid");
     }
 }
 
@@ -1018,6 +1040,7 @@ static void TestActualControlCreation() {
     {&SettingsControls::tabControl, 2037},
     {&SettingsControls::upscalerCombo, 2049},
     {&SettingsControls::nisSharpnessCombo, 2083},
+    {&SettingsControls::cmaaQualityCombo, 2085},
     {&SettingsControls::vsrGuideButton, 2050},
     {&SettingsControls::displayResolutionCombo, 2051},
     {&SettingsControls::audioCombo, 2001},
@@ -1040,6 +1063,7 @@ static void TestActualControlCreation() {
     {&SettingsControls::preventSleepCheck, 2056},
     {&SettingsControls::checkForUpdatesCheck, 2035},
     {&SettingsControls::guideLogFolderButton, 2039},
+    {&SettingsControls::guideReportButton, 2084},
     {&SettingsControls::screenshotClipboardCheck, 2047},
     {&SettingsControls::capture40Check, 2057},
     {&SettingsControls::unlistedFpsCheck, 2078},
@@ -1047,6 +1071,7 @@ static void TestActualControlCreation() {
     {&SettingsControls::guideLsButton, 2059},
     {&SettingsControls::screenshotFolderButton, 2048},
     {&SettingsControls::updateNowButton, 2038},
+    {&SettingsControls::releaseNotesButton, 2086},
     {&SettingsControls::presentationCombo, 2009},
     {&SettingsControls::displayMonitorCombo, 2043},
     {&SettingsControls::presentationHelp, 2022},
@@ -1113,6 +1138,7 @@ static void TestActualControlCreation() {
         settings.consoleSurround51 = profile % 2 != 0;
         settings.saveLog = !settings.borderlessWindow;
         settings.screenshotClipboard = profile % 2 != 0;
+        settings.cmaaPreserve = profile % 2 != 0;
         settings.capture40Fps = profile % 2 != 0;
         settings.vsrEnabled = profile % 2 != 0;
         settings.capturePreset = presets[(profile + 1) % 4].preset;
@@ -1142,8 +1168,10 @@ static void TestActualControlCreation() {
         CreateSettingsDialogControls(&state, parent, GetModuleHandleW(nullptr), initial, population);
         Check(probe.stage == 3, "each population callback invoked exactly once");
         for (const auto& member : kMembers) Check(IsWindow(state.*member.handle) != FALSE, member.name);
-        for (const auto& item : controlIds)
+        for (const auto& item : controlIds) {
             Check(GetDlgCtrlID(state.*item.handle) == item.id, "original control/event ID retained");
+            Check(GetDlgItem(parent,item.id)==state.*item.handle,"control/event IDs uniquely identify their intended control");
+        }
         const auto selection = [](HWND combo) { return SendMessageW(combo, CB_GETCURSEL, 0, 0); };
         Check(SendMessageW(state.tabControl, LB_GETCOUNT, 0, 0) == kSettingsNavigationCount &&
               SendMessageW(state.tabControl, LB_GETCURSEL, 0, 0) == SettingsNavigationIndex(state.activeTab),
@@ -1178,23 +1206,25 @@ static void TestActualControlCreation() {
               DisplayResolutionMatchesCapture(state.displayResolutionCombo) == settings.displayMatchesCapture,
               "right field restores fixed or same-as-capture display choice without changing capture rows");
         LayoutSettingsControls(&state,96);
+        Check(selection(state.cmaaQualityCombo)==(settings.cmaaPreserve?1:0),
+            "initial CMAA correction restores the saved choice");
         for (int mode : {0, 1, 2, 1, 0}) {
             SendMessageW(state.upscalerCombo, CB_SETCURSEL, mode, 0);
+            UpdateAdvancedControlVisibility(&state, false, VideoPixelFormat::Nv12);
             wchar_t sdrOnlyLabel[128]{};
             SendMessageW(state.upscalerCombo, CB_GETLBTEXT, 1, reinterpret_cast<LPARAM>(sdrOnlyLabel));
             Check(std::wcscmp(sdrOnlyLabel,L"CMAA2 → NIS")==0,
                 "upscaler selection uses a concise algorithm name");
-            UpdateAdvancedControlVisibility(&state, false, VideoPixelFormat::Nv12);
             if(mode==1) {
-                GetWindowTextW(state.vsrStatus,sdrOnlyLabel,128);
-                Check(std::wcscmp(sdrOnlyLabel,english ? L"SDR only" : L"SDR 전용")==0,
-                    "SDR-only support appears in the conditional helper");
+                Check(!Visible(state.vsrStatus),"HDR-capable upscaling does not show an SDR-only badge");
                 const auto sharpness=ClientRectOf(parent,state.nisSharpnessCombo);
-                const auto helper=ClientRectOf(parent,state.vsrStatus);
-                Check(helper.left>=sharpness.right+SettingsPixels(16,state.layoutDpi),
-                    "conditional helper cannot overlap the sharpness field after switching");
+                const auto quality=ClientRectOf(parent,state.cmaaQualityCombo);
+                Check(quality.top==sharpness.top && quality.bottom==sharpness.bottom &&
+                    quality.right-quality.left==sharpness.right-sharpness.left &&
+                    sharpness.left-quality.right==SettingsPixels(16,state.layoutDpi),
+                    "CMAA and NIS fields retain equal widths, heights and sixteen-DIP gutter");
             }
-            Check(Visible(state.vsrStatus)==(mode!=0 && state.activeTab==SettingsTab::VideoWindow),
+            Check(Visible(state.vsrStatus)==(mode==2 && state.activeTab==SettingsTab::VideoWindow),
                 "supported GPU hides conditional help when upscaling is off");
             wchar_t label[64]{};
             GetWindowTextW(state.videoLabel, label, 64);
@@ -1208,7 +1238,14 @@ static void TestActualControlCreation() {
                   "upscaler selection preserves capture and display");
             Check(Visible(state.nisSharpnessCombo)==(mode==1 && state.activeTab==SettingsTab::VideoWindow),
                   "sharpness appears only for CMAA/NIS on video page");
-            Check(SendMessageW(state.nisSharpnessCombo,CB_GETCURSEL,0,0)==15,"NIS default is 0.15");
+            Check(Visible(state.cmaaQualityCombo)==Visible(state.nisSharpnessCombo) &&
+                SendMessageW(state.cmaaQualityCombo,CB_GETCOUNT,0,0)==2,
+                "CMAA correction has two choices and follows NIS visibility");
+            Check(SelectedNisSharpness(state.nisSharpnessCombo)==15,"NIS default is 0.15");
+            Check(selection(state.cmaaQualityCombo)==(settings.cmaaPreserve?1:0),
+                "OFF/VSR/CMAA visibility changes retain correction quality");
+            Check(SendMessageW(state.nisSharpnessCombo,CB_GETCOUNT,0,0)==7,
+                  "NIS lists seven presets instead of 101 hundredths");
             auto applied = settings;
             ApplyResolutionSelections(state, presets, applied);
             Check(applied.fullscreenVideoPosition == settings.fullscreenVideoPosition,
@@ -1224,6 +1261,19 @@ static void TestActualControlCreation() {
             Check((IsWindowEnabled(state.displayResolutionCombo) != FALSE) ==
                       (state.activeTab == SettingsTab::VideoWindow),
                   "display resolution remains editable with VSR off or on");
+        }
+        SendMessageW(state.upscalerCombo,CB_SETCURSEL,1,0);
+        for(const auto format:{VideoPixelFormat::P010,VideoPixelFormat::Nv12,VideoPixelFormat::P010,VideoPixelFormat::Nv12}) {
+            UpdateAdvancedControlVisibility(&state,false,format);
+            wchar_t name[128]{};SendMessageW(state.upscalerCombo,CB_GETLBTEXT,1,reinterpret_cast<LPARAM>(name));
+            Check(std::wcscmp(name,format==VideoPixelFormat::P010?L"NIS (HDR10)":L"CMAA2 → NIS")==0,
+                "upscaler name follows the actual HDR/SDR algorithm");
+            Check(selection(state.upscalerCombo)==1 && selection(state.cmaaQualityCombo)==(settings.cmaaPreserve?1:0) &&
+                SelectedNisSharpness(state.nisSharpnessCombo)==15,
+                "format changes retain method, SDR correction and sharpness");
+            Check(bool(IsWindowEnabled(state.cmaaQualityCombo))==
+                (state.activeTab==SettingsTab::VideoWindow && format!=VideoPixelFormat::P010),
+                "HDR disables the saved SDR-only AA choice and SDR re-enables it");
         }
         SendMessageW(state.upscalerCombo, CB_SETCURSEL, settings.vsrEnabled ? 2 : 0, 0);
         Check((SendMessageW(state.upscalerCombo, CB_GETCURSEL, 0, 0) == 2) == settings.vsrEnabled,
@@ -1519,7 +1569,7 @@ static void TestActualControlCreation() {
         }
         wchar_t screenshotCaption[256]{};
         GetWindowTextW(state.screenshotTitle,screenshotCaption,256);
-        Check(std::wcsstr(screenshotCaption,L"F12")!=nullptr,"video screenshot section advertises F12");
+        Check(std::wcsstr(screenshotCaption,L"F12")!=nullptr,"app screenshot section advertises F12");
         HDC screenshotDc=GetDC(state.screenshotHelp);
         const auto oldScreenshotFont=SelectObject(screenshotDc,
             reinterpret_cast<HFONT>(SendMessageW(state.screenshotHelp,WM_GETFONT,0,0)));
@@ -1692,8 +1742,8 @@ static void TestCompactWorkAreas() {
             state.audioCombo,state.audioOutputCombo,state.bufferCombo,state.exclusiveTestButton,
             state.volumeHudCombo,state.volumeBoostCheck,state.muteBackgroundCheck,state.audioOnlyCheck,state.surround51Check,
             state.driftCombo,state.pcmQueueCombo,state.relativeSizeCheck,state.borderlessCheck,state.roundedCornersCheck,
-            state.windowSnapCheck,state.fullscreenCursorCombo,state.saveLogCheck,state.showConsoleCheck,state.guideLogFolderButton,
-            state.languageCombo,state.themeCombo,state.skipStartupCheck,state.preventSleepCheck,state.checkForUpdatesCheck,state.updateNowButton})
+            state.windowSnapCheck,state.fullscreenCursorCombo,state.saveLogCheck,state.showConsoleCheck,state.guideLogFolderButton,state.guideReportButton,
+            state.languageCombo,state.themeCombo,state.skipStartupCheck,state.preventSleepCheck,state.checkForUpdatesCheck,state.updateNowButton,state.releaseNotesButton})
             Check(seen.contains(required),"all settings remain reachable across compact section pages");
         for(HWND description:{state.videoCapabilityStatus,state.screenshotTitle,state.screenshotHelp,
             state.surround51Hint,state.fullscreenCursorHint,state.relativeSizeWarning,
@@ -1714,10 +1764,56 @@ static void TestCompactWorkAreas() {
     std::puts("Compact work areas: 8 sizes/scales, Korean/English, every option, fixed font, no scroll passed.");
 }
 
+static void TestNisSharpnessChoices() {
+    HWND owner = CreateWindowW(L"STATIC", L"Sharpness choice fixture", WS_POPUP,
+        0, 0, 400, 300, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    HWND picker = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | CBS_DROPDOWNLIST,
+        0, 0, 120, 230, owner, nullptr, GetModuleHandleW(nullptr), nullptr);
+    Check(owner && picker, "create isolated sharpness picker");
+    const std::set<int> presets{0, 10, 15, 20, 30, 50, 100};
+    for (int saved = 0; saved <= 100; ++saved) {
+        PopulateNisSharpnessPicker(picker, saved);
+        const LRESULT count = SendMessageW(picker, CB_GETCOUNT, 0, 0);
+        Check(count == (presets.contains(saved) ? 7 : 8), "only presets and one saved custom value are listed");
+        Check(SelectedNisSharpness(picker) == saved, "all existing hundredth values restore exactly");
+        int previous = -1;
+        for (LRESULT row = 0; row < count; ++row) {
+            const int value = int(SendMessageW(picker, CB_GETITEMDATA, row, 0));
+            Check(value > previous && value <= 100 && (presets.contains(value) || value == saved),
+                "sharpness choices are sorted and never duplicated");
+            wchar_t label[32]{}, expected[32]{};
+            SendMessageW(picker, CB_GETLBTEXT, row, reinterpret_cast<LPARAM>(label));
+            swprintf_s(expected, L"%.2f", double(value) / 100.0);
+            Check(!std::wcscmp(label, expected), "sharpness label represents its actual value");
+            SendMessageW(picker, CB_SETCURSEL, row, 0);
+            Check(SelectedNisSharpness(picker) == value, "saving uses item value, never its reduced-list index");
+            previous = value;
+        }
+    }
+    PopulateNisSharpnessPicker(picker, 37);
+    PopulateNisSharpnessPicker(picker, 15);
+    Check(SendMessageW(picker, CB_GETCOUNT, 0, 0) == 7 && SelectedNisSharpness(picker) == 15,
+        "reopening with a preset does not accumulate old custom choices");
+    for (const auto [invalid, expected] : {std::pair{-1, 0}, std::pair{101, 100}}) {
+        PopulateNisSharpnessPicker(picker, invalid);
+        Check(SelectedNisSharpness(picker) == expected, "out-of-range initialization remains bounded");
+    }
+    SendMessageW(picker, CB_SETCURSEL, static_cast<WPARAM>(-1), 0);
+    Check(SelectedNisSharpness(picker) == 15, "empty selection falls back to the existing default");
+    SendMessageW(picker, CB_SETCURSEL, 0, 0);
+    SendMessageW(picker, CB_SETITEMDATA, 0, 101);
+    Check(SelectedNisSharpness(picker) == 15 && SelectedNisSharpness(nullptr) == 15,
+        "invalid selection metadata cannot become a render strength");
+    DestroyWindow(owner);
+    std::puts("NIS choices: 7 presets, all 101 saved values, item-value mapping and fallback passed.");
+}
+
 int main(int argc, char** argv) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     INITCOMMONCONTROLSEX init{sizeof(init), ICC_WIN95_CLASSES};
     Check(InitCommonControlsEx(&init) != FALSE, "initialize tooltip controls");
+    TestNisSharpnessChoices();
+    if(argc==2 && std::strcmp(argv[1],"--nis-only")==0) return EXIT_SUCCESS;
     if(argc==2 && std::strcmp(argv[1],"--compact-only")==0) {
         TestCompactWorkAreas();
         return EXIT_SUCCESS;
@@ -1843,9 +1939,10 @@ int main(int argc, char** argv) {
             ExpectVisible(state.windowSnapCheck, tab == SettingsTab::Window);
             ExpectVisible(state.roundedCornersCheck, tab == SettingsTab::Window);
             ExpectVisible(state.guideLogFolderButton, tab == SettingsTab::GuideDiagnostics);
+            ExpectVisible(state.guideReportButton, tab == SettingsTab::GuideDiagnostics);
             Check((IsWindowEnabled(state.guideKeys.back())!=FALSE)==(tab==SettingsTab::GuideDiagnostics),
                   "exit remains editable on the guide page");
-            ExpectVisible(state.screenshotTitle, tab == SettingsTab::VideoWindow);
+            ExpectVisible(state.screenshotTitle, tab == SettingsTab::Updates);
             ExpectVisible(state.frameOptionsButton, tab == SettingsTab::VideoWindow);
             ExpectVisible(state.capture40Check, false);
             ExpectVisible(state.unlistedFpsCheck, false);
@@ -1854,24 +1951,27 @@ int main(int argc, char** argv) {
             ExpectVisible(state.upscalerCombo, video);
             ExpectVisible(state.vsrGuideButton, video);
             ExpectVisible(state.vsrStatus, video &&
-                (SendMessageW(state.upscalerCombo,CB_GETCURSEL,0,0)>0 || state.vsrGpuUnavailable));
-            ExpectVisible(state.screenshotClipboardCheck, tab == SettingsTab::VideoWindow);
-            ExpectVisible(state.screenshotHelp, tab == SettingsTab::VideoWindow);
-            ExpectVisible(state.screenshotFolderButton, tab == SettingsTab::VideoWindow);
-            if (video) {
+                SendMessageW(state.upscalerCombo,CB_GETCURSEL,0,0)!=1 &&
+                (SendMessageW(state.upscalerCombo,CB_GETCURSEL,0,0)==2 || state.vsrGpuUnavailable));
+            ExpectVisible(state.screenshotClipboardCheck, tab == SettingsTab::Updates);
+            ExpectVisible(state.screenshotHelp, tab == SettingsTab::Updates);
+            ExpectVisible(state.screenshotFolderButton, tab == SettingsTab::Updates);
+            if (tab == SettingsTab::Updates) {
                 for (HWND shot : {state.screenshotTitle,state.screenshotClipboardCheck,
                                   state.screenshotHelp,state.screenshotFolderButton}) {
                     const RECT shotRect=ClientRectOf(parent,shot);
-                    for (HWND other : {state.fullscreenCursorHint,state.hdrChromaCombo,
+                    for (HWND other : {state.updateTitle,state.updateText,state.checkForUpdatesCheck,
+                        state.updateNowButton,state.releaseNotesButton,state.updateStatus,state.themeLabel,state.themeCombo,state.preventSleepCheck,state.preventSleepHint,
                         state.languageLabel,state.languageCombo,state.skipStartupCheck,
                         state.skipStartupHint,state.startButton,state.cancelButton}) {
                         if (!Visible(other)) continue;
                         const RECT otherRect=ClientRectOf(parent,other); RECT overlap{};
-                        Check(!IntersectRect(&overlap,&shotRect,&otherRect),"video screenshot section must not overlap footer/controls");
+                        Check(!IntersectRect(&overlap,&shotRect,&otherRect),"app screenshot section must not overlap footer/controls");
                     }
                 }
             }
             ExpectVisible(state.updateNowButton, tab == SettingsTab::Updates);
+            ExpectVisible(state.releaseNotesButton, tab == SettingsTab::Updates);
             for (HWND control : {state.languageCombo, state.themeLabel, state.themeCombo, state.skipStartupCheck,
                                  state.preventSleepCheck, state.preventSleepHint, state.appPreferencesSection})
                 ExpectVisible(control, tab == SettingsTab::Updates);
