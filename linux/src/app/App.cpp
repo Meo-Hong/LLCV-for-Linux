@@ -366,6 +366,7 @@ void App::Shutdown() {
         imguiInitialized_ = false;
     }
     if (rendererInitialized_) {
+        interpolator_.Reset();
         renderer_.Shutdown();
         rendererInitialized_ = false;
     }
@@ -599,6 +600,9 @@ void App::HandleKey(const SDL_KeyboardEvent& key) {
     case input::Action::Upscaling:
         if (screen_ == Screen::Video) ToggleUpscaling();
         break;
+    case input::Action::FrameInterpolation:
+        if (screen_ == Screen::Video) ToggleInterpolation();
+        break;
     default:
         break;
     }
@@ -725,11 +729,11 @@ void App::UpdateStatistics(uint64_t now) {
         samples ? static_cast<double>(processingNs - statsProcessingNsBase_) / 1.0e6 / static_cast<double>(samples)
                 : -1.0;
     const bool streaming = screen_ == Screen::Video && capture_.State() == capture::CaptureState::Streaming;
-    const auto observed = frameRateMonitor_.Observe(now, captured, streaming ? RequestedCaptureFps(settings_) : 0);
+    const auto observed = frameRateMonitor_.Observe(now, captured, streaming ? RequestedFps() : 0);
     frameRateOverdelivery_ = observed.overdelivery;
     if (observed.event != diagnostics::CaptureFrameRateMonitor::Event::None) {
         Log("[video-rate] %s requested=%d measured-input=%.2f fps",
-            observed.overdelivery ? "sustained-overdelivery" : "delivery-recovered", RequestedCaptureFps(settings_),
+            observed.overdelivery ? "sustained-overdelivery" : "delivery-recovered", RequestedFps(),
             observed.measuredFps);
     }
     statsCapturedBase_ = captured;
@@ -772,12 +776,14 @@ void App::RenderFrame() {
     ApplyPlacement();
 
     uint64_t frameCaptureNs = 0;
+    int64_t frameReadyUs = 0;
     if (newVideoFrame_) {
         newVideoFrame_ = false;
         if (screen_ == Screen::Video) {
             if (const capture::VideoFrame* frame = mailbox_.AcquireLatest()) {
                 renderer_.Upload(*frame);
                 frameCaptureNs = frame->captureNs;
+                frameReadyUs = static_cast<int64_t>(frame->readyNs / 1000);
             }
         }
     }
@@ -796,22 +802,40 @@ void App::RenderFrame() {
     renderer_.SetUpscaling(settings_.upscaling, static_cast<float>(settings_.nisSharpnessPercent) / 100.0f,
                            settings_.cmaaPreserve);
     if (screen_ == Screen::Video && hdrActive_) {
+        if (frameCaptureNs) InterpolateFrame(frameReadyUs);
         renderer_.BeginUiLayer(width, height);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         renderer_.EndUiLayer();
         renderer_.ComposeHdr(width, height, sharp);
     } else {
+        bool delayOriginal = false;
         if (screen_ == Screen::Video) {
+            const GLuint generated = frameCaptureNs ? InterpolateFrame(frameReadyUs) : 0;
+            if (generated) {
+                renderer_.Draw(width, height, sharp, generated);
+                ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+                SDL_GL_SwapWindow(window_);
+                ++presentedFrames_;
+                interpolator_.ScheduleOriginal(interpolationFps_);
+                delayOriginal = true;
+            }
             renderer_.Draw(width, height, sharp);
         } else {
             const ImVec4 background = ui::ToVec4(ui::CurrentPalette().background);
             renderer_.Clear(width, height, background.x, background.y, background.z);
         }
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        if (delayOriginal) {
+            video::gl.Flush();
+            interpolator_.WaitOriginal();
+        }
     }
     SDL_GL_SwapWindow(window_);
     lastRenderMs_ = platform::MonotonicMs();
-    if (screen_ == Screen::Video) ReportUpscaling();
+    if (screen_ == Screen::Video) {
+        ReportUpscaling();
+        if (frameCaptureNs) ReportInterpolation();
+    }
 
     if (frameCaptureNs) {
         ++presentedFrames_;
@@ -956,9 +980,10 @@ std::vector<ui::DiagnosticsLine> App::BuildDiagnostics() const {
                                     ? T("Sharp")
                                     : T("Smooth"))});
         std::string actualFps = Format(T("Input %.1f · Present %.1f"), inputFps_, presentFps_);
-        if (frameRateOverdelivery_) actualFps += Format(T(" · above requested %d"), RequestedCaptureFps(settings_));
+        if (frameRateOverdelivery_) actualFps += Format(T(" · above requested %d"), RequestedFps());
         lines.push_back({T("Actual FPS"), actualFps});
         lines.push_back({T("Upscaling"), UpscalingText()});
+        lines.push_back({T("Frame interpolation"), InterpolationText()});
         lines.push_back({T("App latency"),
                          Format(T("capture→present %s · copy/decode %s (not total HDMI latency)"),
                                 Ms(averageLatencyMs_).c_str(), Ms(averageProcessingMs_).c_str())});
@@ -1117,6 +1142,8 @@ ui::SettingsContext App::BuildSettingsContext() {
     context.scale = scale_;
     context.framebufferBits = framebufferBits_;
     context.upscalingSupported = renderer_.UpscalingSupported();
+    context.interpolationBuilt = video::FrameInterpolator::Built();
+    context.interpolationModels = video::FrameInterpolator::ModelsAvailable();
     context.upscalingIssue = renderer_.UpscalingIssue();
 
     const capture::CaptureDevice* device = capture::SelectDevice(captureDevices_, settings_.captureDevice);
@@ -1199,7 +1226,19 @@ bool App::StartSession(std::string& error) {
             error = T("No capture device was found. Check the USB connection.");
             return false;
         }
-        activeMode_ = capture::ResolveMode(*device, RequestFromSettings(settings_));
+        interpolationCapture_ = false;
+        interpolationCapture40_ = false;
+        if (UsesInterpolationCapture()) {
+            bool capture40 = false;
+            if (auto mode = ResolveInterpolationMode(*device, settings_, capture40)) {
+                activeMode_ = mode;
+                interpolationCapture_ = true;
+                interpolationCapture40_ = capture40;
+            } else {
+                Log("[interpolation] no 1920x1080 mode at 24-60 fps for this format; using the saved capture settings");
+            }
+        }
+        if (!activeMode_) activeMode_ = capture::ResolveMode(*device, RequestFromSettings(settings_));
         if (activeMode_ && activeMode_->format == capture::PixelFormat::P010 &&
             !renderer_.SupportsSixteenBitTextures()) {
             error = Format(T("HDR input not supported: %s"),
@@ -1235,26 +1274,46 @@ bool App::StartSession(std::string& error) {
     }
 
     if (activeMode_) {
-        capture::CaptureConfig config;
-        config.devicePath = device->id;
-        config.format = activeMode_->format;
-        config.fourcc = activeMode_->fourcc;
-        config.width = activeMode_->width;
-        config.height = activeMode_->height;
-        config.rate = activeMode_->rate;
-        config.capture40Fps = settings_.capture40Fps;
-        config.directRate = activeMode_->directRequest;
-        config.exactRate = activeMode_->exactRate;
-        config.colorMatrix = settings_.colorMatrix;
-        config.sdrRange = settings_.sdrRange;
-        config.hdrInput = settings_.hdrInput;
+        const auto configure = [&](bool capture40) {
+            capture::CaptureConfig config;
+            config.devicePath = device->id;
+            config.format = activeMode_->format;
+            config.fourcc = activeMode_->fourcc;
+            config.width = activeMode_->width;
+            config.height = activeMode_->height;
+            config.rate = activeMode_->rate;
+            config.capture40Fps = capture40;
+            config.directRate = activeMode_->directRequest;
+            config.exactRate = activeMode_->exactRate;
+            config.colorMatrix = settings_.colorMatrix;
+            config.sdrRange = settings_.sdrRange;
+            config.hdrInput = settings_.hdrInput;
+            return config;
+        };
         switch (settings_.hdrChromaLocation) {
         case settings::HdrChromaLocation::Left: renderer_.SetP010ChromaSiting(video::ChromaSiting::Left); break;
         case settings::HdrChromaLocation::TopLeft: renderer_.SetP010ChromaSiting(video::ChromaSiting::TopLeft); break;
         case settings::HdrChromaLocation::Auto: renderer_.SetP010ChromaSiting(video::ChromaSiting::Center); break;
         }
         std::string captureError;
-        if (!capture_.Start(config, mailbox_, [this] { NotifyFrame(); }, captureError)) {
+        bool started = capture_.Start(configure(interpolationCapture_ ? interpolationCapture40_ : settings_.capture40Fps),
+                                      mailbox_, [this] { NotifyFrame(); }, captureError);
+        if (!started && interpolationCapture_) {
+            Log("[interpolation] 1920x1080 capture failed (%s); retrying with the saved capture settings",
+                captureError.c_str());
+            interpolationCapture_ = false;
+            activeMode_ = capture::ResolveMode(*device, RequestFromSettings(settings_));
+            if (activeMode_) {
+                captureError.clear();
+                started = capture_.Start(configure(settings_.capture40Fps), mailbox_, [this] { NotifyFrame(); },
+                                         captureError);
+            }
+        }
+        if (!started && !activeMode_) {
+            error = T("The device does not support the selected resolution and format.");
+            return false;
+        }
+        if (!started) {
             error = std::string(T("Could not start capture: ")) + captureError;
             if (settings_.capture40Fps) {
                 error += T("\n\n40 fps capture is enabled. This device, resolution or format may reject 40 fps or "
@@ -1364,6 +1423,9 @@ void App::StopSession() {
     hdrActive_ = false;
     renderer_.Configure(video::OutputMode::Sdr, static_cast<float>(settings_.sdrWhiteNits));
     renderer_.Reset();
+    interpolator_.Reset();
+    interpolationNotices_ = {};
+    interpolationCapture_ = false;
     mailbox_.Reset();
     newVideoFrame_ = false;
     framePending_.store(false, std::memory_order_release);
@@ -1512,7 +1574,14 @@ void App::SetFullscreen(bool fullscreen) {
 void App::ApplySwapInterval() {
     const bool immediate =
         screen_ == Screen::Video && settings_.presentationMode == settings::PresentationMode::Immediate;
-    if (!SDL_GL_SetSwapInterval(immediate ? 0 : 1)) Log("[gl] swap interval failed: %s", SDL_GetError());
+    const bool applied = SDL_GL_SetSwapInterval(immediate ? 0 : 1);
+    if (!applied) Log("[gl] swap interval failed: %s", SDL_GetError());
+    immediateSwap_ = immediate && applied;
+}
+
+int App::RequestedFps() const {
+    if (!interpolationCapture_ || !activeMode_) return RequestedCaptureFps(settings_);
+    return interpolationCapture40_ ? 40 : static_cast<int>(std::lround(activeMode_->rate.Fps()));
 }
 
 void App::RefreshPreferredColor() {
@@ -1890,6 +1959,8 @@ void App::DrawMenu() {
     state.borderless = settings_.borderlessWindow;
     state.sharp = settings_.scalingMode == settings::ScalingMode::Sharp;
     state.upscaling = settings_.upscaling;
+    state.interpolation = settings_.interpolation && settings_.interpolationPlayback;
+    state.interpolationAvailable = settings_.interpolation && video::FrameInterpolator::Built();
     state.vsync = settings_.presentationMode == settings::PresentationMode::VSync;
     state.diagnostics = diagnosticsVisible_;
     state.audioOsd = audioOsdVisible_;
@@ -1928,6 +1999,9 @@ void App::ExecuteMenuCommand(ui::MenuCommand command) {
         break;
     case ui::MenuCommand::Upscaling:
         ToggleUpscaling();
+        break;
+    case ui::MenuCommand::Interpolation:
+        ToggleInterpolation();
         break;
     case ui::MenuCommand::PresentImmediate:
         settings_.presentationMode = settings::PresentationMode::Immediate;
@@ -2200,6 +2274,114 @@ std::string App::UpscalingText() const {
         return Format(T("CMAA2 → NIS · unavailable (%s)"), renderer_.UpscalingIssue().c_str());
     }
     return {};
+}
+
+void App::ToggleInterpolation() {
+    if (!video::FrameInterpolator::Built()) {
+        ShowToast(T("This build has no frame interpolation"), true);
+        return;
+    }
+    if (!settings_.interpolation) {
+        ShowToast(T("Turn on RIFE frame interpolation under Settings → Video first"), true);
+        return;
+    }
+    settings_.interpolationPlayback = !settings_.interpolationPlayback;
+    redrawFrames_ = std::max(redrawFrames_, 1);
+    Log("[interpolation] F7: %s", settings_.interpolationPlayback ? "on" : "off");
+}
+
+bool App::UsesInterpolationCapture() const {
+    return settings_.interpolation && video::FrameInterpolator::Built() && video::FrameInterpolator::ModelsAvailable() &&
+           !settings_.audioOnly && settings_.pixelFormat != settings::PixelFormatChoice::P010 &&
+           settings_.presentationMode == settings::PresentationMode::Immediate;
+}
+
+GLuint App::InterpolateFrame(int64_t arrivalUs) {
+    const bool wanted = settings_.interpolation && settings_.interpolationPlayback &&
+                        video::FrameInterpolator::Built() && !settings_.audioOnly;
+    if (!wanted) {
+        if (interpolator_.Status() != video::InterpolationStatus::Off) interpolator_.MarkOff();
+        interpolationIssue_.clear();
+        return 0;
+    }
+    const auto negotiated = capture_.Negotiated();
+    interpolationFps_ = negotiated.rate.Fps();
+    const std::string previousIssue = interpolationIssue_;
+    if (settings_.presentationMode != settings::PresentationMode::Immediate) {
+        interpolationIssue_ = T("needs Immediate presentation");
+    } else if (!immediateSwap_) {
+        interpolationIssue_ = T("the driver keeps VSync on");
+    } else if (!renderer_.InterpolationEligible()) {
+        interpolationIssue_ = T("SDR only");
+    } else if (renderer_.ImageWidth() != video::kInterpolationWidth ||
+               renderer_.ImageHeight() != video::kInterpolationHeight ||
+               !video::InterpolationRateSupported(interpolationFps_)) {
+        interpolationIssue_ = !interpolationCapture_ && UsesInterpolationCapture()
+                                  ? T("restart playback (F2, then Start) to capture 1920 × 1080")
+                                  : T("needs 1920 × 1080 at 24-60 fps");
+    } else {
+        interpolationIssue_.clear();
+    }
+    if (!interpolationIssue_.empty() && !previousIssue.empty() && interpolationIssue_ != previousIssue) {
+        interpolationNotices_ = {};
+    }
+    if (!interpolationIssue_.empty()) {
+        interpolator_.MarkUnsupported();
+        return 0;
+    }
+    interpolator_.Configure(settings_.rifeHud != settings::RifeHud::Off,
+                            settings_.rifeHud == settings::RifeHud::LumaChroma);
+    return interpolator_.Submit(renderer_.VideoTexture(), renderer_.ImageWidth(), renderer_.ImageHeight(),
+                                interpolationFps_, arrivalUs);
+}
+
+void App::ReportInterpolation() {
+    const bool wanted = settings_.interpolation && settings_.interpolationPlayback &&
+                        video::FrameInterpolator::Built() && !settings_.audioOnly;
+    const auto notice = interpolationNotices_.Observe(wanted, interpolator_.Status());
+    if (!notice) return;
+    std::string text;
+    bool error = false;
+    switch (*notice) {
+    case video::InterpolationStatus::Off: text = T("RIFE frame interpolation OFF · F7: on"); break;
+    case video::InterpolationStatus::Pending: text = T("RIFE frame interpolation · preparing"); break;
+    case video::InterpolationStatus::Active: text = T("RIFE frame interpolation ON · F7: off"); break;
+    case video::InterpolationStatus::Late:
+        text = T("RIFE frame interpolation · late, showing original frames");
+        error = true;
+        break;
+    case video::InterpolationStatus::Unsupported:
+        text = Format(T("RIFE frame interpolation not applied · %s"), interpolationIssue_.c_str());
+        error = true;
+        break;
+    case video::InterpolationStatus::Failed:
+        text = Format(T("RIFE frame interpolation unavailable · %s"), interpolator_.Detail().c_str());
+        error = true;
+        break;
+    }
+    ShowToast(input::ExpandKeyLabels(text, settings_.shortcuts), error);
+    redrawFrames_ = std::max(redrawFrames_, 1);
+}
+
+std::string App::InterpolationText() const {
+    if (!video::FrameInterpolator::Built()) return T("not in this build");
+    if (!settings_.interpolation) return T("Off");
+    if (!settings_.interpolationPlayback) return T("RIFE · off (F7)");
+    const auto stats = interpolator_.Stats();
+    const double gpu = stats.gpuJobs ? stats.gpuMsSum / static_cast<double>(stats.gpuJobs) : 0.0;
+    switch (interpolator_.Status()) {
+    case video::InterpolationStatus::Off:
+    case video::InterpolationStatus::Pending: return T("RIFE · preparing");
+    case video::InterpolationStatus::Unsupported:
+        return Format(T("RIFE · not applied (%s)"), interpolationIssue_.c_str());
+    case video::InterpolationStatus::Failed:
+        return Format(T("RIFE · unavailable (%s)"), interpolator_.Detail().c_str());
+    case video::InterpolationStatus::Active:
+    case video::InterpolationStatus::Late: break;
+    }
+    return Format(T("RIFE · generated %llu · late %llu · busy %llu · GPU %.1f ms (max %.1f)"),
+                  static_cast<unsigned long long>(stats.generated), static_cast<unsigned long long>(stats.late),
+                  static_cast<unsigned long long>(stats.busy), gpu, stats.gpuMsMax);
 }
 
 void App::ToggleMute() {

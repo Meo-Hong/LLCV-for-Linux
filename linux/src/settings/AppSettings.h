@@ -19,6 +19,7 @@ enum class FullscreenCursor { AutoHide, AlwaysVisible };
 enum class HdrOutputMode { Auto, ToneMap, Hdr };
 enum class FullscreenVideoSize { Fit, Original };
 enum class HdrChromaLocation { Auto, Left, TopLeft };
+enum class RifeHud { Off, Luma, LumaChroma };
 enum class FullscreenVideoPosition { Center, TopLeft, Top, TopRight, Left, Right, BottomLeft, Bottom, BottomRight };
 
 inline constexpr const char* kCaptureAudioDisabled = "none";
@@ -50,6 +51,10 @@ struct AppSettings {
     bool upscaling = false;
     int nisSharpnessPercent = 15;
     bool cmaaPreserve = false;
+    bool interpolation = false;
+    bool interpolationPlayback = true;
+    RifeHud rifeHud = RifeHud::LumaChroma;
+    int rifeFrameRateMilli = -1;
     video::HdrInput hdrInput = video::HdrInput::Auto;
     HdrOutputMode hdrOutput = HdrOutputMode::Auto;
     HdrChromaLocation hdrChromaLocation = HdrChromaLocation::Auto;

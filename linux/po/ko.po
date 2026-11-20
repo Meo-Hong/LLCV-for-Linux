@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-11-02 02:05+0900\n"
+"POT-Creation-Date: 2026-11-21 07:32+0900\n"
 "PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
@@ -180,6 +180,10 @@ msgstr "실제 FPS"
 #: src/app/App.cpp src/ui/SettingsScreen.cpp
 msgid "Upscaling"
 msgstr "업스케일링"
+
+#: src/app/App.cpp
+msgid "Frame interpolation"
+msgstr "프레임 보간"
 
 #: src/app/App.cpp
 msgid "App latency"
@@ -718,6 +722,89 @@ msgid "CMAA2 → NIS · unavailable (%s)"
 msgstr "CMAA2 → NIS · 사용 불가 (%s)"
 
 #: src/app/App.cpp
+msgid "This build has no frame interpolation"
+msgstr "이 빌드에는 프레임 보간이 없습니다"
+
+#: src/app/App.cpp
+msgid "Turn on RIFE frame interpolation under Settings → Video first"
+msgstr "먼저 설정 → 영상에서 RIFE 프레임 보간을 켜세요"
+
+#: src/app/App.cpp
+msgid "needs Immediate presentation"
+msgstr "화면 표시 방식이 저지연이어야 함"
+
+#: src/app/App.cpp
+msgid "the driver keeps VSync on"
+msgstr "드라이버가 VSync를 끄지 않음"
+
+#: src/app/App.cpp
+msgid "SDR only"
+msgstr "SDR만 지원"
+
+#: src/app/App.cpp
+msgid "restart playback (F2, then Start) to capture 1920 × 1080"
+msgstr "1920 × 1080으로 캡처하려면 재생을 다시 시작하세요(F2 → 시작)"
+
+#: src/app/App.cpp
+msgid "needs 1920 × 1080 at 24-60 fps"
+msgstr "24~60fps의 1920 × 1080 필요"
+
+#: src/app/App.cpp
+msgid "RIFE frame interpolation OFF · F7: on"
+msgstr "RIFE 프레임 보간 OFF · F7: 켜기"
+
+#: src/app/App.cpp
+msgid "RIFE frame interpolation · preparing"
+msgstr "RIFE 프레임 보간 · 준비 중"
+
+#: src/app/App.cpp
+msgid "RIFE frame interpolation ON · F7: off"
+msgstr "RIFE 프레임 보간 ON · F7: 끄기"
+
+#: src/app/App.cpp
+msgid "RIFE frame interpolation · late, showing original frames"
+msgstr "RIFE 프레임 보간 · 기한 초과, 원본 프레임 표시"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE frame interpolation not applied · %s"
+msgstr "RIFE 프레임 보간 적용 안 됨 · %s"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE frame interpolation unavailable · %s"
+msgstr "RIFE 프레임 보간 사용 불가 · %s"
+
+#: src/app/App.cpp
+msgid "not in this build"
+msgstr "이 빌드에 없음"
+
+#: src/app/App.cpp
+msgid "RIFE · off (F7)"
+msgstr "RIFE · 꺼짐 (F7)"
+
+#: src/app/App.cpp
+msgid "RIFE · preparing"
+msgstr "RIFE · 준비 중"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE · not applied (%s)"
+msgstr "RIFE · 적용 안 됨 (%s)"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE · unavailable (%s)"
+msgstr "RIFE · 사용 불가 (%s)"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE · generated %llu · late %llu · busy %llu · GPU %.1f ms (max %.1f)"
+msgstr ""
+"RIFE · 생성 %llu · 기한 초과 %llu · 처리 중 건너뜀 %llu · GPU %.1f ms (최대 "
+"%.1f)"
+
+#: src/app/App.cpp
 msgid "1:1 size · the capture matches this monitor, so fullscreen is used."
 msgstr "1:1 크기 · 캡처 해상도가 이 모니터와 같아서 전체화면으로 표시합니다."
 
@@ -818,6 +905,51 @@ msgid ""
 msgstr ""
 "재생·스크린샷·녹화에 함께 적용됩니다. P010과 HDR 입력은 자체 범위를 유지합니"
 "다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"RIFE 4.25 Fast inserts a generated frame between two captured frames. Motion "
+"looks smoother; the game does not run faster and input response does not "
+"improve."
+msgstr ""
+"RIFE 4.25 Fast는 캡처한 두 프레임 사이에 생성 프레임을 넣습니다. 움직임은 부"
+"드러워 보이지만 게임이 빨라지거나 입력 반응이 좋아지지는 않습니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Each original frame is shown about half a frame later than without "
+"interpolation."
+msgstr "원본 프레임은 보간하지 않을 때보다 약 반 프레임 늦게 표시됩니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Needs 1920 × 1080 SDR input at 24-60 fps and Immediate presentation. "
+"Starting playback switches the capture to 1920 × 1080 with the selected "
+"pixel format; saved video settings are kept."
+msgstr ""
+"24~60fps의 1920 × 1080 SDR 입력과 저지연 화면 표시 방식이 필요합니다. 재생을 "
+"시작하면 선택한 픽셀 형식 그대로 1920 × 1080으로 캡처하며, 저장한 영상 설정"
+"은 바뀌지 않습니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Runs on the display GPU through Vulkan (ncnn). If RIFE cannot start or "
+"misses a frame's deadline, the original frame is shown."
+msgstr ""
+"화면 출력 GPU에서 Vulkan(ncnn)으로 실행됩니다. RIFE를 시작할 수 없거나 프레"
+"임 기한을 넘기면 원본 프레임을 표시합니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"HUD protection keeps fixed elements such as hearts, text and score counters "
+"from warping."
+msgstr ""
+"HUD 보호는 하트, 글자, 점수처럼 고정된 화면 요소가 일그러지지 않게 합니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Display only: recordings and screenshots keep the captured frames."
+msgstr ""
+"화면 표시에만 적용됩니다. 녹화와 스크린샷은 캡처한 프레임 그대로 저장됩니다."
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
@@ -1098,6 +1230,83 @@ msgstr "Limited (16-235)"
 #: src/ui/SettingsScreen.cpp
 msgid "Full (0-255)"
 msgstr "Full (0-255)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Frame interpolation (F7)"
+msgstr "프레임 보간 (F7)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Use RIFE Vulkan frame interpolation"
+msgstr "RIFE Vulkan 프레임 보간 사용"
+
+#: src/ui/SettingsScreen.cpp
+msgid "This build has no frame interpolation (it needs ncnn with Vulkan)."
+msgstr "이 빌드에는 프레임 보간이 없습니다 (Vulkan을 지원하는 ncnn 필요)."
+
+#: src/ui/SettingsScreen.cpp
+msgid "The RIFE model files are missing. Reinstall LLCV."
+msgstr "RIFE 모델 파일이 없습니다. LLCV를 다시 설치하세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Off. When on, a generated frame is shown between two captured frames."
+msgstr "꺼짐. 켜면 캡처한 두 프레임 사이에 생성 프레임을 표시합니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "HUD protection"
+msgstr "HUD 보호"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Luma and color edges (recommended)"
+msgstr "밝기와 색 윤곽 (권장)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Luma edges"
+msgstr "밝기 윤곽"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Capture rate while interpolating"
+msgstr "보간 중 캡처 프레임레이트"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (highest 24-60 fps)"
+msgstr "자동 (24~60fps 중 최고)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Same as Frame rate (24-60 fps)"
+msgstr "프레임레이트와 같게 (24~60fps)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Not used in audio-only mode."
+msgstr "오디오 전용 모드에서는 사용하지 않습니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid "P010 (HDR) is not interpolated. Choose an SDR pixel format."
+msgstr "P010 (HDR)은 보간하지 않습니다. SDR 픽셀 형식을 선택하세요."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Needs Immediate presentation. With VSync, original frames are shown."
+msgstr ""
+"화면 표시 방식이 저지연이어야 합니다. VSync에서는 원본 프레임을 표시합니다."
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid ""
+"While interpolating: %d × %d · %s · %s fps (saved video settings are kept)"
+msgstr "보간 중: %d × %d · %s · %s fps (저장한 영상 설정은 유지)"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"This device has no 1920 × 1080 mode at 24-60 fps for the selected format. "
+"The saved capture settings are used and frames are not interpolated."
+msgstr ""
+"이 장치는 선택한 형식에서 24~60fps의 1920 × 1080 모드를 지원하지 않습니다. 저"
+"장한 캡처 설정을 사용하며 보간하지 않습니다."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"F7 turns interpolation on and off during playback without reconnecting the "
+"capture device."
+msgstr "F7로 재생 중에 캡처 장치를 다시 연결하지 않고 보간을 켜고 끕니다."
 
 #: src/ui/SettingsScreen.cpp
 msgid "CMAA2 → NIS"
@@ -1999,6 +2208,10 @@ msgid "Toggle CMAA2 → NIS upscaling"
 msgstr "CMAA2 → NIS 업스케일링 켜기/끄기"
 
 #: src/ui/Shortcuts.h
+msgid "Toggle RIFE frame interpolation"
+msgstr "RIFE 프레임 보간 켜기/끄기"
+
+#: src/ui/Shortcuts.h
 msgid "Show / hide the menu bar"
 msgstr "메뉴 막대 표시 / 숨기기"
 
@@ -2159,6 +2372,10 @@ msgstr "선명하게 확대"
 #: src/ui/ViewerOverlay.cpp
 msgid "CMAA2 → NIS upscaling"
 msgstr "CMAA2 → NIS 업스케일링"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "RIFE frame interpolation"
+msgstr "RIFE 프레임 보간"
 
 #: src/ui/ViewerOverlay.cpp
 msgid "Immediate presentation"

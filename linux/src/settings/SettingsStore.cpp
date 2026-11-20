@@ -48,6 +48,9 @@ constexpr EnumName<video::RangeOverride> kSdrRanges[] = {
     {video::RangeOverride::Auto, "auto"}, {video::RangeOverride::Limited, "limited"},
     {video::RangeOverride::Full, "full"}};
 constexpr EnumName<bool> kUpscaling[] = {{false, "off"}, {true, "cmaa2-nis"}};
+constexpr EnumName<bool> kInterpolation[] = {{false, "off"}, {true, "rife"}};
+constexpr EnumName<RifeHud> kRifeHud[] = {
+    {RifeHud::LumaChroma, "color"}, {RifeHud::Luma, "luma"}, {RifeHud::Off, "off"}};
 constexpr EnumName<bool> kCmaaCorrection[] = {{false, "high"}, {true, "preserve"}};
 constexpr EnumName<video::HdrInput> kHdrInput[] = {
     {video::HdrInput::Auto, "auto"}, {video::HdrInput::ForceHdr10, "hdr10"}, {video::HdrInput::ForceSdr, "sdr"}};
@@ -216,6 +219,14 @@ AppSettings LoadSettings(const std::filesystem::path& path) {
     s.upscaling = ReadEnum(v, "Video.Upscaling", kUpscaling, s.upscaling);
     s.nisSharpnessPercent = ReadInt(v, "Video.NisSharpness", s.nisSharpnessPercent, 0, 100);
     s.cmaaPreserve = ReadEnum(v, "Video.CmaaCorrection", kCmaaCorrection, s.cmaaPreserve);
+    s.interpolation = ReadEnum(v, "Video.Interpolation", kInterpolation, s.interpolation);
+    s.interpolationPlayback = ReadBool(v, "Video.InterpolationPlayback", s.interpolationPlayback);
+    s.rifeHud = ReadEnum(v, "Video.RifeHud", kRifeHud, s.rifeHud);
+    s.rifeFrameRateMilli =
+        ReadInt(v, "Video.RifeFrameRateMilli", s.rifeFrameRateMilli, -1, std::numeric_limits<int>::max());
+    if (s.rifeFrameRateMilli > 0 && (s.rifeFrameRateMilli < 23500 || s.rifeFrameRateMilli > 60500)) {
+        s.rifeFrameRateMilli = -1;
+    }
     s.hdrInput = ReadEnum(v, "Video.HdrInput", kHdrInput, s.hdrInput);
     s.hdrOutput = ReadEnum(v, "Video.HdrOutput", kHdrOutput, s.hdrOutput);
     s.hdrChromaLocation = ReadEnum(v, "Video.HdrChroma", kHdrChroma, s.hdrChromaLocation);
@@ -305,6 +316,10 @@ bool SaveSettings(const std::filesystem::path& path, const AppSettings& s) {
              << "Upscaling=" << EnumText(s.upscaling, kUpscaling) << "\n"
              << "NisSharpness=" << std::clamp(s.nisSharpnessPercent, 0, 100) << "\n"
              << "CmaaCorrection=" << EnumText(s.cmaaPreserve, kCmaaCorrection) << "\n"
+             << "Interpolation=" << EnumText(s.interpolation, kInterpolation) << "\n"
+             << "InterpolationPlayback=" << Bool(s.interpolationPlayback) << "\n"
+             << "RifeHud=" << EnumText(s.rifeHud, kRifeHud) << "\n"
+             << "RifeFrameRateMilli=" << s.rifeFrameRateMilli << "\n"
              << "HdrInput=" << EnumText(s.hdrInput, kHdrInput) << "\n"
              << "HdrOutput=" << EnumText(s.hdrOutput, kHdrOutput) << "\n"
              << "HdrChroma=" << EnumText(s.hdrChromaLocation, kHdrChroma) << "\n"

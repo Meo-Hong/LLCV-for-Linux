@@ -36,6 +36,7 @@ bool LoadGlApi(std::string& missing) {
            Resolve(gl.DeleteVertexArrays, "glDeleteVertexArrays", missing) &&
            Resolve(gl.Disable, "glDisable", missing) &&
            Resolve(gl.DrawArrays, "glDrawArrays", missing) &&
+           Resolve(gl.Flush, "glFlush", missing) &&
            Resolve(gl.FramebufferTexture2D, "glFramebufferTexture2D", missing) &&
            Resolve(gl.GenFramebuffers, "glGenFramebuffers", missing) &&
            Resolve(gl.GenTextures, "glGenTextures", missing) &&

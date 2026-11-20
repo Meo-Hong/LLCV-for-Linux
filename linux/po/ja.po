@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-11-02 02:05+0900\n"
+"POT-Creation-Date: 2026-11-21 07:32+0900\n"
 "PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
@@ -183,6 +183,10 @@ msgstr "実測FPS"
 #: src/app/App.cpp src/ui/SettingsScreen.cpp
 msgid "Upscaling"
 msgstr "アップスケーリング"
+
+#: src/app/App.cpp
+msgid "Frame interpolation"
+msgstr "フレーム補間"
 
 #: src/app/App.cpp
 msgid "App latency"
@@ -657,9 +661,9 @@ msgid ""
 "this resolution and frame rate. Lower the recording resolution or frame "
 "limit."
 msgstr ""
-"RGB変換にフレームごとに%sかかり、この解像度とフレームレートには遅すぎるた"
-"め、録画を開始しませんでした。録画の解像度またはフレームレートの上限を下げて"
-"ください。"
+"RGB変換にフレームごとに%sかかり、この解像度とフレームレートには遅すぎるため、"
+"録画を開始しませんでした。録画の解像度またはフレームレートの上限を下げてくだ"
+"さい。"
 
 #: src/app/App.cpp
 #, c-format
@@ -724,6 +728,89 @@ msgstr "CMAA2 → NIS · 適用外（2倍までの拡大のみ）"
 #, c-format
 msgid "CMAA2 → NIS · unavailable (%s)"
 msgstr "CMAA2 → NIS · 使用不可（%s）"
+
+#: src/app/App.cpp
+msgid "This build has no frame interpolation"
+msgstr "このビルドにはフレーム補間がありません"
+
+#: src/app/App.cpp
+msgid "Turn on RIFE frame interpolation under Settings → Video first"
+msgstr "先に設定 → 映像でRIFEフレーム補間をオンにしてください"
+
+#: src/app/App.cpp
+msgid "needs Immediate presentation"
+msgstr "画面表示方式を低遅延にする必要があります"
+
+#: src/app/App.cpp
+msgid "the driver keeps VSync on"
+msgstr "ドライバーがVSyncをオフにしません"
+
+#: src/app/App.cpp
+msgid "SDR only"
+msgstr "SDRのみ対応"
+
+#: src/app/App.cpp
+msgid "restart playback (F2, then Start) to capture 1920 × 1080"
+msgstr "1920 × 1080でキャプチャするには再生を開始し直してください（F2 → 開始）"
+
+#: src/app/App.cpp
+msgid "needs 1920 × 1080 at 24-60 fps"
+msgstr "24～60fpsの1920 × 1080が必要です"
+
+#: src/app/App.cpp
+msgid "RIFE frame interpolation OFF · F7: on"
+msgstr "RIFEフレーム補間 OFF · F7：オン"
+
+#: src/app/App.cpp
+msgid "RIFE frame interpolation · preparing"
+msgstr "RIFEフレーム補間 · 準備中"
+
+#: src/app/App.cpp
+msgid "RIFE frame interpolation ON · F7: off"
+msgstr "RIFEフレーム補間 ON · F7：オフ"
+
+#: src/app/App.cpp
+msgid "RIFE frame interpolation · late, showing original frames"
+msgstr "RIFEフレーム補間 · 間に合わないため元のフレームを表示"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE frame interpolation not applied · %s"
+msgstr "RIFEフレーム補間は適用されません · %s"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE frame interpolation unavailable · %s"
+msgstr "RIFEフレーム補間を使用できません · %s"
+
+#: src/app/App.cpp
+msgid "not in this build"
+msgstr "このビルドにはありません"
+
+#: src/app/App.cpp
+msgid "RIFE · off (F7)"
+msgstr "RIFE · オフ（F7）"
+
+#: src/app/App.cpp
+msgid "RIFE · preparing"
+msgstr "RIFE · 準備中"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE · not applied (%s)"
+msgstr "RIFE · 適用なし（%s）"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE · unavailable (%s)"
+msgstr "RIFE · 使用不可（%s）"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE · generated %llu · late %llu · busy %llu · GPU %.1f ms (max %.1f)"
+msgstr ""
+"RIFE · 生成 %llu · 遅延 %llu · 処理中のため省略 %llu · GPU %.1f ms（最大 "
+"%.1f）"
 
 #: src/app/App.cpp
 msgid "1:1 size · the capture matches this monitor, so fullscreen is used."
@@ -832,6 +919,53 @@ msgid ""
 msgstr ""
 "再生・スクリーンショット・録画に共通で適用されます。P010とHDR入力はそれぞれの"
 "範囲を維持します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"RIFE 4.25 Fast inserts a generated frame between two captured frames. Motion "
+"looks smoother; the game does not run faster and input response does not "
+"improve."
+msgstr ""
+"RIFE 4.25 Fastは、キャプチャした前後のフレームの間に生成フレームを挿入しま"
+"す。動きは滑らかに見えますが、ゲームが速くなったり入力の反応が良くなったりは"
+"しません。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Each original frame is shown about half a frame later than without "
+"interpolation."
+msgstr "元のフレームは、補間なしの場合より約半フレーム遅れて表示されます。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Needs 1920 × 1080 SDR input at 24-60 fps and Immediate presentation. "
+"Starting playback switches the capture to 1920 × 1080 with the selected "
+"pixel format; saved video settings are kept."
+msgstr ""
+"24～60fpsの1920 × 1080 SDR入力と、低遅延の画面表示方式が必要です。再生を始め"
+"ると、選択したピクセル形式のまま1920 × 1080でキャプチャします。保存した映像設"
+"定は変わりません。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Runs on the display GPU through Vulkan (ncnn). If RIFE cannot start or "
+"misses a frame's deadline, the original frame is shown."
+msgstr ""
+"表示用のGPUでVulkan（ncnn）を使って実行します。RIFEを開始できない場合やフレー"
+"ムの期限に間に合わない場合は、元のフレームを表示します。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"HUD protection keeps fixed elements such as hearts, text and score counters "
+"from warping."
+msgstr ""
+"HUD保護は、ハートや文字、スコアなどの固定された要素がゆがむのを防ぎます。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Display only: recordings and screenshots keep the captured frames."
+msgstr ""
+"表示のみに適用されます。録画とスクリーンショットはキャプチャしたフレームのま"
+"ま保存されます。"
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
@@ -1119,6 +1253,86 @@ msgstr "Limited (16-235)"
 #: src/ui/SettingsScreen.cpp
 msgid "Full (0-255)"
 msgstr "Full (0-255)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Frame interpolation (F7)"
+msgstr "フレーム補間（F7）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Use RIFE Vulkan frame interpolation"
+msgstr "RIFE Vulkanフレーム補間を使用"
+
+#: src/ui/SettingsScreen.cpp
+msgid "This build has no frame interpolation (it needs ncnn with Vulkan)."
+msgstr "このビルドにはフレーム補間がありません（Vulkan対応のncnnが必要です）。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "The RIFE model files are missing. Reinstall LLCV."
+msgstr "RIFEモデルファイルが見つかりません。LLCVを再インストールしてください。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Off. When on, a generated frame is shown between two captured frames."
+msgstr ""
+"オフ。オンにすると、キャプチャした前後のフレームの間に生成フレームを表示しま"
+"す。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "HUD protection"
+msgstr "HUD保護"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Luma and color edges (recommended)"
+msgstr "輝度と色の輪郭（推奨）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Luma edges"
+msgstr "輝度の輪郭"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Capture rate while interpolating"
+msgstr "補間中のキャプチャフレームレート"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (highest 24-60 fps)"
+msgstr "自動（24～60fpsの最大値）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Same as Frame rate (24-60 fps)"
+msgstr "フレームレートと同じ（24～60fps）"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Not used in audio-only mode."
+msgstr "オーディオ専用モードでは使用しません。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "P010 (HDR) is not interpolated. Choose an SDR pixel format."
+msgstr "P010（HDR）は補間しません。SDRのピクセル形式を選択してください。"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Needs Immediate presentation. With VSync, original frames are shown."
+msgstr ""
+"画面表示方式を低遅延にする必要があります。VSyncでは元のフレームを表示します。"
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid ""
+"While interpolating: %d × %d · %s · %s fps (saved video settings are kept)"
+msgstr "補間中：%d × %d · %s · %s fps（保存した映像設定は変わりません）"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"This device has no 1920 × 1080 mode at 24-60 fps for the selected format. "
+"The saved capture settings are used and frames are not interpolated."
+msgstr ""
+"このデバイスは、選択した形式で24～60fpsの1920 × 1080モードに対応していませ"
+"ん。保存したキャプチャ設定を使い、補間は行いません。"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"F7 turns interpolation on and off during playback without reconnecting the "
+"capture device."
+msgstr ""
+"F7で、再生中にキャプチャデバイスを再接続せずに補間をオン・オフできます。"
 
 #: src/ui/SettingsScreen.cpp
 msgid "CMAA2 → NIS"
@@ -2038,6 +2252,10 @@ msgid "Toggle CMAA2 → NIS upscaling"
 msgstr "CMAA2 → NISアップスケーリングのオン・オフ"
 
 #: src/ui/Shortcuts.h
+msgid "Toggle RIFE frame interpolation"
+msgstr "RIFEフレーム補間のオン・オフ"
+
+#: src/ui/Shortcuts.h
 msgid "Show / hide the menu bar"
 msgstr "メニューバーの表示 / 非表示"
 
@@ -2198,6 +2416,10 @@ msgstr "シャープに拡大"
 #: src/ui/ViewerOverlay.cpp
 msgid "CMAA2 → NIS upscaling"
 msgstr "CMAA2 → NISアップスケーリング"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "RIFE frame interpolation"
+msgstr "RIFEフレーム補間"
 
 #: src/ui/ViewerOverlay.cpp
 msgid "Immediate presentation"

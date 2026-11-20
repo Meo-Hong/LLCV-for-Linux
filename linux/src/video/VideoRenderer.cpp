@@ -542,7 +542,7 @@ void VideoRenderer::Clear(int targetWidth, int targetHeight, float red, float gr
     gl.Clear(GL_COLOR_BUFFER_BIT);
 }
 
-GLuint VideoRenderer::UpscaledTexture(const PixelRect& rect) {
+GLuint VideoRenderer::UpscaledTexture(const PixelRect& rect, GLuint source, uint64_t generation) {
     upscaleState_ = UpscaleState::Off;
     if (!upscaleRequested_) return 0;
     if (!UpscalingSupported()) {
@@ -554,8 +554,8 @@ GLuint VideoRenderer::UpscaledTexture(const PixelRect& rect) {
         return 0;
     }
     const bool hdr = output_ == OutputMode::Pq;
-    const GLuint texture = upscaler_.Process(video_.texture, sourceWidth_, sourceHeight_, rect.width, rect.height,
-                                             upscaleSharpness_, upscalePreserve_, hdr, imageGeneration_);
+    const GLuint texture = upscaler_.Process(source, sourceWidth_, sourceHeight_, rect.width, rect.height,
+                                             upscaleSharpness_, upscalePreserve_, hdr, generation);
     if (!texture) {
         upscaleState_ = UpscaleState::Unavailable;
     } else {
@@ -564,7 +564,7 @@ GLuint VideoRenderer::UpscaledTexture(const PixelRect& rect) {
     return texture;
 }
 
-void VideoRenderer::Draw(int targetWidth, int targetHeight, bool sharp) {
+void VideoRenderer::Draw(int targetWidth, int targetHeight, bool sharp, GLuint generated) {
     Clear(targetWidth, targetHeight, 0.0f, 0.0f, 0.0f);
     lastRect_ = FitRect(targetWidth, targetHeight);
     if (lastRect_.width <= 0 || lastRect_.height <= 0) {
@@ -572,11 +572,13 @@ void VideoRenderer::Draw(int targetWidth, int targetHeight, bool sharp) {
         return;
     }
 
-    const GLuint upscaled = UpscaledTexture(lastRect_);
+    const GLuint source = generated ? generated : video_.texture;
+    const uint64_t generation = generated ? (++generatedGeneration_ | (uint64_t{1} << 63)) : imageGeneration_;
+    const GLuint upscaled = UpscaledTexture(lastRect_, source, generation);
     gl.BindFramebuffer(GL_FRAMEBUFFER, 0);
     gl.Viewport(0, 0, targetWidth, targetHeight);
     gl.ActiveTexture(GL_TEXTURE0);
-    SetFilter(upscaled ? upscaled : video_.texture, upscaled ? true : sharp);
+    SetFilter(upscaled ? upscaled : source, upscaled ? true : sharp);
     ResetPipelineState();
     const PixelRect& rect = lastRect_;
     const float x0 = static_cast<float>(rect.x) / targetWidth * 2.0f - 1.0f;
@@ -605,7 +607,7 @@ void VideoRenderer::ComposeHdr(int targetWidth, int targetHeight, bool sharp) {
     lastRect_ = FitRect(targetWidth, targetHeight);
     const bool video = output_ == OutputMode::Pq && lastRect_.width > 0 && lastRect_.height > 0;
     upscaleState_ = UpscaleState::Off;
-    const GLuint upscaled = video ? UpscaledTexture(lastRect_) : 0;
+    const GLuint upscaled = video ? UpscaledTexture(lastRect_, video_.texture, imageGeneration_) : 0;
     gl.BindFramebuffer(GL_FRAMEBUFFER, 0);
     gl.Viewport(0, 0, targetWidth, targetHeight);
 

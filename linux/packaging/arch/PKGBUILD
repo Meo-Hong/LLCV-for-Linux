@@ -1,21 +1,28 @@
 pkgname=llcv
-pkgver=2.2.1
+pkgver=2.4.0
 pkgrel=1
 pkgdesc="Low-latency viewer for USB (UVC) HDMI capture devices, with HDR10"
 arch=('x86_64' 'aarch64')
 url="https://github.com/Meo-Hong/LLCV-for-Linux"
-license=('GPL-3.0-or-later' 'MIT' 'OFL-1.1' 'Apache-2.0')
+license=('GPL-3.0-or-later' 'MIT' 'OFL-1.1' 'Apache-2.0' 'BSD-3-Clause' 'BSD-2-Clause')
 depends=('dbus' 'ffmpeg' 'gcc-libs' 'glibc' 'libglvnd' 'libjpeg-turbo' 'libpng' 'sdl3' 'wayland')
 makedepends=('cmake' 'pkgconf' 'wayland-protocols')
+makedepends_x86_64=('vulkan-headers')
 optdepends=('pipewire: low-latency audio routing (recommended)'
             'libdecor: window title bar on GNOME Wayland'
             'v4l-utils: inspect capture devices with v4l2-ctl')
+optdepends_x86_64=('vulkan-icd-loader: RIFE frame interpolation (F7)')
 source=()
 sha256sums=()
 
 _srcroot="$(realpath "$startdir/../..")"
 
 build() {
+    local interpolation=(-DLLCV_FRAME_INTERPOLATION=OFF)
+    if [[ $CARCH == x86_64 ]]; then
+        "$_srcroot/tools/build-ncnn-static.sh" "$srcdir/ncnn-build"
+        interpolation=(-DLLCV_FRAME_INTERPOLATION=ON -Dncnn_DIR="$srcdir/ncnn-build/prefix/lib/cmake/ncnn")
+    fi
     cmake -S "$_srcroot" -B build \
         -DCMAKE_BUILD_TYPE=None \
         -DCMAKE_INSTALL_PREFIX=/usr \
@@ -23,7 +30,8 @@ build() {
         -DLLCV_SDL3=SYSTEM \
         -DLLCV_WAYLAND_COLOR_MANAGEMENT=ON \
         -DLLCV_SLEEP_INHIBIT=ON \
-        -DLLCV_RECORDING=ON
+        -DLLCV_RECORDING=ON \
+        "${interpolation[@]}"
     cmake --build build
 }
 
@@ -35,4 +43,10 @@ package() {
     install -Dm644 "$_srcroot/third_party/upscaling/nis/licence.txt" "$pkgdir/usr/share/licenses/$pkgname/NIS-MIT.txt"
     install -Dm644 "$_srcroot/third_party/upscaling/cmaa2/license.txt" "$pkgdir/usr/share/licenses/$pkgname/CMAA2-Apache-2.0.txt"
     install -Dm644 "$_srcroot/third_party/upscaling/NOTICE.txt" "$pkgdir/usr/share/licenses/$pkgname/upscaling-NOTICE.txt"
+    if [[ $CARCH == x86_64 ]]; then
+        install -Dm644 "$_srcroot/third_party/frame-interpolation/RIFE-MODEL-LICENSE.txt" "$pkgdir/usr/share/licenses/$pkgname/RIFE-MIT.txt"
+        install -Dm644 "$_srcroot/third_party/frame-interpolation/NCNN-LICENSE.txt" "$pkgdir/usr/share/licenses/$pkgname/ncnn-BSD-3-Clause.txt"
+        install -Dm644 "$_srcroot/third_party/frame-interpolation/GLSLANG-LICENSE.txt" "$pkgdir/usr/share/licenses/$pkgname/glslang-LICENSE.txt"
+        install -Dm644 "$_srcroot/third_party/frame-interpolation/NOTICE.txt" "$pkgdir/usr/share/licenses/$pkgname/frame-interpolation-NOTICE.txt"
+    fi
 }

@@ -16,6 +16,7 @@
 #include "ui/SettingsScreen.h"
 #include "ui/Theme.h"
 #include "ui/ViewerOverlay.h"
+#include "video/FrameInterpolator.h"
 #include "video/HdrOutput.h"
 #include "video/VideoRenderer.h"
 
@@ -104,6 +105,7 @@ private:
     void PositionOnPreferredDisplay();
     void SetFullscreen(bool fullscreen);
     void ApplySwapInterval();
+    int RequestedFps() const;
     void RefreshPreferredColor();
     void UpdateHdrState();
     ui::HdrSupport EvaluateHdrSupport(const capture::CaptureDevice* device) const;
@@ -126,6 +128,11 @@ private:
     bool RecordingActive() const;
     void ToggleMute();
     void ToggleUpscaling();
+    void ToggleInterpolation();
+    bool UsesInterpolationCapture() const;
+    GLuint InterpolateFrame(int64_t arrivalUs);
+    void ReportInterpolation();
+    std::string InterpolationText() const;
     void ReportUpscaling();
     std::string UpscalingText() const;
     void SetPlaybackMuted(bool muted);
@@ -171,6 +178,13 @@ private:
     recording::Recorder recorder_;
     recording::EncoderProbe encoderProbe_;
     video::VideoRenderer renderer_;
+    video::FrameInterpolator interpolator_;
+    video::InterpolationNotices interpolationNotices_;
+    double interpolationFps_ = 0.0;
+    std::string interpolationIssue_;
+    bool immediateSwap_ = false;
+    bool interpolationCapture_ = false;
+    bool interpolationCapture40_ = false;
     video::HdrOutput hdrOutput_;
     video::PreferredColor preferredColor_;
     bool hdrActive_ = false;

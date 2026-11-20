@@ -41,6 +41,17 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="2.4.0" date="2026-11-21">
+      <description>
+        <p>Follows the Windows LLCV 2.3.0 to 2.4.0 updates.</p>
+        <ul>
+          <li>Optional RIFE frame interpolation (F7) on a Vulkan GPU doubles 1920×1080 SDR video at 24 to 60 fps (x86_64).</li>
+          <li>HUD protection keeps fixed screen elements such as hearts and text from smearing.</li>
+          <li>While interpolating, capture follows the frame rate, Auto or a chosen 24 to 60 fps rate.</li>
+          <li>Recordings that end normally show their length in file managers.</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.2.1" date="2026-11-02">
       <description>
         <p>Follows the Windows LLCV 2.2.0 and 2.2.1 updates.</p>

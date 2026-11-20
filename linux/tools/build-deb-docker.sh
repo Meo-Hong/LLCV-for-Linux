@@ -7,6 +7,9 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 
 "$root/tools/fetch-sdl3.sh" >/dev/null
 "$root/tools/fetch-ffmpeg.sh" >/dev/null
+case "$cross_arch" in
+    ""|amd64) "$root/tools/fetch-ncnn.sh" >/dev/null ;;
+esac
 mkdir -p "$root/dist"
 
 docker="docker"

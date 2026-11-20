@@ -57,4 +57,39 @@ int RequestedCaptureFps(const settings::AppSettings& settings) {
     return settings.frameRateMilli > 0 ? static_cast<int>(std::lround(settings.frameRateMilli / 1000.0)) : 0;
 }
 
+int InterpolationFrameRateMilli(const settings::AppSettings& settings) {
+    const auto supported = [](int milli) { return milli >= 23500 && milli <= 60500; };
+    if (settings.rifeFrameRateMilli == 0 || supported(settings.rifeFrameRateMilli)) return settings.rifeFrameRateMilli;
+    if (settings.capture40Fps) return 40000;
+    return supported(settings.frameRateMilli) ? settings.frameRateMilli : 0;
+}
+
+std::optional<capture::ResolvedMode> ResolveInterpolationMode(const capture::CaptureDevice& device,
+                                                             const settings::AppSettings& settings, bool& capture40) {
+    capture::ModeRequest request = RequestFromSettings(settings);
+    request.width = 1920;
+    request.height = 1080;
+    request.capture40Fps = false;
+    capture40 = false;
+    const int milli = InterpolationFrameRateMilli(settings);
+    if (milli == 40000 && settings.capture40Fps) {
+        request.capture40Fps = true;
+        capture40 = true;
+        return capture::ResolveMode(device, request);
+    }
+    if (milli > 0) {
+        request.fpsMilli = milli;
+        return capture::ResolveMode(device, request);
+    }
+    int best = 0;
+    for (const auto& rate : capture::RatesAt(device, request.width, request.height, request.format)) {
+        const int value = rate.Milli();
+        if (value >= 23500 && value <= 60500 && value > best) best = value;
+    }
+    if (best == 0) return std::nullopt;
+    request.fpsMilli = best;
+    request.allowUnlistedFps = false;
+    return capture::ResolveMode(device, request);
+}
+
 }

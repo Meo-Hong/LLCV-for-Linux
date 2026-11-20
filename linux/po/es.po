@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: LLCV\n"
 "Report-Msgid-Bugs-To: https://github.com/Meo-Hong/LLCV-for-Linux/issues\n"
-"POT-Creation-Date: 2026-11-02 02:05+0900\n"
+"POT-Creation-Date: 2026-11-21 07:32+0900\n"
 "PO-Revision-Date: 2026-10-19 21:00+0900\n"
 "Last-Translator: Meo-hong\n"
 "Language-Team: none\n"
@@ -187,6 +187,10 @@ msgstr "FPS reales"
 #: src/app/App.cpp src/ui/SettingsScreen.cpp
 msgid "Upscaling"
 msgstr "Reescalado"
+
+#: src/app/App.cpp
+msgid "Frame interpolation"
+msgstr "Interpolación de fotogramas"
 
 #: src/app/App.cpp
 msgid "App latency"
@@ -740,6 +744,90 @@ msgid "CMAA2 → NIS · unavailable (%s)"
 msgstr "CMAA2 → NIS · no disponible (%s)"
 
 #: src/app/App.cpp
+msgid "This build has no frame interpolation"
+msgstr "Esta compilación no incluye interpolación de fotogramas"
+
+#: src/app/App.cpp
+msgid "Turn on RIFE frame interpolation under Settings → Video first"
+msgstr ""
+"Primero activa la interpolación de fotogramas RIFE en Configuración → Video"
+
+#: src/app/App.cpp
+msgid "needs Immediate presentation"
+msgstr "requiere el modo de presentación Inmediato"
+
+#: src/app/App.cpp
+msgid "the driver keeps VSync on"
+msgstr "el controlador mantiene VSync activado"
+
+#: src/app/App.cpp
+msgid "SDR only"
+msgstr "solo SDR"
+
+#: src/app/App.cpp
+msgid "restart playback (F2, then Start) to capture 1920 × 1080"
+msgstr "reinicia la reproducción (F2 y luego Iniciar) para capturar a 1920 × 1080"
+
+#: src/app/App.cpp
+msgid "needs 1920 × 1080 at 24-60 fps"
+msgstr "requiere 1920 × 1080 a 24-60 fps"
+
+#: src/app/App.cpp
+msgid "RIFE frame interpolation OFF · F7: on"
+msgstr "Interpolación RIFE OFF · F7: activar"
+
+#: src/app/App.cpp
+msgid "RIFE frame interpolation · preparing"
+msgstr "Interpolación RIFE · preparando"
+
+#: src/app/App.cpp
+msgid "RIFE frame interpolation ON · F7: off"
+msgstr "Interpolación RIFE ON · F7: desactivar"
+
+#: src/app/App.cpp
+msgid "RIFE frame interpolation · late, showing original frames"
+msgstr ""
+"Interpolación RIFE · con retraso, se muestran los fotogramas originales"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE frame interpolation not applied · %s"
+msgstr "Interpolación RIFE no aplicada · %s"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE frame interpolation unavailable · %s"
+msgstr "Interpolación RIFE no disponible · %s"
+
+#: src/app/App.cpp
+msgid "not in this build"
+msgstr "no incluida en esta compilación"
+
+#: src/app/App.cpp
+msgid "RIFE · off (F7)"
+msgstr "RIFE · desactivada (F7)"
+
+#: src/app/App.cpp
+msgid "RIFE · preparing"
+msgstr "RIFE · preparando"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE · not applied (%s)"
+msgstr "RIFE · no aplicada (%s)"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE · unavailable (%s)"
+msgstr "RIFE · no disponible (%s)"
+
+#: src/app/App.cpp
+#, c-format
+msgid "RIFE · generated %llu · late %llu · busy %llu · GPU %.1f ms (max %.1f)"
+msgstr ""
+"RIFE · generados %llu · tarde %llu · ocupado %llu · GPU %.1f ms (máx. %.1f)"
+
+#: src/app/App.cpp
 msgid "1:1 size · the capture matches this monitor, so fullscreen is used."
 msgstr ""
 "Tamaño 1:1 · la captura coincide con este monitor, así que se usa pantalla "
@@ -849,6 +937,58 @@ msgid ""
 msgstr ""
 "Se aplica a la reproducción, las capturas de pantalla y la grabación. La "
 "entrada P010 y HDR conserva su propio rango."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"RIFE 4.25 Fast inserts a generated frame between two captured frames. Motion "
+"looks smoother; the game does not run faster and input response does not "
+"improve."
+msgstr ""
+"RIFE 4.25 Fast inserta un fotograma generado entre dos fotogramas "
+"capturados. El movimiento se ve más fluido; el juego no corre más rápido y "
+"la respuesta a los controles no mejora."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Each original frame is shown about half a frame later than without "
+"interpolation."
+msgstr ""
+"Cada fotograma original se muestra aproximadamente medio fotograma más tarde "
+"que sin interpolación."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Needs 1920 × 1080 SDR input at 24-60 fps and Immediate presentation. "
+"Starting playback switches the capture to 1920 × 1080 with the selected "
+"pixel format; saved video settings are kept."
+msgstr ""
+"Requiere entrada SDR de 1920 × 1080 a 24-60 fps y el modo de presentación "
+"“Inmediato”. Al iniciar la reproducción, la captura cambia a 1920 × 1080 con "
+"el formato de píxel seleccionado; la configuración de video guardada se "
+"conserva."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"Runs on the display GPU through Vulkan (ncnn). If RIFE cannot start or "
+"misses a frame's deadline, the original frame is shown."
+msgstr ""
+"Se ejecuta en la GPU de la pantalla mediante Vulkan (ncnn). Si RIFE no puede "
+"iniciarse o no termina un fotograma a tiempo, se muestra el fotograma "
+"original."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"HUD protection keeps fixed elements such as hearts, text and score counters "
+"from warping."
+msgstr ""
+"La protección del HUD evita que se deformen elementos fijos como corazones, "
+"texto y marcadores."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Display only: recordings and screenshots keep the captured frames."
+msgstr ""
+"Solo afecta a la pantalla: las grabaciones y las capturas de pantalla "
+"conservan los fotogramas capturados."
 
 #: src/ui/SettingsScreen.cpp
 msgid ""
@@ -1138,6 +1278,93 @@ msgstr "Limited (16-235)"
 #: src/ui/SettingsScreen.cpp
 msgid "Full (0-255)"
 msgstr "Full (0-255)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Frame interpolation (F7)"
+msgstr "Interpolación de fotogramas (F7)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Use RIFE Vulkan frame interpolation"
+msgstr "Usar interpolación de fotogramas RIFE Vulkan"
+
+#: src/ui/SettingsScreen.cpp
+msgid "This build has no frame interpolation (it needs ncnn with Vulkan)."
+msgstr ""
+"Esta compilación no incluye interpolación de fotogramas (requiere ncnn con "
+"Vulkan)."
+
+#: src/ui/SettingsScreen.cpp
+msgid "The RIFE model files are missing. Reinstall LLCV."
+msgstr "Faltan los archivos del modelo RIFE. Reinstala LLCV."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Off. When on, a generated frame is shown between two captured frames."
+msgstr ""
+"Desactivada. Al activarla, se muestra un fotograma generado entre dos "
+"fotogramas capturados."
+
+#: src/ui/SettingsScreen.cpp
+msgid "HUD protection"
+msgstr "Protección del HUD"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Luma and color edges (recommended)"
+msgstr "Bordes de luminancia y color (recomendado)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Luma edges"
+msgstr "Bordes de luminancia"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Capture rate while interpolating"
+msgstr "Velocidad de captura al interpolar"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Auto (highest 24-60 fps)"
+msgstr "Automático (la más alta de 24-60 fps)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Same as Frame rate (24-60 fps)"
+msgstr "Igual que “Velocidad de fotogramas” (24-60 fps)"
+
+#: src/ui/SettingsScreen.cpp
+msgid "Not used in audio-only mode."
+msgstr "No se usa en el modo solo audio."
+
+#: src/ui/SettingsScreen.cpp
+msgid "P010 (HDR) is not interpolated. Choose an SDR pixel format."
+msgstr "P010 (HDR) no se interpola. Elige un formato de píxel SDR."
+
+#: src/ui/SettingsScreen.cpp
+msgid "Needs Immediate presentation. With VSync, original frames are shown."
+msgstr ""
+"Requiere el modo de presentación “Inmediato”. Con VSync se muestran los "
+"fotogramas originales."
+
+#: src/ui/SettingsScreen.cpp
+#, c-format
+msgid ""
+"While interpolating: %d × %d · %s · %s fps (saved video settings are kept)"
+msgstr ""
+"Al interpolar: %d × %d · %s · %s fps (se conserva la configuración de video "
+"guardada)"
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"This device has no 1920 × 1080 mode at 24-60 fps for the selected format. "
+"The saved capture settings are used and frames are not interpolated."
+msgstr ""
+"Este dispositivo no tiene un modo de 1920 × 1080 a 24-60 fps para el formato "
+"seleccionado. Se usa la configuración de captura guardada y no se interpolan "
+"fotogramas."
+
+#: src/ui/SettingsScreen.cpp
+msgid ""
+"F7 turns interpolation on and off during playback without reconnecting the "
+"capture device."
+msgstr ""
+"F7 activa y desactiva la interpolación durante la reproducción sin volver a "
+"conectar el dispositivo de captura."
 
 #: src/ui/SettingsScreen.cpp
 msgid "CMAA2 → NIS"
@@ -2076,6 +2303,10 @@ msgid "Toggle CMAA2 → NIS upscaling"
 msgstr "Activar/desactivar reescalado CMAA2 → NIS"
 
 #: src/ui/Shortcuts.h
+msgid "Toggle RIFE frame interpolation"
+msgstr "Activar/desactivar interpolación RIFE"
+
+#: src/ui/Shortcuts.h
 msgid "Show / hide the menu bar"
 msgstr "Mostrar / ocultar la barra de menús"
 
@@ -2239,6 +2470,10 @@ msgstr "Escalado nítido"
 #: src/ui/ViewerOverlay.cpp
 msgid "CMAA2 → NIS upscaling"
 msgstr "Reescalado CMAA2 → NIS"
+
+#: src/ui/ViewerOverlay.cpp
+msgid "RIFE frame interpolation"
+msgstr "Interpolación RIFE"
 
 #: src/ui/ViewerOverlay.cpp
 msgid "Immediate presentation"

@@ -4,7 +4,7 @@
 
 LLCV는 USB(UVC/V4L2) HDMI 캡처 장치의 영상과 소리를 낮은 지연으로 표시하는
 뷰어입니다. 이 폴더는 [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer)의
-Windows용 LLCV 2.2.1을 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
+Windows용 LLCV 2.4.0을 Meo-hong이 리눅스용으로 다시 작성한 것입니다.
 기준 장치는 AVerMedia Live Gamer ULTRA S GC553Pro이고, 기준 데스크톱은
 Ubuntu 26.04(GNOME, Wayland)입니다.
 
@@ -15,18 +15,21 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 > [이 저장소의 이슈](https://github.com/Meo-Hong/LLCV-for-Linux/issues)에
 > 남겨 주세요.
 
-## 2.2.1 새 기능
+## 2.4.0 새 기능
 
-- [업스케일링](#업스케일링)에 **CMAA2 보정**이 생겼습니다. **높음**은 경계를 더
-  부드럽게 다듬고, **보존형**은 글씨와 얇은 선의 원래 모양을 더 유지합니다.
-- **HDR10 업스케일링**: HDR 출력에서는 NIS로 확대하되, 윤곽이 망가지지 않도록
-  원본 영상과의 차이를 작게 제한합니다. HDR에서는 CMAA2를 쓰지 않습니다.
-- **안내 · 로그**의 **보고서 ZIP**이 최근 로그, 설정, 버전, 장치, 오류 정보를
-  모읍니다. 개인 경로와 일련번호는 가립니다.
-- 스크린샷 설정을 **앱**으로 옮겼고, 앱에 **릴리스 노트** 버튼을 넣었습니다. 녹화
-  폴더의 남은 공간은 백그라운드에서 읽습니다.
+- **RIFE 프레임 보간**(F7, x86_64 패키지): 24~60fps의 1920 × 1080 SDR 영상에서
+  캡처한 두 프레임 사이마다 생성 프레임을 보여 줘서 움직임이 부드러워집니다.
+  Practical-RIFE 4.25 Fast 모델을 Vulkan으로 GPU에서 실행하며, 처음에는 꺼져
+  있습니다. [프레임 보간](#프레임-보간)을 참고하세요.
+- **HUD 보호**가 하트, 글자, 점수처럼 고정된 화면 요소가 일그러지지 않게 합니다.
+- **보간 중 캡처 프레임레이트**: 프레임레이트 설정, 자동(24~60fps 중 최고),
+  목록의 프레임레이트 중에서 고릅니다. 저장한 캡처 설정은 바뀌지 않습니다.
+- **녹화 길이**: 정상적으로 끝난 녹화 파일에 MP4 전체 색인을 넣어서 파일 관리자에서도
+  길이가 보입니다([녹화](#녹화)).
 
-전체 목록: [릴리스 노트](release-notes/v2.2.1.md). 2.1.9에서는 RGB·UYVY 입력이
+전체 목록: [릴리스 노트](release-notes/v2.4.0.md). 2.2.1에서는 CMAA2 보정, HDR10
+업스케일링, 보고서 ZIP이 추가되었습니다([2.2.1 릴리스 노트](release-notes/v2.2.1.md)).
+2.1.9에서는 RGB·UYVY 입력이
 추가되었습니다([2.1.9 릴리스 노트](release-notes/v2.1.9.md)). 2.1.7에서는
 [CMAA2 → NIS 업스케일링](#업스케일링)(F6), SDR 색 범위 분리, 직접 고른 FPS 엄격
 적용이 추가되었습니다([2.1.7 릴리스 노트](release-notes/v2.1.7.md)). 2.1.4에서는 F2가 기본 설정
@@ -41,6 +44,7 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 | 화면 출력 | D3D11 / DXGI | OpenGL 3.3 (Wayland는 EGL, X11은 GLX), 또는 OpenGL ES 3.0 |
 | 색 변환 | D3D11 Video Processor | GLSL 셰이더, BT.601/709/2020, Limited/Full |
 | 업스케일링 | CMAA2 → NIS 또는 NVIDIA VSR | CMAA2 → NIS (OpenGL 4.3 컴퓨트 셰이더) |
+| 프레임 보간 | RIFE Vulkan 또는 NVIDIA VFG | RIFE Vulkan (ncnn), OpenGL 공유 텍스처, x86_64 |
 | HDR10 | P010 + DXGI HDR10 | P010 + Wayland `wp_color_management_v1`, 또는 톤매핑 |
 | MJPEG | Media Foundation | libjpeg-turbo (YUV 평면으로 디코딩) |
 | 오디오 | WASAPI / ASIO | PipeWire 위의 SDL3 오디오 |
@@ -52,7 +56,8 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 | 녹화 파일 | 동영상 폴더 | `$XDG_VIDEOS_DIR/LLCV/` |
 | 업데이트 | 앱 안의 업데이트 확인 | APT 저장소 (`.deb`) |
 
-리눅스판에서 지원하지 않는 기능: NVIDIA VSR(CMAA2 → NIS는 지원), WASAPI Exclusive, ASIO,
+리눅스판에서 지원하지 않는 기능: NVIDIA VSR(CMAA2 → NIS는 지원), NVIDIA VFG 프레임
+보간(RIFE Vulkan은 지원), 재생 GPU 선택(화면을 출력하는 GPU를 사용), WASAPI Exclusive, ASIO,
 콘솔 LPCM 5.1, 독점 전체화면과 호환성(Blt) 표시 방식([전체화면](#전체화면) 참고),
 창 가장자리 스냅과 둥근 모서리(컴포지터나 창 관리자가 담당), 앱 안의 업데이트
 확인(패키지 관리자가 담당).
@@ -64,11 +69,11 @@ Ubuntu 26.04(GNOME, Wayland)입니다.
 
 | 파일 | 설치할 OS | 명령 |
 | --- | --- | --- |
-| `llcv_2.2.1_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.2.1_amd64.deb` |
-| `llcv_2.2.1_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.2.1_arm64.deb` |
-| `llcv_2.2.1_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.2.1_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.2.1-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.2.1-1.x86_64.rpm` |
-| `llcv-2.2.1-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.2.1-1-x86_64.pkg.tar.zst` |
+| `llcv_2.4.0_amd64.deb` | Ubuntu 22.04~26.04, Debian 12·13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.4.0_amd64.deb` |
+| `llcv_2.4.0_arm64.deb` | Raspberry Pi OS 64비트, Debian 12·13 (arm64) | `sudo apt install ./llcv_2.4.0_arm64.deb` |
+| `llcv_2.4.0_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32비트 (trixie) | `sudo apt install ./llcv_2.4.0_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.4.0-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9·10 | `sudo dnf install ./llcv-2.4.0-1.x86_64.rpm` |
+| `llcv-2.4.0-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.4.0-1-x86_64.pkg.tar.zst` |
 
 - `.deb`를 설치하면 LLCV APT 저장소도 함께 등록되어, 다음 버전부터는
   `apt upgrade`나 소프트웨어 업데이트로 받습니다. `.rpm`과 Arch는 Releases에서
@@ -229,6 +234,68 @@ SDR용으로 유지됩니다.
   다른 점이 하나 있습니다. NIS SDK에서 왼쪽·위쪽 가장자리가 반대편 가장자리를
   읽던 부호 오류를 리눅스 셰이더에서 고쳤습니다.
 
+## 프레임 보간
+
+**설정 → 영상 → 프레임 보간 (F7) → RIFE Vulkan 프레임 보간 사용**을 켜면 RIFE 4.25
+Fast를 사용합니다. 캡처한 두 프레임 사이마다 생성 프레임을 보여 줘서 움직임이
+부드러워 보입니다. 게임이 빨라지거나 입력 반응이 좋아지지는 않습니다. 원본
+프레임은 보간하지 않을 때보다 약 반 프레임 늦게 표시됩니다.
+
+- **조건.** 24~60fps의 1920 × 1080 SDR 입력, 저지연 화면 표시 방식, 그리고 같은
+  GPU에서 Vulkan 드라이버와 `GL_EXT_memory_object_fd`·`GL_EXT_semaphore_fd`를
+  지원하는 OpenGL 드라이버가 필요합니다. NVIDIA 드라이버와 Mesa의 radeonsi(AMD)·
+  iris(Intel)가 이 확장을 제공하지만, 확인한 것은 NVIDIA뿐입니다. P010(HDR),
+  VSync, 오디오 전용 모드에서는 보간하지 않습니다. amd64 `.deb`, `.rpm`, Arch
+  패키지에 들어 있고 Raspberry Pi 패키지에는 없습니다.
+- **캡처.** 보간을 켜 두면 재생을 시작할 때 선택한 픽셀 형식 그대로 1920 × 1080으로
+  캡처합니다. **보간 중 캡처 프레임레이트**는 **프레임레이트와 같게**(기본값,
+  40fps 캡처와 24~60fps의 직접 고른 프레임레이트는 그대로 쓰고 나머지는 자동),
+  **자동**(24~60fps 중 목록에서 가장 높은 값), 장치 목록의 프레임레이트 중에서
+  고릅니다. 저장한 영상 설정은 바뀌지 않습니다. 장치에 해당 모드가 없으면 저장한
+  설정으로 캡처하고 보간하지 않습니다.
+- **시간 맞춤.** 새 프레임이 도착하면 GPU가 직전 프레임과의 중간 프레임을
+  계산합니다. 반 프레임 시간(30fps에서 16.7 ms, 60fps에서 8.3 ms) 안에 끝나면 생성
+  프레임을 먼저 보여 주고 반 프레임 뒤에 새 프레임을 보여 줍니다. 늦으면 새
+  프레임만 보여 주고 기한 초과로 셉니다. GeForce RTX 2070에서 한 프레임은 약
+  10 ms라서 30fps는 화면에서 60fps가 되고, 60fps 입력은 생성 프레임 없이 표시됩니다.
+- **HUD 보호**(**밝기와 색 윤곽**(기본), **밝기 윤곽**, **끄기**)는 하트, 글자,
+  점수처럼 고정된 화면 요소가 일그러지지 않게 합니다.
+- **F7**(또는 **Alt → 보기 → RIFE 프레임 보간**)로 재생 중에 캡처 장치를 다시
+  연결하지 않고 보간을 끄고 켭니다. 이 선택은 다음 실행에도 유지되고, 설정의
+  체크는 켜진 채로 남습니다.
+- 화면 표시에만 적용됩니다. 녹화와 스크린샷은 캡처한 프레임 그대로입니다.
+  [업스케일링](#업스케일링)은 생성 프레임에도 적용됩니다.
+- Tab 진단의 **프레임 보간**에 생성, 기한 초과, 처리 중 건너뜀 횟수와 프레임당
+  GPU 시간이 나옵니다.
+- RIFE를 시작할 수 없으면(Vulkan 드라이버 없음, OpenGL과 Vulkan이 서로 다른 GPU,
+  확장 없음) 알림으로 이유를 보여 주고 원본 프레임을 표시합니다. 처음 모델을
+  읽을 때 1~4초 걸립니다.
+
+모델은 Windows LLCV 프로젝트가 ncnn용으로 변환한 Practical-RIFE 4.25(MIT)이며,
+Windows판 2.4.0 패키지의 파일을 그대로 가져왔습니다. Windows판 패치를 적용한
+ncnn 20261020(BSD 3-Clause)과 그 안의 glslang을 `llcv`에 넣어 실행합니다
+([third_party/frame-interpolation/NOTICE.txt](third_party/frame-interpolation/NOTICE.txt) 참고).
+Windows판의 다른 방식인 NVIDIA VFG는 NVIDIA의 Windows 런타임이 필요해서 지원하지
+않습니다.
+
+### 테스트 결과 (2.4.0)
+
+| 환경 | 확인한 내용 | 결과 |
+| --- | --- | --- |
+| Ubuntu 26.04, GeForce RTX 2070(NVIDIA 595) | 테스트 프로그램: 사각형이 움직이는 합성 1080p 프레임을 30fps로 OpenGL ↔ Vulkan 공유를 거쳐 보간 | 생성 프레임마다 사각형이 원본 사이 중간에 위치(300과 500 사이에서 x 397~561), 색과 방향 유지, 프레임당 12 ms |
+| Ubuntu 26.04, RTX 2070, GC553Pro NV12 1080p | 앱, 30fps, HUD 보호 끄기 | 400쌍 중 400쌍 생성, 기한 초과 없음, 프레임당 10.2 ms |
+| Ubuntu 26.04, RTX 2070, GC553Pro NV12 1080p | 앱, 60fps | 모든 쌍 기한 초과(8.3 ms 기한에 9.4 ms), 원본 프레임 표시 |
+| Ubuntu 26.04, RTX 2070, GC553Pro NV12 1080p | Ubuntu 22.04에서 빌드한 `.deb`, 30fps, HUD 보호 밝기와 색 | 549쌍 중 549쌍 생성, 평균 10.4 ms, 최대 11.3 ms |
+| Ubuntu 26.04, Mesa 26 llvmpipe | 보간을 켠 `.deb` | OpenGL에 `GL_EXT_memory_object_fd`가 없다는 알림, 원본 프레임 표시 |
+| Ubuntu 22.04·24.04·26.04, Debian 12·13 컨테이너 | Ubuntu 22.04에서 빌드한 amd64 `.deb` 하나를 각각 설치·실행 | 통과 |
+| AlmaLinux 9(CRB 사용)·10, Fedora 44 컨테이너 | AlmaLinux 9에서 빌드한 `.rpm` 설치·실행 | 통과. 같은 빌드가 RTX 2070에서 516쌍 중 513쌍 생성 |
+| Arch Linux 컨테이너 | `.pkg.tar.zst` 빌드·설치·실행 | 통과 |
+| Ubuntu 26.04, GC553Pro | 보간을 뺀 빌드(`LLCV_FRAME_INTERPOLATION=OFF`, ARM 패키지와 같음)에서 RIFE 설정을 켠 채 실행 | 저장한 캡처 설정으로 재생 |
+| 녹화 테스트 프로그램: FFmpeg 7.1.1(`.deb`와 같음) + NVENC, FFmpeg 8 + x264 | H.264·AAC 녹화를 정상 종료하고, 녹화 중에 복사본 만들기 | 완료 파일은 끝에 전체 색인이 붙음(`ftyp free mdat moov`), 복사본도 완성된 조각까지 재생 |
+
+아직 확인하지 못한 것: AMD·Intel GPU, X11, GPU가 두 개인 노트북, 새 설정 컨트롤
+직접 조작, 2.4.0 ARM 패키지(CI에서 빌드).
+
 ## 녹화
 
 **F9**를 누르면 재생 중인 영상과 캡처 오디오를 MP4로 녹화합니다. 다시 누르면
@@ -258,9 +325,12 @@ SDR용으로 유지됩니다.
   다음 키프레임에서 새 파일을 시작하므로 기준을 조금 넘을 수 있습니다.
 - **파일.** `$XDG_VIDEOS_DIR/LLCV/`(보통 `~/동영상/LLCV` 또는 `~/Videos/LLCV`)에
   `LLCV_YYYYMMDD_HHMMSS.mp4`로 저장하고, 분할된 파일은 `_part02`, `_part03` 식으로
-  이어집니다. 녹화 탭에서 다른 폴더를 고를 수 있습니다. 파일은 fragmented MP4라서
-  비정상 종료 때도 이미 기록된 부분은 대개 남지만, 마지막 몇 초는 보장하지
-  않습니다.
+  이어집니다. 녹화 탭에서 다른 폴더를 고를 수 있습니다. 녹화 중에는 fragmented MP4로
+  기록해서 비정상 종료 때도 이미 기록된 부분은 대개 남지만, 마지막 몇 초는 보장하지
+  않습니다. 녹화나 분할 파일이 정상적으로 끝나면 파일 끝에 전체 샘플 색인을
+  덧붙여서(hybrid MP4, FFmpeg 7.1 이상, `.deb` 패키지에 포함), 파일 관리자처럼 MP4
+  헤더만 읽는 프로그램도 길이를 보여 줍니다. 중간에 끊긴 파일과 더 오래된 시스템
+  FFmpeg로 녹화한 파일은 fragmented MP4 그대로 남습니다.
 - **일시정지·재개**는 메뉴 막대(**Alt → 녹화**)에 있습니다. 재생은 계속되고,
   일시정지한 시간은 파일에서 빠집니다.
 - 화면 구석에 녹화 시간과 용량을 표시합니다. 이 표시와 다른 오버레이, 재생 음량,
@@ -469,6 +539,7 @@ Alt나 종료 키(기본 Esc)를 다시 누르거나 메뉴 밖을 클릭하면 
 | F9 | 녹화 시작 / 종료 |
 | M | 재생 음소거 켜기 / 끄기 |
 | F6 | CMAA2 → NIS 업스케일링 켜기 / 끄기 |
+| F7 | RIFE 프레임 보간 켜기 / 끄기 |
 | 마우스 휠 | 음량 ±5% (음소거도 해제) |
 | 더블 클릭 | 전체화면 전환 |
 

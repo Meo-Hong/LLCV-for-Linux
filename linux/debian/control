@@ -12,6 +12,7 @@ Build-Depends:
  libdbus-1-dev,
  libva-dev,
  libx264-dev,
+ libvulkan-dev [amd64],
  nasm [amd64 i386],
  xz-utils,
  libwayland-dev,
@@ -45,6 +46,7 @@ Depends:
  libegl1,
  libgl1,
 Recommends:
+ ${llcv:Recommends},
  pipewire-audio | pulseaudio,
  libdecor-0-0,
  libwayland-cursor0,
@@ -66,6 +68,10 @@ Description: low-latency viewer for USB HDMI capture devices
  of SDR video with H.264, HEVC or AV1 (NVENC or VA-API; H.264 also on the
  CPU through x264, using a built-in FFmpeg) and a live diagnostics overlay. It runs on Wayland by default and can also use X11
  (XWayland), with Mesa (AMD, Intel) and NVIDIA OpenGL drivers.
+ .
+ On amd64, optional RIFE frame interpolation (F7) doubles 1920x1080 SDR
+ video at 24 to 60 fps with the Practical-RIFE 4.25 model on a Vulkan GPU,
+ through a built-in ncnn.
  .
  P010 capture needs Linux 7.1 or newer, or a uvcvideo module with P010
  support. On releases without SDL3, such as Ubuntu 22.04 and 24.04, SDL3

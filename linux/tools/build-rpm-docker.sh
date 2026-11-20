@@ -5,6 +5,7 @@ image="${1:-fedora:latest}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 
 "$root/tools/fetch-sdl3.sh" >/dev/null
+"$root/tools/fetch-ncnn.sh" >/dev/null
 mkdir -p "$root/dist"
 
 docker="docker"

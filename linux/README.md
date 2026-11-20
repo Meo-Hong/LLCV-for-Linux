@@ -3,7 +3,7 @@
 > [한국어](README.ko.md)
 
 LLCV shows video and audio from USB (UVC/V4L2) HDMI capture devices with low
-latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.2.1 viewer
+latency. This is a Linux rewrite, by Meo-hong, of the Windows LLCV 2.4.0 viewer
 by [seria-aa](https://github.com/seria-aa/LowLatencyCaptureViewer). The
 reference device is the AVerMedia Live Gamer ULTRA S GC553Pro. The reference
 desktop is Ubuntu 26.04 (GNOME, Wayland).
@@ -16,19 +16,24 @@ desktop is Ubuntu 26.04 (GNOME, Wayland).
 > [this repository's issues](https://github.com/Meo-Hong/LLCV-for-Linux/issues),
 > not in the original repository.
 
-## What's new in 2.2.1
+## What's new in 2.4.0
 
-- **CMAA2 correction** for [upscaling](#upscaling): **High** smooths more
-  edges, **Preserve** keeps more of the original text and thin lines.
-- **HDR10 upscaling**: with HDR output, NIS enlarges the video and the result
-  stays close to the original image so contours are not damaged. CMAA2 is
-  skipped in HDR.
-- **Report ZIP** under **Guide & logs** collects recent logs, settings,
-  versions, devices and errors, with personal paths and serial numbers masked.
-- Screenshot settings moved to **App**, which also has a **Release notes**
-  button. The recording folder's free space is read in the background.
+- **RIFE frame interpolation** (F7, x86_64 packages): a generated frame is
+  shown between every two captured 1920 × 1080 SDR frames at 24 to 60 fps, so
+  motion looks smoother. It runs on the GPU through Vulkan with the
+  Practical-RIFE 4.25 Fast model and is off by default. See
+  [Frame interpolation](#frame-interpolation).
+- **HUD protection** keeps fixed screen elements such as hearts, text and
+  score counters from warping.
+- **Capture rate while interpolating**: the Frame rate setting, Auto (highest
+  rate from 24 to 60 fps) or a listed rate. The saved capture settings are
+  kept.
+- **Recording length**: recordings that end normally get a complete MP4
+  index, so file managers show their length ([Recording](#recording)).
 
-Full list: [release notes](release-notes/v2.2.1.md). 2.1.9 added RGB and UYVY
+Full list: [release notes](release-notes/v2.4.0.md). 2.2.1 added CMAA2
+correction, HDR10 upscaling and the report ZIP ([2.2.1 notes](release-notes/v2.2.1.md)).
+2.1.9 added RGB and UYVY
 input ([2.1.9 notes](release-notes/v2.1.9.md)). 2.1.7 added
 [CMAA2 → NIS upscaling](#upscaling) (F6), a separate SDR color range and strict
 explicit frame rates ([2.1.7 notes](release-notes/v2.1.7.md)). 2.1.4 made F2 open the
@@ -44,6 +49,7 @@ fullscreen video size and position ([2.1.3 notes](release-notes/v2.1.3.md),
 | Presentation | D3D11 / DXGI | OpenGL 3.3 (EGL on Wayland, GLX on X11), or OpenGL ES 3.0 |
 | Color conversion | D3D11 Video Processor | GLSL shaders, BT.601/709/2020, limited/full range |
 | Upscaling | CMAA2 → NIS or NVIDIA VSR | CMAA2 → NIS (OpenGL 4.3 compute shaders) |
+| Frame interpolation | RIFE Vulkan or NVIDIA VFG | RIFE Vulkan (ncnn) with OpenGL shared textures, x86_64 |
 | HDR10 | P010 + DXGI HDR10 | P010 + Wayland `wp_color_management_v1`, or tone mapping |
 | MJPEG | Media Foundation | libjpeg-turbo (decoded to YUV planes) |
 | Audio | WASAPI / ASIO | SDL3 audio on PipeWire |
@@ -55,7 +61,9 @@ fullscreen video size and position ([2.1.3 notes](release-notes/v2.1.3.md),
 | Recordings | Videos | `$XDG_VIDEOS_DIR/LLCV/` |
 | Updates | In-app update check | APT repository (`.deb`) |
 
-Not available on Linux: NVIDIA VSR (CMAA2 → NIS is available), WASAPI Exclusive, ASIO, console LPCM 5.1,
+Not available on Linux: NVIDIA VSR (CMAA2 → NIS is available), NVIDIA VFG frame
+interpolation (RIFE Vulkan is available), the playback GPU choice (the GPU
+that runs the display is used), WASAPI Exclusive, ASIO, console LPCM 5.1,
 the exclusive fullscreen and Compatibility (Blt) presentation modes (see
 [Fullscreen](#fullscreen)), window edge snapping and rounded corners (the
 compositor or window manager handles them), and the in-app update check (the
@@ -68,11 +76,11 @@ Download the file for your system from
 
 | File | Install on | Command |
 | --- | --- | --- |
-| `llcv_2.2.1_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.2.1_amd64.deb` |
-| `llcv_2.2.1_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.2.1_arm64.deb` |
-| `llcv_2.2.1_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.2.1_raspberrypi-32bit_armhf.deb` |
-| `llcv-2.2.1-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.2.1-1.x86_64.rpm` |
-| `llcv-2.2.1-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.2.1-1-x86_64.pkg.tar.zst` |
+| `llcv_2.4.0_amd64.deb` | Ubuntu 22.04 to 26.04, Debian 12 and 13, Linux Mint, Pop!_OS, Zorin OS, elementary OS, LMDE, Kali | `sudo apt install ./llcv_2.4.0_amd64.deb` |
+| `llcv_2.4.0_arm64.deb` | Raspberry Pi OS 64-bit, Debian 12 and 13 (arm64) | `sudo apt install ./llcv_2.4.0_arm64.deb` |
+| `llcv_2.4.0_raspberrypi-32bit_armhf.deb` | Raspberry Pi OS 32-bit (trixie) | `sudo apt install ./llcv_2.4.0_raspberrypi-32bit_armhf.deb` |
+| `llcv-2.4.0-1.x86_64.rpm` | Fedora, Nobara, RHEL, Rocky Linux, AlmaLinux 9 and 10 | `sudo dnf install ./llcv-2.4.0-1.x86_64.rpm` |
+| `llcv-2.4.0-1-x86_64.pkg.tar.zst` | Arch Linux, Manjaro, EndeavourOS | `sudo pacman -U ./llcv-2.4.0-1-x86_64.pkg.tar.zst` |
 
 - Installing a `.deb` also registers the LLCV APT repository, so later
   versions arrive through `apt upgrade` or Software Updater. For `.rpm` and
@@ -243,6 +251,73 @@ erode fine contours. The CMAA2 correction setting is kept for SDR.
   One difference: the Linux NIS shader fixes a sign error in the SDK that made
   the left and top edges sample the opposite edge of the image.
 
+## Frame interpolation
+
+**Settings → Video → Frame interpolation (F7) → Use RIFE Vulkan frame
+interpolation** turns on RIFE 4.25 Fast. LLCV then shows a generated frame
+between every two captured frames, so motion looks smoother. The game does not
+run faster and input response does not improve: each original frame is shown
+about half a frame later than without interpolation.
+
+- **Requirements.** 1920 × 1080 SDR input at 24 to 60 fps, Immediate
+  presentation, and an OpenGL driver with `GL_EXT_memory_object_fd` and
+  `GL_EXT_semaphore_fd` on the same GPU as a Vulkan driver. The NVIDIA driver
+  and Mesa's radeonsi (AMD) and iris (Intel) drivers list them; only NVIDIA
+  has been tested. P010 (HDR), VSync and the audio-only mode are not
+  interpolated. The amd64 `.deb`, the `.rpm` and the Arch package include it;
+  the Raspberry Pi packages do not.
+- **Capture.** While interpolation is on, playback opens the capture at
+  1920 × 1080 with the selected pixel format. **Capture rate while
+  interpolating** offers **Same as Frame rate** (the default; 40 fps capture
+  and explicit rates from 24 to 60 fps are kept, other choices use Auto),
+  **Auto** (the highest listed rate from 24 to 60 fps) and the rates the
+  device lists. The saved video settings do not change. If the device has no
+  such mode, the saved settings are used and nothing is interpolated.
+- **Timing.** When a frame arrives, the GPU computes the frame between it and
+  the previous one. If that is ready within half a frame time (16.7 ms at
+  30 fps, 8.3 ms at 60 fps), LLCV shows it and then the new frame half a frame
+  later. Otherwise only the new frame is shown and counted as late. On a
+  GeForce RTX 2070 one frame takes about 10 ms, so 30 fps becomes 60 fps on
+  screen while 60 fps input is shown without generated frames.
+- **HUD protection** (**Luma and color edges**, the default, **Luma edges** or
+  **Off**) keeps fixed elements such as hearts, text and score counters from
+  warping.
+- **F7** (or **Alt → View → RIFE frame interpolation**) turns it off and on
+  during playback without reconnecting the capture device. The choice is kept
+  for the next start, and the settings check box stays on.
+- It is display only. Recordings and screenshots keep the captured frames.
+  [Upscaling](#upscaling) applies to the generated frames as well.
+- The Tab diagnostics show **Frame interpolation** with the generated, late
+  and busy counts and the GPU time per frame.
+- If RIFE cannot start (no Vulkan driver, OpenGL and Vulkan on different GPUs,
+  missing extensions), a notice gives the reason and the original frames are
+  shown. Loading the model takes 1 to 4 seconds the first time.
+
+The model is Practical-RIFE 4.25 (MIT), converted to ncnn by the Windows LLCV
+project and copied unchanged from its 2.4.0 package. It runs on ncnn 20261020
+(BSD 3-Clause) with the Windows LLCV patch and its bundled glslang, linked into
+`llcv`; see [third_party/frame-interpolation/NOTICE.txt](third_party/frame-interpolation/NOTICE.txt).
+NVIDIA VFG, the other method of the Windows build, needs NVIDIA's Windows
+runtime and is not available.
+
+### Tests (2.4.0)
+
+| Environment | What was checked | Result |
+| --- | --- | --- |
+| Ubuntu 26.04, GeForce RTX 2070 (NVIDIA 595) | Test program: synthetic 1080p frames with a moving square, 30 fps, through the OpenGL ↔ Vulkan sharing | Each generated frame puts the square halfway between the originals (x 397 to 561 between 300 and 500); colors and orientation kept; 12 ms per frame |
+| Ubuntu 26.04, RTX 2070, GC553Pro NV12 1080p | App at 30 fps, HUD protection off | 400 of 400 pairs generated, none late, 10.2 ms per frame |
+| Ubuntu 26.04, RTX 2070, GC553Pro NV12 1080p | App at 60 fps | Every pair late (9.4 ms against 8.3 ms); original frames shown |
+| Ubuntu 26.04, RTX 2070, GC553Pro NV12 1080p | Packaged `.deb` (built on Ubuntu 22.04) at 30 fps, HUD protection luma and color | 549 of 549 pairs generated, 10.4 ms average, 11.3 ms maximum |
+| Ubuntu 26.04, Mesa 26 llvmpipe | Packaged `.deb` with interpolation on | Notice that OpenGL lacks `GL_EXT_memory_object_fd`; original frames shown |
+| Ubuntu 22.04, 24.04 and 26.04, Debian 12 and 13 containers | One amd64 `.deb` (built on Ubuntu 22.04) installed and run | Passed |
+| AlmaLinux 9 (with CRB) and 10, Fedora 44 containers | `.rpm` built on AlmaLinux 9: install and run | Passed; the same build generated 513 of 516 pairs on the RTX 2070 |
+| Arch Linux container | `.pkg.tar.zst` build, install and run | Passed |
+| Ubuntu 26.04, GC553Pro | Build without interpolation (`LLCV_FRAME_INTERPOLATION=OFF`, as for the ARM packages) with the RIFE setting on | Plays with the saved capture settings |
+| Recording test program: FFmpeg 7.1.1 (as in the `.deb`) with NVENC, and FFmpeg 8 with x264 | H.264 and AAC, normal stop, plus a copy taken during recording | Finished files end with a full index (`ftyp free mdat moov`); the copies still play their completed fragments |
+
+Not checked yet: AMD and Intel GPUs, X11, laptops with two GPUs, the new
+settings controls operated by hand, and the 2.4.0 ARM packages (built in CI).
+
 ## Recording
 
 **F9** records the playing video and capture audio to MP4. Press it again to
@@ -277,8 +352,12 @@ stop and finish the file. The options are under **Settings → Recording**.
 - **Files.** Recordings go to `$XDG_VIDEOS_DIR/LLCV/` (usually `~/Videos/LLCV`)
   as `LLCV_YYYYMMDD_HHMMSS.mp4`; later parts end in `_part02`, `_part03` and so
   on. Another folder can be chosen on the Recording page. The files are
-  fragmented MP4, so parts already written usually survive a crash. The last
-  seconds are not guaranteed.
+  written as fragmented MP4, so parts already written usually survive a crash.
+  The last seconds are not guaranteed. When a recording or a split part ends
+  normally, a complete sample index is added at the end (hybrid MP4, FFmpeg 7.1
+  or newer, which the `.deb` packages include), so programs that read only the
+  MP4 header, such as file managers, show the length. Interrupted files stay
+  fragmented; with an older system FFmpeg every file does.
 - **Pause and resume** are in the menu bar (**Alt → Recording**). Paused time
   is left out of the file while playback continues.
 - A corner indicator shows the recording time and size. The indicator, the
@@ -501,6 +580,7 @@ The keys below are the defaults. They can be changed under
 | F9 | Start or stop recording |
 | M | Mute or unmute playback |
 | F6 | Turn CMAA2 → NIS upscaling on or off |
+| F7 | Turn RIFE frame interpolation on or off |
 | Mouse wheel | Volume ±5% (also unmutes) |
 | Double-click | Toggle fullscreen |
 

@@ -14,6 +14,7 @@ done
 tar -C "$root" \
     --exclude=./build --exclude=./dist --exclude="./obj-*" \
     --exclude=./debian/llcv --exclude=./debian/.debhelper --exclude=./third_party/sdl3 \
+    --exclude=./third_party/ncnn \
     --exclude=./packaging/arch/src --exclude=./packaging/arch/pkg \
     --transform "s,^\.,llcv-$version," \
     -czf "$top/SOURCES/llcv-$version.tar.gz" .
@@ -21,6 +22,10 @@ tar -C "$root" \
 if [ -z "$(rpm --eval '%{?fedora}')" ]; then
     sdl_dir="$("$root/tools/fetch-sdl3.sh")"
     cp "$(dirname "$sdl_dir")"/SDL3-*.tar.gz "$top/SOURCES/"
+fi
+if [ "$(rpm --eval '%{_arch}')" = x86_64 ]; then
+    ncnn_dir="$("$root/tools/fetch-ncnn.sh")"
+    cp "$(dirname "$ncnn_dir")"/ncnn-*-full-source.zip "$top/SOURCES/"
 fi
 
 rpmbuild -ba --define "_topdir $top" "$spec"

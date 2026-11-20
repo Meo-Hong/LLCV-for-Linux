@@ -569,6 +569,8 @@ MenuCommand DrawMenuBar(const MenuState& state, const input::Bindings& shortcuts
                 item(T("Sharp scaling"), nullptr, state.sharp, MenuCommand::ScalingSharp);
                 item(T("CMAA2 → NIS upscaling"), key(input::Action::Upscaling).c_str(), state.upscaling,
                      MenuCommand::Upscaling);
+                item(T("RIFE frame interpolation"), key(input::Action::FrameInterpolation).c_str(),
+                     state.interpolation, MenuCommand::Interpolation, state.interpolationAvailable);
                 ImGui::Separator();
                 item(T("Immediate presentation"), nullptr, !state.vsync, MenuCommand::PresentImmediate);
                 item("VSync", nullptr, state.vsync, MenuCommand::PresentVSync);

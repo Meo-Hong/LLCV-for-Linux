@@ -25,6 +25,7 @@ struct GlApi {
     void (*DeleteVertexArrays)(GLsizei, const GLuint*);
     void (*Disable)(GLenum);
     void (*DrawArrays)(GLenum, GLint, GLsizei);
+    void (*Flush)();
     void (*FramebufferTexture2D)(GLenum, GLenum, GLenum, GLuint, GLint);
     void (*GenFramebuffers)(GLsizei, GLuint*);
     void (*GenTextures)(GLsizei, GLuint*);

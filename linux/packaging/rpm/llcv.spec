@@ -1,6 +1,7 @@
 %global sdl3_version 3.4.18
 %global imgui_version 1.92.2b
 %global app_id io.github.meo_hong.LLCV
+%global ncnn_version 20261020
 
 %if 0%{?fedora}
 %bcond_with bundled_sdl3
@@ -10,16 +11,25 @@
 %bcond_with recording
 %endif
 
+%ifarch x86_64
+%bcond_without interpolation
+%else
+%bcond_with interpolation
+%endif
+
 Name:           llcv
-Version:        2.2.1
+Version:        2.4.0
 Release:        1
 Summary:        Low-latency viewer for USB HDMI capture devices
 
-License:        GPL-3.0-or-later AND MIT AND OFL-1.1 AND Apache-2.0%{?with_bundled_sdl3: AND Zlib}
+License:        GPL-3.0-or-later AND MIT AND OFL-1.1 AND Apache-2.0%{?with_bundled_sdl3: AND Zlib}%{?with_interpolation: AND BSD-3-Clause AND BSD-2-Clause}
 URL:            https://github.com/Meo-Hong/LLCV-for-Linux
 Source0:        llcv-%{version}.tar.gz
 %if %{with bundled_sdl3}
 Source1:        https://github.com/libsdl-org/SDL/releases/download/release-%{sdl3_version}/SDL3-%{sdl3_version}.tar.gz
+%endif
+%if %{with interpolation}
+Source2:        https://github.com/Tencent/ncnn/releases/download/%{ncnn_version}/ncnn-%{ncnn_version}-full-source.zip
 %endif
 
 BuildRequires:  cmake >= 3.22
@@ -31,6 +41,10 @@ BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(wayland-scanner)
 BuildRequires:  wayland-protocols-devel
 BuildRequires:  pkgconfig(dbus-1)
+%if %{with interpolation}
+BuildRequires:  vulkan-headers
+BuildRequires:  patch
+%endif
 %if %{with recording}
 BuildRequires:  pkgconfig(libavcodec)
 BuildRequires:  pkgconfig(libavformat)
@@ -65,6 +79,9 @@ Requires:       hicolor-icon-theme
 Requires:       libglvnd-egl
 Requires:       libglvnd-glx
 Recommends:     pipewire
+%if %{with interpolation}
+Recommends:     vulkan-loader
+%endif
 %if %{with bundled_sdl3}
 Recommends:     libdecor
 %endif
@@ -73,6 +90,10 @@ Suggests:       v4l-utils
 Provides:       bundled(imgui) = %{imgui_version}
 %if %{with bundled_sdl3}
 Provides:       bundled(SDL3) = %{sdl3_version}
+%endif
+%if %{with interpolation}
+Provides:       bundled(ncnn) = %{ncnn_version}
+Provides:       bundled(glslang)
 %endif
 
 %description
@@ -87,6 +108,10 @@ mapping everywhere else, an audio-only mode, PNG screenshots, MP4 recording of
 SDR video through FFmpeg (Fedora builds) and a live diagnostics overlay. P010
 capture needs Linux 7.1 or newer.
 
+On x86_64, optional RIFE frame interpolation (F7) doubles 1920x1080 SDR video
+at 24 to 60 fps with the Practical-RIFE 4.25 model on a Vulkan GPU, through a
+built-in ncnn.
+
 %prep
 %autosetup -n llcv-%{version}
 %if %{with bundled_sdl3}
@@ -99,14 +124,26 @@ cp -p third_party/noto-sans-jp/LICENSE.txt NotoSansJP-LICENSE.txt
 cp -p third_party/upscaling/nis/licence.txt NIS-LICENSE.txt
 cp -p third_party/upscaling/cmaa2/license.txt CMAA2-LICENSE.txt
 cp -p third_party/upscaling/NOTICE.txt upscaling-NOTICE.txt
+%if %{with interpolation}
+mkdir -p third_party/ncnn
+cp -p %{SOURCE2} third_party/ncnn/
+cp -p third_party/frame-interpolation/RIFE-MODEL-LICENSE.txt RIFE-MODEL-LICENSE.txt
+cp -p third_party/frame-interpolation/NCNN-LICENSE.txt NCNN-LICENSE.txt
+cp -p third_party/frame-interpolation/GLSLANG-LICENSE.txt GLSLANG-LICENSE.txt
+cp -p third_party/frame-interpolation/NOTICE.txt frame-interpolation-NOTICE.txt
+%endif
 
 %build
+%if %{with interpolation}
+tools/build-ncnn-static.sh "$PWD/obj-ncnn"
+%endif
 %cmake \
     -DLLCV_SOURCE_TREE_DATA=OFF \
     -DLLCV_SDL3=%{?with_bundled_sdl3:BUNDLED}%{!?with_bundled_sdl3:SYSTEM} \
     -DLLCV_WAYLAND_COLOR_MANAGEMENT=ON \
     -DLLCV_SLEEP_INHIBIT=ON \
-    -DLLCV_RECORDING=%{?with_recording:ON}%{!?with_recording:OFF}
+    -DLLCV_RECORDING=%{?with_recording:ON}%{!?with_recording:OFF} \
+    -DLLCV_FRAME_INTERPOLATION=%{?with_interpolation:ON -Dncnn_DIR=$PWD/obj-ncnn/prefix/lib/cmake/ncnn}%{!?with_interpolation:OFF}
 %cmake_build
 
 %install
@@ -114,6 +151,9 @@ cp -p third_party/upscaling/NOTICE.txt upscaling-NOTICE.txt
 
 %files
 %license LICENSE imgui-LICENSE.txt Pretendard-LICENSE.txt NotoSansJP-LICENSE.txt NIS-LICENSE.txt CMAA2-LICENSE.txt upscaling-NOTICE.txt
+%if %{with interpolation}
+%license RIFE-MODEL-LICENSE.txt NCNN-LICENSE.txt GLSLANG-LICENSE.txt frame-interpolation-NOTICE.txt
+%endif
 %doc README.md README.ko.md
 %{_bindir}/llcv
 %{_datadir}/applications/%{app_id}.desktop
@@ -124,6 +164,17 @@ cp -p third_party/upscaling/NOTICE.txt upscaling-NOTICE.txt
 %{_prefix}/lib/udev/rules.d/70-llcv-elgato-hid.rules
 
 %changelog
+* Sat Nov 21 2026 Meohong <busimh001@gmail.com> - 2.4.0-1
+- Follow the Windows LLCV 2.3.0 to 2.4.0 updates with RIFE Vulkan frame
+  interpolation; NVIDIA VFG and the playback GPU choice are Windows only.
+- RIFE frame interpolation (x86_64, off by default, F7) doubles 1920x1080
+  SDR video at 24 to 60 fps in Immediate presentation, with HUD protection
+  for fixed screen elements.
+- Capture uses 1920x1080 at Frame rate, Auto or a chosen 24-60 fps rate
+  while interpolating. P010 HDR is not interpolated.
+- Recordings that end normally get a complete MP4 index (hybrid MP4, FFmpeg
+  7.1 or newer).
+
 * Mon Nov 02 2026 Meohong <busimh001@gmail.com> - 2.2.1-1
 - Follow the Windows LLCV 2.2.0 and 2.2.1 updates.
 - CMAA2 High/Preserve correction for SDR upscaling.

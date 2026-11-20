@@ -94,8 +94,8 @@ for your password.
 At the end, it prints the package and the install command, for example:
 
 ```text
-Package: /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.2.1_amd64.deb
-Install: sudo apt install /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.2.1_amd64.deb
+Package: /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.4.0_amd64.deb
+Install: sudo apt install /home/user/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.4.0_amd64.deb
 ```
 
 **5. Install**
@@ -162,8 +162,16 @@ x264, NVENC, VA-API, MP4) and links it statically together with the
 distribution's static `libx264`. This keeps one `.deb` per architecture
 installable on every release; it adds a few minutes to the build.
 
+On amd64, the package build also compiles ncnn 20261020 for
+[frame interpolation](README.md#frame-interpolation): `tools/fetch-ncnn.sh`
+downloads the source (SHA256 pinned) and applies
+`third_party/frame-interpolation/ncnn-20261020-replay.patch`, and
+`tools/build-ncnn-static.sh` builds it with Vulkan and its bundled glslang.
+This takes another few minutes. The ARM packages are built without frame
+interpolation.
+
 **Result**: `dist/<distro>-<version>/llcv_<version>~<distro><version>_<arch>.deb`
-(for example `dist/debian-13/llcv_2.2.1_arm64.deb`)
+(for example `dist/debian-13/llcv_2.4.0_arm64.deb`)
 
 **Install.** The folder name is your `ID`-`VERSION_ID`:
 
@@ -225,13 +233,17 @@ Fedora builds include recording through the system FFmpeg (`ffmpeg-free`, or
 the RPM Fusion `ffmpeg`). The base and CRB repositories of the RHEL family have
 no FFmpeg, so that build has no recording.
 
+On x86_64, `tools/build-rpm.sh` downloads the ncnn source for frame
+interpolation (`tools/fetch-ncnn.sh`) and adds it to the source RPM; the RPM
+build compiles it.
+
 **Build the package**
 
 ```sh
 ./tools/build-rpm.sh
 ```
 
-**Result**: `dist/<distro>-<version>/llcv-2.2.1-1.x86_64.rpm`
+**Result**: `dist/<distro>-<version>/llcv-2.4.0-1.x86_64.rpm`
 (debug packages `llcv-debuginfo` and `llcv-debugsource`, and a source RPM, are
 created too)
 
@@ -248,7 +260,7 @@ For Arch Linux, Manjaro and EndeavourOS.
 **Install the build dependencies**
 
 ```sh
-sudo pacman -S --needed base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd dbus ffmpeg
+sudo pacman -S --needed base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd dbus ffmpeg vulkan-headers
 ```
 
 **Build the package.** Run `makepkg` as a normal user (not root):
@@ -258,13 +270,16 @@ cd packaging/arch
 makepkg -f
 ```
 
-**Result**: `packaging/arch/llcv-2.2.1-1-x86_64.pkg.tar.zst`
+On x86_64, `makepkg` downloads and builds ncnn for frame interpolation
+(`tools/build-ncnn-static.sh`).
+
+**Result**: `packaging/arch/llcv-2.4.0-1-x86_64.pkg.tar.zst`
 (`./tools/build-package.sh` also copies it to `dist/arch/`)
 
 **Install**
 
 ```sh
-sudo pacman -U llcv-2.2.1-1-*.pkg.tar.zst
+sudo pacman -U llcv-2.4.0-1-*.pkg.tar.zst
 ```
 
 `makepkg -si` installs the dependencies, builds and installs in one step.
@@ -359,6 +374,7 @@ app without installing it.
 | HDR output (Wayland) | `wayland-client`, `wayland-scanner` | no |
 | Blocking automatic suspend during playback | `dbus-1` | no |
 | MP4 recording (FFmpeg 4.4 or newer) | `libavcodec`, `libavformat`, `libavutil`, `libswscale` | no |
+| Frame interpolation | `vulkan` headers (`libvulkan-dev`, `vulkan-headers`) and the patched ncnn below | no |
 
 openSUSE can install by pkg-config name (an untested example):
 
@@ -397,6 +413,21 @@ cmake --build build -j
 Building SDL3 in needs the X11, Wayland, EGL/OpenGL, PipeWire, PulseAudio,
 ALSA and D-Bus development packages.
 
+**With frame interpolation**
+
+```sh
+./tools/build-ncnn-static.sh "$PWD/build-ncnn"
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLLCV_FRAME_INTERPOLATION=ON -Dncnn_DIR="$PWD/build-ncnn/prefix/lib/cmake/ncnn"
+cmake --build build -j
+```
+
+The script downloads ncnn 20261020, applies the Windows LLCV patch and builds a
+static ncnn with Vulkan into `build-ncnn/prefix`. The upstream ncnn packages of
+distributions lack the patch and cannot be used. The Vulkan headers come from
+the system (`libvulkan-dev` on Debian and Ubuntu, `vulkan-headers` on Fedora
+and Arch); the Vulkan loader is opened at run time. Run from the build folder,
+the app finds the RIFE model in `third_party/frame-interpolation/rife-fast`.
+
 **CMake options**
 
 | Option | Default | Meaning |
@@ -405,6 +436,8 @@ ALSA and D-Bus development packages.
 | `LLCV_WAYLAND_COLOR_MANAGEMENT` | `AUTO` | Build HDR output for Wayland; `ON` makes missing dependencies an error |
 | `LLCV_SLEEP_INHIBIT` | `AUTO` | Block automatic suspend during playback through the desktop portal (needs `dbus-1`); `ON` makes a missing `dbus-1` an error |
 | `LLCV_RECORDING` | `AUTO` | Build MP4 recording through FFmpeg (needs `libavcodec`, `libavformat`, `libavutil`, `libswscale`); `ON` makes missing FFmpeg an error, `OFF` leaves recording out |
+| `LLCV_FRAME_INTERPOLATION` | `AUTO` | Build RIFE frame interpolation; needs the patched ncnn (`-Dncnn_DIR=<prefix>/lib/cmake/ncnn`) and the Vulkan headers. `ON` makes them required, `OFF` leaves interpolation out |
+| `LLCV_VULKAN_HEADERS` | empty | Folder that holds `vulkan/vulkan.h`, when the system headers are not used |
 | `LLCV_FFMPEG_STATIC` | `OFF` | Link FFmpeg statically, using the `.pc` files found through `PKG_CONFIG_PATH` (the `.deb` build points it at `tools/build-ffmpeg-static.sh` output) |
 | `LLCV_USE_SYSTEM_IMGUI` | `OFF` | Use a system Dear ImGui 1.92 or newer instead of the bundled copy |
 | `LLCV_SOURCE_TREE_DATA` | `ON` | Find fonts and icons in the source tree when not installed (off for packages) |
@@ -418,8 +451,9 @@ ALSA and D-Bus development packages.
 | `... the package libsdl3-dev cannot be found` / `Unable to locate package libsdl3-dev` | The release has no SDL3. Use `sudo apt build-dep -P pkg.llcv.bundled-sdl3 ./`. On Ubuntu, also check the universe repository. |
 | `No match for argument` / `No matching package to install` (dnf) | The CRB repository is off on the RHEL family. See [3.2](#32-fedora-and-rhel-family-rpm). |
 | `Recording needs FFmpeg 4.4 or newer` | `-DLLCV_RECORDING=ON` without FFmpeg development files. Install them (`libavcodec-dev libavformat-dev libavutil-dev libswscale-dev` on Debian and Ubuntu), or configure with `-DLLCV_RECORDING=AUTO` or `OFF`. |
+| `Frame interpolation needs the patched ncnn with Vulkan` | `-DLLCV_FRAME_INTERPOLATION=ON` without `ncnn_DIR` or Vulkan headers. Run `./tools/build-ncnn-static.sh`, pass `-Dncnn_DIR=<prefix>/lib/cmake/ncnn`, and install `libvulkan-dev` (`vulkan-headers` on Fedora and Arch). |
 | `SDL3 3.2 or newer is not installed. Run tools/fetch-sdl3.sh` | A direct build without SDL3. Run `./tools/fetch-sdl3.sh`, then configure with `-DLLCV_SDL3=BUNDLED`. |
-| `SHA256 mismatch` | The SDL3 download is damaged. Delete `third_party/sdl3/` and run again. |
+| `SHA256 mismatch` | A download is damaged. Delete the archive in `third_party/sdl3/`, `third_party/ffmpeg/` or `third_party/ncnn/` and run again. |
 | `curl-minimal ... conflicts with curl` (dnf) | The RHEL family already has `curl-minimal`. Leave `curl` out of the install list. |
 | `curl: (6) Could not resolve host` | No internet connection. Releases that build SDL3 in need to download it. |
 | `ERROR: Running makepkg as root is not allowed` | On Arch, build as a normal user. |

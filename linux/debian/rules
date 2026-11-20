@@ -21,15 +21,28 @@ LLCV_APT_KEY := $(wildcard $(LLCV_APT_DIR)/llcv-archive-keyring.asc)
 	dh $@ --buildsystem=cmake
 
 LLCV_FFMPEG_BUILD := $(CURDIR)/obj-ffmpeg
+LLCV_NCNN_BUILD := $(CURDIR)/obj-ncnn
+
+ifeq ($(DEB_HOST_ARCH),amd64)
+LLCV_INTERPOLATION := ON
+LLCV_INTERPOLATION_FLAGS := -DLLCV_FRAME_INTERPOLATION=ON -Dncnn_DIR=$(LLCV_NCNN_BUILD)/prefix/lib/cmake/ncnn
+else
+LLCV_INTERPOLATION := OFF
+LLCV_INTERPOLATION_FLAGS := -DLLCV_FRAME_INTERPOLATION=OFF
+endif
 
 override_dh_auto_configure:
 	tools/build-ffmpeg-static.sh $(LLCV_FFMPEG_BUILD) $(DEB_HOST_GNU_TYPE)
+ifeq ($(LLCV_INTERPOLATION),ON)
+	tools/build-ncnn-static.sh $(LLCV_NCNN_BUILD)
+endif
 	PKG_CONFIG_PATH=$(LLCV_FFMPEG_BUILD)/prefix/lib/pkgconfig dh_auto_configure -- -DLLCV_SOURCE_TREE_DATA=OFF \
-		-DLLCV_SDL3=$(LLCV_SDL3) -DLLCV_SLEEP_INHIBIT=ON -DLLCV_RECORDING=ON -DLLCV_FFMPEG_STATIC=ON
+		-DLLCV_SDL3=$(LLCV_SDL3) -DLLCV_SLEEP_INHIBIT=ON -DLLCV_RECORDING=ON -DLLCV_FFMPEG_STATIC=ON \
+		$(LLCV_INTERPOLATION_FLAGS)
 
 override_dh_auto_clean:
 	dh_auto_clean
-	rm -rf $(LLCV_FFMPEG_BUILD)
+	rm -rf $(LLCV_FFMPEG_BUILD) $(LLCV_NCNN_BUILD)
 
 override_dh_install:
 	dh_install
@@ -42,6 +55,13 @@ ifneq (,$(and $(LLCV_APT_URL),$(LLCV_APT_KEY),$(LLCV_SUITE)))
 	chmod 644 debian/llcv/etc/apt/sources.list.d/llcv.sources
 else
 	@echo "LLCV APT source not configured; the package will not add an update repository."
+endif
+
+override_dh_gencontrol:
+ifeq ($(LLCV_INTERPOLATION),ON)
+	dh_gencontrol -- -Vllcv:Recommends=libvulkan1
+else
+	dh_gencontrol
 endif
 
 override_dh_shlibdeps:

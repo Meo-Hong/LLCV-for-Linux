@@ -93,8 +93,8 @@ cd LLCV-for-Linux/linux
 마지막에 만들어진 파일과 설치 명령이 표시됩니다. 예시:
 
 ```text
-Package: /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.2.1_amd64.deb
-Install: sudo apt install /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.2.1_amd64.deb
+Package: /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.4.0_amd64.deb
+Install: sudo apt install /home/사용자/LLCV-for-Linux/linux/dist/ubuntu-26.04/llcv_2.4.0_amd64.deb
 ```
 
 **⑤ 설치**
@@ -158,8 +158,14 @@ SDL3가 없으면 스크립트가 알아서 SDL3 소스를 받고(`tools/fetch-s
 `libx264`와 함께 앱에 정적으로 넣습니다. 그래서 기종마다 `.deb` 하나로 모든
 배포판에 설치되며, 빌드 시간이 몇 분 늘어납니다.
 
+amd64에서는 [프레임 보간](README.ko.md#프레임-보간)을 위해 ncnn 20261020도 함께
+빌드합니다. `tools/fetch-ncnn.sh`가 소스를 받고(SHA256 고정)
+`third_party/frame-interpolation/ncnn-20261020-replay.patch`를 적용하며,
+`tools/build-ncnn-static.sh`가 Vulkan과 내장 glslang을 넣어 빌드합니다. 빌드 시간이
+몇 분 더 늘어납니다. ARM 패키지는 프레임 보간 없이 빌드합니다.
+
 **결과물**: `dist/<배포판>-<버전>/llcv_<버전>~<배포판><버전>_<아키텍처>.deb`
-(예: `dist/debian-13/llcv_2.2.1_arm64.deb`)
+(예: `dist/debian-13/llcv_2.4.0_arm64.deb`)
 
 **설치** — 폴더 이름은 내 배포판(`ID`-`VERSION_ID`)입니다.
 
@@ -218,13 +224,16 @@ Fedora는 시스템 SDL3를 쓰고, RHEL 계열은 SDL3를 앱에 넣는 데 필
 Fedora 빌드는 시스템 FFmpeg(`ffmpeg-free`나 RPM Fusion의 `ffmpeg`)로 녹화 기능을
 넣습니다. RHEL 계열의 기본·CRB 저장소에는 FFmpeg가 없어서 녹화 없이 빌드합니다.
 
+x86_64에서는 `tools/build-rpm.sh`가 프레임 보간용 ncnn 소스를 받아(`tools/fetch-ncnn.sh`)
+소스 RPM에 넣고, RPM 빌드 중에 컴파일합니다.
+
 **패키지 만들기**
 
 ```sh
 ./tools/build-rpm.sh
 ```
 
-**결과물**: `dist/<배포판>-<버전>/llcv-2.2.1-1.x86_64.rpm`
+**결과물**: `dist/<배포판>-<버전>/llcv-2.4.0-1.x86_64.rpm`
 (디버그 정보 `llcv-debuginfo`, `llcv-debugsource`와 소스 RPM도 함께 생깁니다.)
 
 **설치** — 폴더 이름은 내 배포판(`ID`-`VERSION_ID`)입니다.
@@ -240,7 +249,7 @@ Arch Linux, Manjaro, EndeavourOS에 해당합니다.
 **빌드 의존성 설치**
 
 ```sh
-sudo pacman -S --needed base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd dbus ffmpeg
+sudo pacman -S --needed base-devel cmake pkgconf sdl3 libjpeg-turbo libpng wayland wayland-protocols libglvnd dbus ffmpeg vulkan-headers
 ```
 
 **패키지 만들기** — `makepkg`는 일반 사용자로 실행해야 합니다(root 불가).
@@ -250,13 +259,15 @@ cd packaging/arch
 makepkg -f
 ```
 
-**결과물**: `packaging/arch/llcv-2.2.1-1-x86_64.pkg.tar.zst`
+x86_64에서는 `makepkg`가 프레임 보간용 ncnn을 받아 빌드합니다(`tools/build-ncnn-static.sh`).
+
+**결과물**: `packaging/arch/llcv-2.4.0-1-x86_64.pkg.tar.zst`
 (`./tools/build-package.sh`를 쓰면 `dist/arch/`로 복사됩니다.)
 
 **설치**
 
 ```sh
-sudo pacman -U llcv-2.2.1-1-*.pkg.tar.zst
+sudo pacman -U llcv-2.4.0-1-*.pkg.tar.zst
 ```
 
 `makepkg -si`를 쓰면 의존성 설치, 빌드, 설치를 한 번에 합니다.
@@ -351,6 +362,7 @@ llcv --version
 | HDR 출력 (Wayland) | `wayland-client`, `wayland-scanner` | 아니요 |
 | 재생 중 시스템 자동 절전 방지 | `dbus-1` | 아니요 |
 | MP4 녹화 (FFmpeg 4.4 이상) | `libavcodec`, `libavformat`, `libavutil`, `libswscale` | 아니요 |
+| 프레임 보간 | `vulkan` 헤더(`libvulkan-dev`, `vulkan-headers`)와 아래의 패치한 ncnn | 아니요 |
 
 openSUSE는 pkg-config 이름으로 바로 설치할 수 있습니다(검증하지 않은 예시).
 
@@ -388,6 +400,20 @@ cmake --build build -j
 이때는 SDL3를 빌드하기 위한 X11, Wayland, EGL/OpenGL, PipeWire, PulseAudio,
 ALSA, D-Bus 개발 패키지가 필요합니다.
 
+**프레임 보간을 넣어 빌드**
+
+```sh
+./tools/build-ncnn-static.sh "$PWD/build-ncnn"
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLLCV_FRAME_INTERPOLATION=ON -Dncnn_DIR="$PWD/build-ncnn/prefix/lib/cmake/ncnn"
+cmake --build build -j
+```
+
+스크립트가 ncnn 20261020을 받아 Windows LLCV 패치를 적용하고, Vulkan을 켠 정적
+ncnn을 `build-ncnn/prefix`에 빌드합니다. 배포판의 ncnn 패키지는 이 패치가 없어서
+쓸 수 없습니다. Vulkan 헤더는 시스템 것을 씁니다(Debian·Ubuntu는 `libvulkan-dev`,
+Fedora·Arch는 `vulkan-headers`). Vulkan 로더는 실행 중에 엽니다. 빌드 폴더에서
+실행하면 RIFE 모델을 `third_party/frame-interpolation/rife-fast`에서 찾습니다.
+
 **CMake 옵션**
 
 | 옵션 | 기본값 | 의미 |
@@ -396,6 +422,8 @@ ALSA, D-Bus 개발 패키지가 필요합니다.
 | `LLCV_WAYLAND_COLOR_MANAGEMENT` | `AUTO` | Wayland HDR 출력 포함 여부. `ON`이면 필요한 패키지가 없을 때 오류 |
 | `LLCV_SLEEP_INHIBIT` | `AUTO` | 재생 중 데스크톱 포털로 시스템 자동 절전 방지 (`dbus-1` 필요). `ON`이면 `dbus-1`이 없을 때 오류 |
 | `LLCV_RECORDING` | `AUTO` | FFmpeg로 MP4 녹화 기능 포함 (`libavcodec`, `libavformat`, `libavutil`, `libswscale` 필요). `ON`이면 FFmpeg가 없을 때 오류, `OFF`면 녹화 제외 |
+| `LLCV_FRAME_INTERPOLATION` | `AUTO` | RIFE 프레임 보간 빌드. 패치한 ncnn(`-Dncnn_DIR=<prefix>/lib/cmake/ncnn`)과 Vulkan 헤더가 필요합니다. `ON`이면 없을 때 오류, `OFF`면 보간을 빼고 빌드 |
+| `LLCV_VULKAN_HEADERS` | 비어 있음 | 시스템 헤더 대신 쓸 `vulkan/vulkan.h`가 든 폴더 |
 | `LLCV_FFMPEG_STATIC` | `OFF` | `PKG_CONFIG_PATH`로 찾은 `.pc` 파일을 써서 FFmpeg를 정적으로 링크 (`.deb` 빌드는 `tools/build-ffmpeg-static.sh` 결과를 가리킴) |
 | `LLCV_USE_SYSTEM_IMGUI` | `OFF` | 함께 들어 있는 Dear ImGui 대신 시스템 Dear ImGui 1.92 이상 사용 |
 | `LLCV_SOURCE_TREE_DATA` | `ON` | 설치 없이 실행할 때 소스 폴더에서 글꼴·아이콘 찾기 (패키지 빌드에서는 끔) |
@@ -409,8 +437,9 @@ ALSA, D-Bus 개발 패키지가 필요합니다.
 | `... the package libsdl3-dev cannot be found` / `Unable to locate package libsdl3-dev` | 그 배포판에 SDL3가 없습니다. `sudo apt build-dep -P pkg.llcv.bundled-sdl3 ./`를 쓰세요. Ubuntu라면 universe 저장소도 확인하세요. |
 | `No match for argument` / `No matching package to install` (dnf) | RHEL 계열에서 CRB 저장소가 꺼져 있습니다. [3.2](#32-fedora--rhel-계열-rpm)를 보세요. |
 | `Recording needs FFmpeg 4.4 or newer` | FFmpeg 개발 패키지 없이 `-DLLCV_RECORDING=ON`으로 설정했습니다. 개발 패키지를 설치하거나(Debian·Ubuntu는 `libavcodec-dev libavformat-dev libavutil-dev libswscale-dev`), `-DLLCV_RECORDING=AUTO`나 `OFF`로 다시 설정하세요. |
+| `Frame interpolation needs the patched ncnn with Vulkan` | `ncnn_DIR`이나 Vulkan 헤더 없이 `-DLLCV_FRAME_INTERPOLATION=ON`으로 설정했습니다. `./tools/build-ncnn-static.sh`를 실행하고 `-Dncnn_DIR=<prefix>/lib/cmake/ncnn`을 넘기며, `libvulkan-dev`(Fedora·Arch는 `vulkan-headers`)를 설치하세요. |
 | `SDL3 3.2 or newer is not installed. Run tools/fetch-sdl3.sh` | 직접 빌드에서 SDL3가 없습니다. `./tools/fetch-sdl3.sh` 후 `-DLLCV_SDL3=BUNDLED`로 다시 설정하세요. |
-| `SHA256 mismatch` | 받다가 깨진 SDL3 파일입니다. `third_party/sdl3/`를 지우고 다시 실행하세요. |
+| `SHA256 mismatch` | 받다가 깨진 파일입니다. `third_party/sdl3/`, `third_party/ffmpeg/`, `third_party/ncnn/`의 해당 압축 파일을 지우고 다시 실행하세요. |
 | `curl-minimal ... conflicts with curl` (dnf) | RHEL 계열에 이미 있는 `curl-minimal`과 충돌합니다. `curl`은 설치 목록에서 빼세요. |
 | `curl: (6) Could not resolve host` | 인터넷 연결 문제입니다. SDL3를 받는 배포판은 인터넷이 필요합니다. |
 | `ERROR: Running makepkg as root is not allowed` | Arch에서는 일반 사용자로 빌드하세요. |

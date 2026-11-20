@@ -13,7 +13,7 @@ namespace llcv::input {
 
 enum class Action : size_t {
     Help, Settings, AudioOsd, PixelPerfect, Fullscreen, Screenshot, Diagnostics, Exit, Recording, Mute, Upscaling,
-    Count
+    FrameInterpolation, Count
 };
 
 inline constexpr size_t kActionCount = static_cast<size_t>(Action::Count);
@@ -30,12 +30,12 @@ inline constexpr Binding kSuper = 0x80000;
 inline constexpr Bindings kDefaultBindings{
     SDL_SCANCODE_F1,  SDL_SCANCODE_F2,  SDL_SCANCODE_F3,  SDL_SCANCODE_F5,
     SDL_SCANCODE_F11, SDL_SCANCODE_F12, SDL_SCANCODE_TAB, SDL_SCANCODE_ESCAPE,
-    SDL_SCANCODE_F9,  SDL_SCANCODE_M,   SDL_SCANCODE_F6,
+    SDL_SCANCODE_F9,  SDL_SCANCODE_M,   SDL_SCANCODE_F6,  SDL_SCANCODE_F7,
 };
 
 inline constexpr const char* kActionNames[kActionCount] = {
     "Help", "Settings", "AudioOsd", "PixelPerfect", "Fullscreen", "Screenshot", "Diagnostics", "Exit", "Recording", "Mute",
-    "Upscaling",
+    "Upscaling", "FrameInterpolation",
 };
 
 inline Binding BindingFor(const Bindings& bindings, Action action) {

@@ -80,6 +80,36 @@ Comment: Noto Sans JP 2.004 Regular and Bold, subset to the JIS X 0208 level 1
  kanji by tools/subset-japanese-font.sh for the Japanese interface. See
  third_party/noto-sans-jp/SOURCE.txt for the upstream archive and hashes.
 
+Files: third_party/frame-interpolation/rife-fast/*
+       third_party/frame-interpolation/RIFE-MODEL-LICENSE.txt
+Copyright: 2021 hzwer
+License: MIT
+Comment: Practical-RIFE 4.25 model converted to ncnn, the four files of the
+ Windows LLCV 2.4.0 package unchanged. Used on amd64 for RIFE frame
+ interpolation. See third_party/frame-interpolation/NOTICE.txt for hashes.
+
+Files: third_party/ncnn/ncnn-*/*
+       third_party/frame-interpolation/ncnn-*-replay.patch
+       third_party/frame-interpolation/NCNN-LICENSE.txt
+Copyright: 2017 Tencent
+License: BSD-3-clause
+Comment: ncnn 20261020 (ncnn-20261020-full-source.zip), downloaded by
+ tools/fetch-ncnn.sh (SHA256 pinned), patched with the Windows LLCV replay
+ patch and built by tools/build-ncnn-static.sh with Vulkan. Linked
+ statically into the amd64 package. Its third-party parts are listed in
+ /usr/share/llcv/rife-fast/NCNN-LICENSE.txt.
+
+Files: third_party/ncnn/ncnn-*/glslang/*
+       third_party/frame-interpolation/GLSLANG-LICENSE.txt
+Copyright: 2015-2018 Google, Inc.
+           2014-2020 The Khronos Group Inc.
+           2002 NVIDIA Corporation
+           and others
+License: BSD-3-clause and BSD-2-clause and MIT and Apache-2.0
+Comment: glslang from the ncnn source, linked statically into the amd64
+ package. The full license texts of its parts are in
+ /usr/share/llcv/rife-fast/GLSLANG-LICENSE.txt.
+
 License: GPL-3+
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -238,3 +268,53 @@ License: OFL-1.1
  DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
  FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
  OTHER DEALINGS IN THE FONT SOFTWARE.
+
+License: BSD-3-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ .
+ 1. Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+ .
+ 2. Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+ .
+ 3. Neither the name of the copyright holder nor the names of its
+    contributors may be used to endorse or promote products derived from this
+    software without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.
+
+License: BSD-2-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ .
+ 1. Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+ .
+ 2. Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.

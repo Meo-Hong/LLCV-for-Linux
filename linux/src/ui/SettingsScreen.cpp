@@ -164,6 +164,18 @@ constexpr const char* kSdrRangeGuide[] = {
     N_("Applies to playback, screenshots and recording. P010 and HDR input keep their own range."),
 };
 
+constexpr const char* kInterpolationGuide[] = {
+    N_("RIFE 4.25 Fast inserts a generated frame between two captured frames. Motion looks smoother; the game does "
+       "not run faster and input response does not improve."),
+    N_("Each original frame is shown about half a frame later than without interpolation."),
+    N_("Needs 1920 × 1080 SDR input at 24-60 fps and Immediate presentation. Starting playback switches the capture "
+       "to 1920 × 1080 with the selected pixel format; saved video settings are kept."),
+    N_("Runs on the display GPU through Vulkan (ncnn). If RIFE cannot start or misses a frame's deadline, the "
+       "original frame is shown."),
+    N_("HUD protection keeps fixed elements such as hearts, text and score counters from warping."),
+    N_("Display only: recordings and screenshots keep the captured frames."),
+};
+
 constexpr const char* kUpscalingGuide[] = {
     N_("SDR: CMAA2 reduces jagged edges, then NIS enlarges the image. Default sharpness: 0.15."),
     N_("CMAA2 correction: High smooths more edges; Preserve keeps more of the original text and thin lines."),
@@ -587,7 +599,95 @@ void SettingsScreen::DrawVideo(AppSettings& s, const SettingsContext& context) {
     }
     EndCard(table);
 
+    DrawInterpolation(s, context);
     DrawHdr(s, context);
+}
+
+void SettingsScreen::DrawInterpolation(AppSettings& s, const SettingsContext& context) {
+    const Palette& palette = CurrentPalette();
+    const bool table = BeginCard("##interpolation", Keys(T("Frame interpolation (F7)")).c_str());
+    if (!table) {
+        EndCard(table);
+        return;
+    }
+    ValueRow();
+    ImGui::BeginDisabled(!context.interpolationBuilt || !context.interpolationModels);
+    if (ImGui::Checkbox(T("Use RIFE Vulkan frame interpolation"), &s.interpolation)) s.interpolationPlayback = true;
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    HelpMarker(kInterpolationGuide, std::size(kInterpolationGuide));
+    if (!context.interpolationBuilt) {
+        ValueRow();
+        Note(T("This build has no frame interpolation (it needs ncnn with Vulkan)."), palette.warning);
+        EndCard(table);
+        return;
+    }
+    if (!context.interpolationModels) {
+        ValueRow();
+        Note(T("The RIFE model files are missing. Reinstall LLCV."), palette.warning);
+        EndCard(table);
+        return;
+    }
+    if (!s.interpolation) {
+        ValueRow();
+        Note(T("Off. When on, a generated frame is shown between two captured frames."));
+        EndCard(table);
+        return;
+    }
+
+    Row(T("HUD protection"));
+    EnumCombo<settings::RifeHud>("##rifeHud", s.rifeHud,
+                                 {{settings::RifeHud::LumaChroma, T("Luma and color edges (recommended)")},
+                                  {settings::RifeHud::Luma, T("Luma edges")},
+                                  {settings::RifeHud::Off, T("Off")}});
+
+    const capture::CaptureDevice* device =
+        context.captureDevices ? capture::SelectDevice(*context.captureDevices, s.captureDevice) : nullptr;
+    Row(T("Capture rate while interpolating"));
+    std::vector<std::string> items{T("Same as Frame rate (24-60 fps)"), T("Auto (highest 24-60 fps)")};
+    std::vector<int> values{-1, 0};
+    if (device) {
+        for (const auto& rate : capture::RatesAt(*device, 1920, 1080, app::FormatFromChoice(s.pixelFormat))) {
+            const int milli = rate.Milli();
+            if (milli < 23500 || milli > 60500) continue;
+            if (std::find(values.begin(), values.end(), milli) != values.end()) continue;
+            items.push_back(capture::FormatRate(rate) + " fps");
+            values.push_back(milli);
+        }
+    }
+    int index = -1;
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (values[i] == s.rifeFrameRateMilli) index = static_cast<int>(i);
+    }
+    if (index < 0) {
+        items.push_back(platform::Format("%.2f fps%s", s.rifeFrameRateMilli / 1000.0, T(" (unsupported)")));
+        values.push_back(s.rifeFrameRateMilli);
+        index = static_cast<int>(items.size()) - 1;
+    }
+    if (Combo("##rifeRate", index, items)) s.rifeFrameRateMilli = values[static_cast<size_t>(index)];
+
+    ValueRow();
+    if (s.audioOnly) {
+        Note(T("Not used in audio-only mode."), palette.warning);
+    } else if (s.pixelFormat == settings::PixelFormatChoice::P010) {
+        Note(T("P010 (HDR) is not interpolated. Choose an SDR pixel format."), palette.warning);
+    } else if (s.presentationMode != settings::PresentationMode::Immediate) {
+        Note(T("Needs Immediate presentation. With VSync, original frames are shown."), palette.warning);
+    } else if (device) {
+        bool capture40 = false;
+        if (const auto mode = app::ResolveInterpolationMode(*device, s, capture40)) {
+            Note(platform::Format(T("While interpolating: %d × %d · %s · %s fps (saved video settings are kept)"),
+                                  mode->width, mode->height, capture::PixelFormatName(mode->format),
+                                  capture::FormatRate(mode->rate).c_str()));
+        } else {
+            Note(T("This device has no 1920 × 1080 mode at 24-60 fps for the selected format. The saved capture "
+                   "settings are used and frames are not interpolated."),
+                 palette.warning);
+        }
+    }
+    ValueRow();
+    Note(Keys(T("F7 turns interpolation on and off during playback without reconnecting the capture device.")));
+    EndCard(table);
 }
 
 void SettingsScreen::DrawUpscaling(AppSettings& s, const SettingsContext& context) {

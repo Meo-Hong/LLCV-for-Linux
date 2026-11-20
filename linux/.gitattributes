@@ -9,3 +9,5 @@
 *.gz binary
 third_party/pretendard/LICENSE.txt -whitespace
 third_party/imgui/** -whitespace
+third_party/frame-interpolation/rife-fast/** binary
+third_party/frame-interpolation/ncnn-20261020-replay.patch whitespace=-blank-at-eol

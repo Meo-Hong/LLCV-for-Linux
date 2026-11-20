@@ -1,0 +1,39 @@
+LLCV for Linux frame interpolation
+
+RIFE Vulkan Fast, ported from the Windows LLCV 2.4.0 RIFE Vulkan path. The
+NVIDIA DLSS Frame Generation (VFG) path of the Windows build is not ported.
+
+Practical-RIFE 4.25 model, converted to ncnn by the Windows LLCV project
+Copyright (c) 2021 hzwer. MIT license. See RIFE-MODEL-LICENSE.txt.
+https://github.com/hzwer/Practical-RIFE
+rife-fast/ holds the four files shipped in LowLatencyCaptureViewer_v2.4.0_x64.zip
+(https://github.com/seria-aa/LowLatencyCaptureViewer/releases/tag/v2.4.0),
+unchanged:
+  fast-fold-cache.ncnn.param  7555b43762cd23cb38139f0719fe72aa1d599c862c86c2f255ce451999523b9c
+  fast-fold-cache.ncnn.bin    95d45db607cb8e0896f10990e5b6667a88ca64429ea4b00349f41211f7775a93
+  fast-encoder.ncnn.param     ee51d9303fb015bfb888b634436e75b9ec0e9bc3fcb48d5eb7b1c0f0b4b83c01
+  fast-encoder.ncnn.bin       16af9ff58f802d0b1050ed2289ee537fc359cbf3d52e29b3938273fac6a36a23
+They are installed to share/llcv/rife-fast.
+
+ncnn 20261020
+Copyright (C) 2017 Tencent. BSD 3-Clause license with third-party components.
+See NCNN-LICENSE.txt.
+https://github.com/Tencent/ncnn/releases/tag/20261020
+tools/fetch-ncnn.sh downloads ncnn-20261020-full-source.zip (SHA-256
+699d9acc67489eee0993a551ca1ebc247bbf0f4e33babe1dec810e6a9a52b988) and applies
+ncnn-20261020-replay.patch, the Windows LLCV patch unchanged: VkCompute with
+GPU timestamps and a reusable command buffer, resubmit_and_wait and
+elapsed_gpu_ms. tools/build-ncnn-static.sh builds it with Vulkan and the
+bundled glslang (NCNN_SIMPLEVK, the Vulkan loader is opened at run time) and
+llcv links it statically.
+
+glslang (bundled in the ncnn source)
+Copyright (C) 2015-2018 Google, Inc., The Khronos Group Inc. and others.
+Several licenses for its parts (BSD 3-Clause, BSD 2-Clause, MIT, Apache 2.0).
+See GLSLANG-LICENSE.txt.
+
+src/video/rife/ncnn/*.h and src/video/rife/RifeGraph.cpp, RifeHistoryPolicy.h
+come from the Windows LLCV sources with include paths and namespaces changed.
+src/video/rife/RifeBackend.cpp replaces the Direct3D 11 bridge with OpenGL
+shared textures and semaphores (GL_EXT_memory_object_fd, GL_EXT_semaphore_fd)
+and keeps the Windows pack, unpack and HUD protection shaders.

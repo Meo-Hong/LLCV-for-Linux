@@ -12,5 +12,8 @@ settings::PixelFormatChoice ChoiceFromFormat(capture::PixelFormat format);
 capture::ModeRequest RequestFromSettings(const settings::AppSettings& settings);
 bool SelectedFpsUnavailable(const capture::CaptureDevice& device, const settings::AppSettings& settings);
 int RequestedCaptureFps(const settings::AppSettings& settings);
+int InterpolationFrameRateMilli(const settings::AppSettings& settings);
+std::optional<capture::ResolvedMode> ResolveInterpolationMode(const capture::CaptureDevice& device,
+                                                             const settings::AppSettings& settings, bool& capture40);
 
 }

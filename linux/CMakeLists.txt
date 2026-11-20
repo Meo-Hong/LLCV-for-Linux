@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22...3.25)
-project(llcv VERSION 2.2.1 LANGUAGES C CXX)
+project(llcv VERSION 2.4.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,6 +20,9 @@ set(LLCV_SLEEP_INHIBIT AUTO CACHE STRING "Block automatic suspend during playbac
 set_property(CACHE LLCV_SLEEP_INHIBIT PROPERTY STRINGS AUTO ON OFF)
 set(LLCV_RECORDING AUTO CACHE STRING "MP4 recording through FFmpeg libavcodec/libavformat/libswscale (AUTO, ON, OFF)")
 set_property(CACHE LLCV_RECORDING PROPERTY STRINGS AUTO ON OFF)
+set(LLCV_FRAME_INTERPOLATION AUTO CACHE STRING "RIFE frame interpolation through the patched ncnn with Vulkan (AUTO, ON, OFF)")
+set_property(CACHE LLCV_FRAME_INTERPOLATION PROPERTY STRINGS AUTO ON OFF)
+set(LLCV_VULKAN_HEADERS "" CACHE PATH "Directory that contains vulkan/vulkan.h (default: the system Vulkan headers)")
 option(LLCV_FFMPEG_STATIC "Link the FFmpeg libraries statically (from PKG_CONFIG_PATH, see tools/build-ffmpeg-static.sh)" OFF)
 set(LLCV_SDL3 AUTO CACHE STRING "SDL3 source: AUTO (system, else bundled), SYSTEM, BUNDLED")
 set_property(CACHE LLCV_SDL3 PROPERTY STRINGS AUTO SYSTEM BUNDLED)
@@ -124,6 +127,19 @@ if (NOT LLCV_RECORDING STREQUAL "OFF")
         message(FATAL_ERROR "Recording needs FFmpeg 4.4 or newer (libavcodec, libavformat, libavutil, libswscale development files)")
     endif()
 endif()
+set(LLCV_HAVE_FRAME_INTERPOLATION OFF)
+if (NOT LLCV_FRAME_INTERPOLATION STREQUAL "OFF")
+    find_package(ncnn CONFIG QUIET)
+    find_path(LLCV_VULKAN_INCLUDE_DIR vulkan/vulkan.h HINTS ${LLCV_VULKAN_HEADERS})
+    if (ncnn_FOUND AND NCNN_VULKAN AND LLCV_VULKAN_INCLUDE_DIR)
+        set(LLCV_HAVE_FRAME_INTERPOLATION ON)
+    elseif (LLCV_FRAME_INTERPOLATION STREQUAL "ON")
+        message(FATAL_ERROR "Frame interpolation needs the patched ncnn with Vulkan (tools/build-ncnn-static.sh, then "
+                            "-Dncnn_DIR=<prefix>/lib/cmake/ncnn) and the Vulkan headers (libvulkan-dev, vulkan-headers)")
+    endif()
+endif()
+message(STATUS "RIFE frame interpolation (ncnn Vulkan): ${LLCV_HAVE_FRAME_INTERPOLATION}")
+
 if (LLCV_HAVE_RECORDING AND LLCV_FFMPEG_STATIC)
     message(STATUS "MP4 recording (FFmpeg): ON, static libavcodec ${FFMPEG_libavcodec_VERSION}")
 else()
@@ -232,6 +248,30 @@ if (LLCV_HAVE_RECORDING)
     endif()
 else()
     target_sources(llcv PRIVATE src/recording/RecordingUnavailable.cpp)
+endif()
+
+if (LLCV_HAVE_FRAME_INTERPOLATION)
+    target_sources(llcv PRIVATE
+        src/video/FrameInterpolator.cpp
+        src/video/rife/RifeBackend.cpp
+        src/video/rife/RifeGraph.cpp)
+    get_target_property(LLCV_NCNN_INCLUDE_DIRS ncnn INTERFACE_INCLUDE_DIRECTORIES)
+    set_source_files_properties(src/video/rife/RifeGraph.cpp PROPERTIES INCLUDE_DIRECTORIES "${LLCV_NCNN_INCLUDE_DIRS}")
+    if (NOT LLCV_VULKAN_INCLUDE_DIR IN_LIST CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES)
+        set_source_files_properties(src/video/rife/RifeBackend.cpp PROPERTIES INCLUDE_DIRECTORIES "${LLCV_VULKAN_INCLUDE_DIR}")
+    endif()
+    set_source_files_properties(src/video/rife/RifeBackend.cpp src/video/rife/RifeGraph.cpp
+        PROPERTIES COMPILE_OPTIONS "-Wno-missing-field-initializers")
+    target_link_libraries(llcv PRIVATE $<LINK_ONLY:ncnn> ${CMAKE_DL_LIBS})
+    install(DIRECTORY third_party/frame-interpolation/rife-fast DESTINATION ${CMAKE_INSTALL_DATADIR}/llcv)
+    install(FILES
+        third_party/frame-interpolation/NOTICE.txt
+        third_party/frame-interpolation/RIFE-MODEL-LICENSE.txt
+        third_party/frame-interpolation/NCNN-LICENSE.txt
+        third_party/frame-interpolation/GLSLANG-LICENSE.txt
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/llcv/rife-fast)
+else()
+    target_sources(llcv PRIVATE src/video/FrameInterpolatorUnavailable.cpp)
 endif()
 
 target_compile_options(llcv PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra>)

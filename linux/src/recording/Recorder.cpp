@@ -16,6 +16,7 @@ extern "C" {
 #include <libavutil/frame.h>
 #include <libavutil/hwcontext.h>
 #include <libavutil/mathematics.h>
+#include <libavutil/opt.h>
 #include <libavutil/samplefmt.h>
 #include <libavutil/version.h>
 #include <libswscale/swscale.h>
@@ -57,6 +58,12 @@ constexpr AVRational kNanoseconds{1, 1000000000};
 constexpr int kRgbCheckWarmups = 1;
 constexpr int kRgbCheckSamples = 6;
 constexpr double kRgbCheckMeanShare = 0.75;
+
+const char* Mp4Flags(AVFormatContext* format) {
+    const bool hybrid = format->priv_data && av_opt_find(format->priv_data, "hybrid_fragmented", "movflags", 0, 0);
+    return hybrid ? "hybrid_fragmented+frag_keyframe+empty_moov+default_base_moof"
+                  : "frag_keyframe+empty_moov+default_base_moof";
+}
 
 struct VideoBuffer {
     std::vector<uint8_t> data;
@@ -385,10 +392,10 @@ bool Recorder::Impl::Session::Open(std::string& error) {
     }
     if (!OpenSegment(currentPath_, error)) return false;
     freeBytes_ = FreeBytes(currentPath_.parent_path());
-    diagnostics::Log("[recording] %s -> %s %dx%d @ %.3f fps, %s, audio %s, %s", capture::PixelFormatName(input_.format),
+    diagnostics::Log("[recording] %s -> %s %dx%d @ %.3f fps, %s, audio %s, %s, %s", capture::PixelFormatName(input_.format),
                      video_.name.c_str(), outWidth_, outHeight_, fps_,
                      options_.rateControl == RateControl::Quality ? "CQP" : "bitrate",
-                     audio_ ? "AAC" : "none", currentPath_.c_str());
+                     audio_ ? "AAC" : "none", Mp4Flags(format_), currentPath_.c_str());
     return true;
 }
 
@@ -458,7 +465,7 @@ bool Recorder::Impl::Session::OpenSegment(const std::filesystem::path& path, std
         return false;
     }
     AVDictionary* muxOptions = nullptr;
-    av_dict_set(&muxOptions, "movflags", "frag_keyframe+empty_moov+default_base_moof", 0);
+    av_dict_set(&muxOptions, "movflags", Mp4Flags(format_), 0);
     result = avformat_write_header(format_, &muxOptions);
     av_dict_free(&muxOptions);
     if (result < 0) {

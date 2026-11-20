@@ -134,6 +134,21 @@ std::filesystem::path FindTranslation(const std::string& fileName) {
     return FirstExisting(candidates);
 }
 
+std::filesystem::path FindInterpolationModels() {
+    std::vector<std::filesystem::path> candidates;
+    const auto executable = ExecutableDirectory();
+    if (!executable.empty()) {
+        candidates.push_back(executable.parent_path() / "share" / "llcv" / "rife-fast" / "fast-fold-cache.ncnn.bin");
+    }
+    candidates.push_back(std::filesystem::path(LLCV_DATA_DIR) / "rife-fast" / "fast-fold-cache.ncnn.bin");
+#ifdef LLCV_SOURCE_DIR
+    candidates.push_back(std::filesystem::path(LLCV_SOURCE_DIR) / "third_party" / "frame-interpolation" / "rife-fast" /
+                         "fast-fold-cache.ncnn.bin");
+#endif
+    const auto found = FirstExisting(candidates);
+    return found.empty() ? found : found.parent_path();
+}
+
 std::filesystem::path FindAppIcon() {
     const std::string fileName = std::string(LLCV_APP_ID) + ".png";
     std::vector<std::filesystem::path> candidates;

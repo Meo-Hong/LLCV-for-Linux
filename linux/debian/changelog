@@ -1,3 +1,28 @@
+llcv (2.4.0) resolute; urgency=medium
+
+  * Follow the Windows LLCV 2.3.0 to 2.4.0 updates with RIFE Vulkan frame
+    interpolation. The NVIDIA VFG path and the playback GPU choice are
+    Windows only.
+  * RIFE frame interpolation (amd64, off by default, F7): the Practical-RIFE
+    4.25 Fast model runs on a Vulkan GPU through a built-in ncnn and doubles
+    1920x1080 SDR video at 24 to 60 fps in Immediate presentation. The
+    generated frame is shown half a capture frame before the original, and
+    a pair that is not ready by then shows only the original.
+  * HUD protection, luma and color by default, keeps fixed screen elements
+    such as hearts and text from smearing.
+  * While interpolating, capture uses 1920x1080 with the selected pixel
+    format at Frame rate, Auto (highest 24-60 fps) or a listed rate chosen
+    under Video. P010 HDR is not interpolated.
+  * Turning interpolation off with F7 is kept for the next start; the
+    setting stays on.
+  * OpenGL and Vulkan share the frames on the same GPU through
+    GL_EXT_memory_object_fd and GL_EXT_semaphore_fd.
+  * Recordings that end normally get a complete MP4 sample index at the end
+    (hybrid MP4), so file managers show their length; they are still written
+    as fragmented MP4 while recording.
+
+ -- Meohong <busimh001@gmail.com>  Sat, 21 Nov 2026 12:00:00 +0900
+
 llcv (2.2.1) resolute; urgency=medium
 
   * Follow the Windows LLCV 2.2.0 and 2.2.1 updates.

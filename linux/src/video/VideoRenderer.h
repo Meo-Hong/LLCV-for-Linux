@@ -41,7 +41,7 @@ public:
         upscalePreserve_ = preserve;
     }
     void Upload(const capture::VideoFrame& frame);
-    void Draw(int targetWidth, int targetHeight, bool sharp);
+    void Draw(int targetWidth, int targetHeight, bool sharp, GLuint generated = 0);
     void BeginUiLayer(int targetWidth, int targetHeight);
     void EndUiLayer();
     void ComposeHdr(int targetWidth, int targetHeight, bool sharp);
@@ -50,6 +50,10 @@ public:
     bool ReadImage(std::vector<uint8_t>& rgba, int& width, int& height);
 
     bool HasImage() const { return hasImage_; }
+    GLuint VideoTexture() const { return video_.texture; }
+    bool InterpolationEligible() const {
+        return hasImage_ && output_ == OutputMode::Sdr && !SourceIsPq() && sourceProgram_ != kP010;
+    }
     bool SupportsSixteenBitTextures() const { return sixteenBitTextures_; }
     bool SourceIsPq() const { return hasImage_ && sourceColor_.transfer == Transfer::Pq && sourceProgram_ != kRgb; }
     OutputMode Output() const { return output_; }
@@ -103,7 +107,7 @@ private:
     void Convert(Target& target, OutputMode output);
     void SetFilter(GLuint texture, bool sharp);
     PixelRect FitRect(int targetWidth, int targetHeight) const;
-    GLuint UpscaledTexture(const PixelRect& rect);
+    GLuint UpscaledTexture(const PixelRect& rect, GLuint source, uint64_t generation);
     void DrawQuad(const Program& program, float x0, float y0, float x1, float y1, bool flip);
 
     std::array<Program, kProgramCount> programs_{};
@@ -136,6 +140,7 @@ private:
     std::string upscaleIssue_;
     UpscaleState upscaleState_ = UpscaleState::Off;
     uint64_t imageGeneration_ = 0;
+    uint64_t generatedGeneration_ = 0;
 };
 
 }

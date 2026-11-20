@@ -1,4 +1,4 @@
-.TH LLCV 1 "2026-11-02" "LLCV 2.2.1" "User Commands"
+.TH LLCV 1 "2026-11-21" "LLCV 2.4.0" "User Commands"
 .SH NAME
 llcv \- low-latency viewer for USB HDMI capture devices
 .SH SYNOPSIS
@@ -85,6 +85,13 @@ unmutes.
 .B F6
 Turn CMAA2 \(-> NIS upscaling on or off. It applies to SDR video enlarged by
 up to 2x per axis, for display only, and needs OpenGL compute shaders.
+.TP
+.B F7
+Turn RIFE frame interpolation on or off, after it is enabled under Settings,
+Video. A generated frame is shown between every two captured 1920x1080 SDR
+frames at 24 to 60 fps. It needs Immediate presentation and a Vulkan GPU that
+shares textures with OpenGL (GL_EXT_memory_object_fd), and is included in the
+x86_64 builds only.
 .SH FILES
 .TP
 .I $XDG_CONFIG_HOME/llcv/settings.ini
@@ -98,6 +105,10 @@ Screenshots.
 .TP
 .I $XDG_VIDEOS_DIR/LLCV/
 Recordings, unless another folder is chosen in the settings.
+.TP
+.I /usr/share/llcv/rife-fast/
+Practical-RIFE 4.25 model used for frame interpolation, with its license
+notices.
 .SH HDR
 P010 (10-bit HDR10) capture needs Linux 7.1 or newer, or a uvcvideo module
 with P010 support. On Wayland compositors that offer the

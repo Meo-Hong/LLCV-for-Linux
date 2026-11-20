@@ -23,6 +23,7 @@ inline constexpr Shortcut kShortcuts[] = {
     {input::Action::Recording, N_("Start / stop recording"), true},
     {input::Action::Mute, N_("Toggle playback mute"), false},
     {input::Action::Upscaling, N_("Toggle CMAA2 → NIS upscaling"), true},
+    {input::Action::FrameInterpolation, N_("Toggle RIFE frame interpolation"), true},
 };
 
 struct FixedShortcut {
