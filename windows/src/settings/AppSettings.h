@@ -99,12 +99,18 @@ struct ExclusiveEndpointCacheEntry {
     bool inconclusive = false; // A completed attempt awaiting explicit retry.
 };
 
+enum class InterpolationMethod { NvidiaVfg = 1, RifeVulkan = 2 };
+inline constexpr int kDefaultRifeHudMode = 2; // luma and chroma
+
 struct AppSettings {
     shortcuts::Bindings shortcuts = shortcuts::Defaults;
     UiLanguage uiLanguage = UiLanguage::Auto;
     bool settingsLightTheme = false; // App chrome; persisted key retained for compatibility.
     AudioMode audioMode = AudioMode::WasapiShared;
     bool consoleSurround51 = false;
+#ifdef LLCV_DOLBY_CAPTURE
+    bool dolbyCapture = false;
+#endif
     int wasapiBufferMs = 20;
     uint32_t wasapiSharedPeriodFrames = 0;
     DriftCorrectionMode driftCorrection = DriftCorrectionMode::Auto;
@@ -126,6 +132,7 @@ struct AppSettings {
     FullscreenVideoPosition fullscreenVideoPosition = FullscreenVideoPosition::Center;
     VideoPixelFormat pixelFormat = VideoPixelFormat::Auto;
     int videoFrameRate = 0;
+    int rifeCaptureFrameRate = -1; // -1: inherit the original capture rate, 0: Auto
     // Explicit driver request; leave the normal frame-rate preference intact.
     bool capture40Fps = false;
     bool allowUnlistedFps = false;
@@ -143,6 +150,12 @@ struct AppSettings {
     bool saveLog = false;
     bool screenshotClipboard = false;
     bool vsrEnabled = false;
+    bool vfgEnabled = false;
+    bool vfgPlaybackEnabled = false;
+    bool vfgLowQuality = false;
+    bool vfgWaitForFrame = false;
+    InterpolationMethod interpolationMethod = InterpolationMethod::RifeVulkan;
+    int rifeHudMode = kDefaultRifeHudMode; // 0: off, 1: luma, 2: luma and chroma
     bool cmaaNisEnabled = false;
     UpscalingMethod preferredUpscaler = UpscalingMethod::CmaaNis;
     int nisSharpnessPercent = 15; // 0..100; default 0.15. Display processing only.
@@ -174,6 +187,7 @@ struct AppSettings {
     std::wstring monitorDevice;
     // Explicit startup display; empty preserves the last-window-position policy.
     std::wstring preferredDisplayMonitor;
+    std::wstring playbackGpuId; // Empty uses automatic GPU selection.
 };
 
 // Enabled legacy preferences take priority; OFF remembers the last selection.

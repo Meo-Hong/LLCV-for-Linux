@@ -1,5 +1,6 @@
 #include "settings/SettingsStore.h"
 #include "settings/TestProfile.h"
+#include "video/InterpolationMethodPolicy.h"
 
 #include <windows.h>
 
@@ -175,6 +176,14 @@ LoadResult LoadFromIni(const std::wstring& path) {
 #endif
     if (ReadString(path,L"Shortcuts",L"Mute",L"missing")==L"missing")
         shortcuts::AddMuteDefault(settings.shortcuts);
+#ifdef LLCV_RIFE_OPTIONAL
+    for(auto action:{shortcuts::Action::HudCorrection,shortcuts::Action::FrameInterpolation}){
+        const auto i=static_cast<size_t>(action);
+        if(ReadString(path,L"Shortcuts",shortcuts::Names[i],L"missing")!=L"missing")continue;
+        auto used=[&](unsigned key){for(size_t j=0;j<shortcuts::Count;++j)if(i!=j&&settings.shortcuts[j]==key)return true;return false;};
+        if(used(settings.shortcuts[i]))for(unsigned k=VK_F13;k<=VK_F24;++k)if(!used(shortcuts::Ctrl|k)){settings.shortcuts[i]=shortcuts::Ctrl|k;break;}
+    }
+#endif
     if (!shortcuts::Valid(settings.shortcuts)) settings.shortcuts=shortcuts::Defaults;
     settings.settingsLightTheme = _wcsicmp(
         ReadString(path, L"General", L"SettingsTheme", L"Dark").c_str(), L"Light") == 0;
@@ -197,6 +206,9 @@ LoadResult LoadFromIni(const std::wstring& path) {
     settings.audioOnlyHeight = std::clamp(
         ReadInt(path, L"Window", L"AudioOnlyHeight", 230), 230, 16384);
     settings.consoleSurround51 = ReadBool(path, L"Audio", L"ConsoleSurround51");
+#ifdef LLCV_DOLBY_CAPTURE
+    settings.dolbyCapture=settings.consoleSurround51&&ReadBool(path,L"Audio",L"DolbyCapture");
+#endif
 
     const std::wstring audioMode =
         ReadString(path, L"Audio", L"Mode", L"Shared");
@@ -369,6 +381,9 @@ LoadResult LoadFromIni(const std::wstring& path) {
     }
     settings.videoFrameRate =
         std::max(0, ReadInt(path, L"Video", L"FrameRate"));
+    const int rifeCaptureFrameRate = ReadInt(path, L"Video", L"RifeCaptureFrameRate", -1);
+    if (rifeCaptureFrameRate == 0 || interpolation::RifeCaptureRateSupported(rifeCaptureFrameRate))
+        settings.rifeCaptureFrameRate = rifeCaptureFrameRate;
     settings.capture40Fps = ReadBool(path, L"Video", L"Capture40Fps");
     settings.allowUnlistedFps = ReadBool(path, L"Video", L"AllowUnlistedFps");
     const auto presentation = ReadString(path, L"Video", L"Presentation",
@@ -402,6 +417,7 @@ LoadResult LoadFromIni(const std::wstring& path) {
             : FullscreenCursorMode::AutoHide;
 
     settings.preferredDisplayMonitor = ReadString(path, L"Video", L"DisplayMonitor");
+    settings.playbackGpuId = ReadString(path, L"Video", L"PlaybackGpu");
     settings.fullscreenVideoPosition = FullscreenPositionFromIndex(
         ReadInt(path, L"Video", L"FullscreenVideoPosition"));
     settings.windowSnap = ReadBool(path, L"Window", L"Snap", true);
@@ -421,6 +437,18 @@ LoadResult LoadFromIni(const std::wstring& path) {
     const int nisSharpness = ReadInt(path, L"Video", L"NisSharpness", 15);
     settings.nisSharpnessPercent = nisSharpness >= 0 && nisSharpness <= 100 ? nisSharpness : 15;
     settings.cmaaPreserve = ReadInt(path, L"Video", L"CmaaPreserve", 0) == 1;
+    settings.vfgEnabled = ReadInt(path, L"Video", L"VfgEnabled", 0) == 1;
+    settings.vfgPlaybackEnabled = settings.vfgEnabled &&
+        ReadInt(path, L"Video", L"VfgPlaybackEnabled", 1) == 1;
+    settings.vfgLowQuality = ReadInt(path, L"Video", L"VfgLowQuality", 0) == 1;
+    settings.vfgWaitForFrame = ReadInt(path, L"Video", L"VfgWaitForFrame", 0) == 1;
+    const int interpolationMethod = ReadInt(path, L"Video", L"InterpolationMethod", -1);
+    // Released profiles before the method picker stored only the VFG opt-in.
+    // The development build's Automatic (0) maps to RIFE.
+    settings.interpolationMethod = interpolationMethod == 1 || (interpolationMethod == -1 && settings.vfgEnabled)
+        ? InterpolationMethod::NvidiaVfg : InterpolationMethod::RifeVulkan;
+    const int rifeHudMode = ReadInt(path, L"Video", L"RifeHudMode", kDefaultRifeHudMode);
+    settings.rifeHudMode = rifeHudMode >= 0 && rifeHudMode <= 2 ? rifeHudMode : kDefaultRifeHudMode;
     if (settings.cmaaNisEnabled) settings.vsrEnabled = false;
     settings.preferredUpscaler = ReadInt(path, L"Video", L"PreferredUpscaler", 1) == 0
         ? UpscalingMethod::NvidiaVsr : UpscalingMethod::CmaaNis;
@@ -467,6 +495,9 @@ static DWORD WriteSettings(const std::wstring& file, const AppSettings& settings
     WriteInt(path, L"Window", L"AudioOnlyWidth", settings.audioOnlyWidth);
     WriteInt(path, L"Window", L"AudioOnlyHeight", settings.audioOnlyHeight);
     WriteInt(path, L"Audio", L"ConsoleSurround51", settings.consoleSurround51 ? 1 : 0);
+#ifdef LLCV_DOLBY_CAPTURE
+    WriteInt(path,L"Audio",L"DolbyCapture",settings.dolbyCapture?1:0);
+#endif
 
     const wchar_t* audioMode = L"Shared";
     if (settings.audioMode == AudioMode::WasapiExclusive) {
@@ -561,6 +592,9 @@ static DWORD WriteSettings(const std::wstring& file, const AppSettings& settings
     WriteString(path, L"Video", L"PixelFormat",
                 PixelFormatSettingName(settings.pixelFormat));
     WriteInt(path, L"Video", L"FrameRate", settings.videoFrameRate);
+    WriteInt(path, L"Video", L"RifeCaptureFrameRate",
+        interpolation::RifeCaptureRateSupported(settings.rifeCaptureFrameRate)
+            ? settings.rifeCaptureFrameRate : settings.rifeCaptureFrameRate == 0 ? 0 : -1);
     WriteInt(path, L"Video", L"Capture40Fps", settings.capture40Fps ? 1 : 0);
     WriteInt(path, L"Video", L"AllowUnlistedFps", settings.allowUnlistedFps ? 1 : 0);
     WriteString(path, L"Video", L"Presentation",
@@ -589,6 +623,7 @@ static DWORD WriteSettings(const std::wstring& file, const AppSettings& settings
                     ? L"AlwaysVisible" : L"AutoHide");
 
     WriteString(path, L"Video", L"DisplayMonitor", settings.preferredDisplayMonitor.c_str());
+    WriteString(path, L"Video", L"PlaybackGpu", settings.playbackGpuId.c_str());
     WriteInt(path, L"Video", L"FullscreenVideoPosition",
         static_cast<int>(FullscreenPositionFromIndex(static_cast<int>(settings.fullscreenVideoPosition))));
     WriteInt(path, L"Window", L"Snap", settings.windowSnap ? 1 : 0);
@@ -600,6 +635,12 @@ static DWORD WriteSettings(const std::wstring& file, const AppSettings& settings
     WriteInt(path, L"Video", L"PreferredUpscaler", static_cast<int>(SelectedUpscaler(settings)));
     WriteInt(path, L"Video", L"NisSharpness", std::clamp(settings.nisSharpnessPercent, 0, 100));
     WriteInt(path, L"Video", L"CmaaPreserve", settings.cmaaPreserve ? 1 : 0);
+    WriteInt(path, L"Video", L"VfgEnabled", settings.vfgEnabled ? 1 : 0);
+    WriteInt(path, L"Video", L"VfgPlaybackEnabled", settings.vfgEnabled && settings.vfgPlaybackEnabled ? 1 : 0);
+    WriteInt(path, L"Video", L"VfgLowQuality", settings.vfgLowQuality ? 1 : 0);
+    WriteInt(path, L"Video", L"VfgWaitForFrame", settings.vfgWaitForFrame ? 1 : 0);
+    WriteInt(path, L"Video", L"InterpolationMethod", static_cast<int>(settings.interpolationMethod));
+    WriteInt(path, L"Video", L"RifeHudMode", std::clamp(settings.rifeHudMode, 0, 2));
     WriteInt(path, L"Diagnostics", L"ShowConsole",
              settings.showDiagnosticConsole ? 1 : 0);
     return path.error;
@@ -692,6 +733,14 @@ bool SaveToIni(const std::wstring& path, const AppSettings& settings,
                unsigned long* error) {
     return UpdateIniAtomically(path, [&](const auto& temporary) {
         return WriteSettings(temporary, settings);
+    }, error);
+}
+
+bool SaveVfgPlayback(const std::wstring& path, bool enabled, unsigned long* error) {
+    return UpdateIniAtomically(path, [&](const auto& temporary) {
+        IniWriter writer{temporary};
+        WriteInt(writer, L"Video", L"VfgPlaybackEnabled", enabled ? 1 : 0);
+        return writer.error;
     }, error);
 }
 

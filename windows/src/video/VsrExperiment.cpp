@@ -4,11 +4,11 @@
 #include <dxgi.h>
 
 namespace llcv::vsr {
-AdapterProbe ProbeDefaultAdapter() {
+AdapterProbe ProbeDefaultAdapter(IDXGIAdapter* preferred) {
     AdapterProbe probe;
     using Microsoft::WRL::ComPtr;
     ComPtr<ID3D11Device> device;
-    probe.result = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+    probe.result = D3D11CreateDevice(preferred, preferred ? D3D_DRIVER_TYPE_UNKNOWN : D3D_DRIVER_TYPE_HARDWARE, nullptr,
         D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
         nullptr, 0, D3D11_SDK_VERSION, &device, nullptr, nullptr);
     if (FAILED(probe.result)) return probe;
@@ -19,6 +19,10 @@ AdapterProbe ProbeDefaultAdapter() {
         FAILED(probe.result = dxgi->GetAdapter(&adapter)) ||
         FAILED(probe.result = adapter->GetDesc(&desc))) return probe;
     probe.vendor = desc.VendorId;
+    probe.luid = desc.AdapterLuid;
+    probe.rtx30=IsGeForceRtx30(desc.VendorId,desc.Description);
+    probe.prefersVfg=NvidiaAdapter(desc.VendorId) &&
+        (wcsstr(desc.Description,L"GeForce RTX 40") || wcsstr(desc.Description,L"GeForce RTX 50"));
     return probe;
 }
 SupportProbe ProbeSupport() {

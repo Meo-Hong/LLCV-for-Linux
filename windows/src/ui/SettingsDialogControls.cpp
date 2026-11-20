@@ -2,7 +2,11 @@
 #include "ViewerShortcuts.h"
 #include "PresentationModeUi.h"
 #include "UiText.h"
+#ifdef LLCV_RIFE_TEST
+#include "video/RifeHalfTest.h"
+#endif
 #include "capture/DirectShowDevices.h"
+#include "video/InterpolationMethodPolicy.h"
 
 #include <commctrl.h>
 #include <algorithm>
@@ -17,6 +21,29 @@ using settings::AudioMode;
 using settings::DriftCorrectionMode;
 using settings::FullscreenCursorMode;
 using settings::ScalingMode;
+
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+void PopulateRifeCaptureRatePicker(HWND picker, bool english, int rate, std::span<const int> detectedRates) {
+    const auto add = [&](const wchar_t* text, int fps) {
+        const auto row = SendMessageW(picker, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
+        if (row >= 0) SendMessageW(picker, CB_SETITEMDATA, row, fps);
+        return row;
+    };
+    SendMessageW(picker, CB_RESETCONTENT, 0, 0);
+    auto selected = add(english ? L"Auto (up to 60 fps)" : L"자동 (최대 60 fps)", 0);
+    for (int fps = interpolation::kRifeMaxCaptureRate; fps >= interpolation::kRifeMinCaptureRate; --fps) {
+        if (std::find(detectedRates.begin(), detectedRates.end(), fps) == detectedRates.end()) continue;
+        const auto row = add((std::to_wstring(fps) + L" fps").c_str(), fps);
+        if (fps == rate) selected = row;
+    }
+    if (interpolation::RifeCaptureRateSupported(rate) &&
+        std::find(detectedRates.begin(), detectedRates.end(), rate) == detectedRates.end()) {
+        selected = add((std::to_wstring(rate) +
+            (english ? L" fps (unavailable)" : L" fps (지원 안 됨)")).c_str(), rate);
+    }
+    SendMessageW(picker, CB_SETCURSEL, selected, 0);
+}
+#endif
 
 void ApplyResolutionSelections(const SettingsControls& state,
                               std::span<const settings::VideoPresetInfo> presets,
@@ -110,6 +137,9 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     if (state->tabControl) {
         const wchar_t* labels[] = {
             initial.english ? L"Video" : L"영상", text(L"오디오"),
+#ifdef LLCV_RIFE_AUTO_UI_TEST
+            initial.english ? L"Frame interpolation" : L"프레임 보간",
+#endif
 #ifdef LLCV_RECORDING
             initial.english ? L"Recording" : L"녹화",
 #endif
@@ -326,15 +356,33 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     SendMessageW(state->audioOnlyCheck, BM_SETCHECK,
                  initial.settings.audioOnly ? BST_CHECKED : BST_UNCHECKED, 0);
 
+#ifdef LLCV_DOLBY_CAPTURE
+    state->surround51Check=CreateWindowExW(0,L"COMBOBOX",L"",kSettingsDropdownStyle,580,244,320,140,hwnd,reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SURROUND51)),instance,nullptr);
+    for(auto label:{initial.english?L"Stereo":L"스테레오",L"LPCM 5.1",L"Dolby Digital 5.1 (AC-3 / E-AC-3)"})
+        SendMessageW(state->surround51Check,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
+    SendMessageW(state->surround51Check,CB_SETCURSEL,initial.settings.consoleSurround51?(initial.settings.dolbyCapture?2:1):0,0);
+#else
     state->surround51Check = CreateWindowExW(
+#ifdef LLCV_RIFE_OPTIONAL
+        0,L"BUTTON",initial.english?L"Console surround (5.1)":L"콘솔 서라운드 (5.1)",
+#else
         0, L"BUTTON", initial.english ? L"Console LPCM 5.1" : L"콘솔 LPCM 5.1",
+#endif
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
         580, 244, 320, 28, hwnd,
         reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SURROUND51)),
         instance, nullptr);
     SendMessageW(state->surround51Check, BM_SETCHECK,
         initial.settings.consoleSurround51 ? BST_CHECKED : BST_UNCHECKED, 0);
+#endif
+#ifdef LLCV_DOLBY_CAPTURE
+    state->surroundHelp=CreateWindowExW(0,L"BUTTON",L"?",WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON,0,0,24,24,hwnd,reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SURROUND_FORMAT_HELP)),instance,nullptr);
+    state->surround51Hint=makeLabel(initial.english?L"Capture audio format":L"캡처 오디오 형식",600,336);
+#else
     state->surround51Hint = CreateWindowExW(
+#if defined(LLCV_RIFE_OPTIONAL) && !defined(LLCV_INTERPOLATION_RELEASE)
+        0,L"STATIC",initial.english?L"WASAPI Shared · 48 kHz\r\n5.1/7.1 LPCM or direct Dolby Digital (AC-3).\r\nAC-3 needs an installed 5.1 decoder.\r\nWindows downmixes on stereo outputs.":L"WASAPI Shared · 48 kHz\r\n5.1/7.1 LPCM 또는 직접 AC-3 입력을 사용합니다.\r\nAC-3는 5.1 디코더 설치가 필요합니다.\r\n스테레오 출력은 Windows가 다운믹스합니다.",
+#else
         0, L"STATIC", initial.english
         ? L"Shared only · needs 6/8-channel PCM capture.\r\n"
           L"Set console and Windows output to 5.1 LPCM.\r\n"
@@ -344,8 +392,10 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
           L"콘솔과 Windows 출력을 5.1 LPCM으로 설정하세요.\r\n"
           L"스테레오 출력은 Windows가 다운믹스합니다.\r\n"
           L"Dolby/DTS와 가상 서라운드는 지원하지 않습니다.",
+#endif
         WS_CHILD | WS_VISIBLE | SS_LEFT,
         580, 280, 320, 100, hwnd, nullptr, instance, nullptr);
+#endif
 
     state->languageLabel = makeLabel(
         text(L"언어 / Language"), 24, 392);
@@ -417,6 +467,11 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
 
     state->guideShortcutsTitle = makeLabel(
         initial.english ? L"Keyboard shortcuts" : L"키보드 단축키", 34, 62);
+#ifdef LLCV_RIFE_OPTIONAL
+    state->shortcutListToggle=CreateWindowW(L"BUTTON",initial.english?L"Edit all shortcuts":L"전체 단축키 편집",
+        WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON,0,0,1,1,hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_SHORTCUT_LIST)),instance,nullptr);
+#endif
     state->shortcutBindings=initial.settings.shortcuts;
     state->shortcutResetButton=CreateWindowW(L"BUTTON",initial.english ? L"Reset defaults" : L"기본값 복원",
         WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_PUSHBUTTON,0,0,1,1,hwnd,
@@ -522,6 +577,88 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     state->vsrStatus = makeLabel(initial.english
         ? L"SDR / HDR10 · Toggle with F6"
         : L"SDR / HDR10 · F6으로 전환", 34, 474);
+#ifdef LLCV_RIFE_TEST
+    state->rifeHalfCheck=CreateWindowExW(0,L"BUTTON",initial.english?L"RIFE (F7)":L"RIFE 보간 (F7)",
+        WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_AUTOCHECKBOX,600,540,376,26,hwnd,reinterpret_cast<HMENU>(static_cast<INT_PTR>(llcv::rife_test::CheckCommand)),instance,nullptr);
+    SendMessageW(state->rifeHalfCheck,BM_SETCHECK,llcv::rife_test::requested.load()?BST_CHECKED:BST_UNCHECKED,0);
+#ifdef LLCV_INTERPOLATION_RELEASE
+    state->playbackGpuLabel = makeLabel(initial.english ? L"Playback GPU" : L"재생 그래픽카드", 184, 120);
+    state->playbackGpuCombo = CreateWindowExW(0, L"COMBOBOX", L"", kSettingsDropdownStyle,
+        184, 148, 376, 160, hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_PLAYBACK_GPU)),
+        instance, nullptr);
+    SendMessageW(state->playbackGpuCombo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(
+        initial.english ? L"Automatic (high-performance first)" : L"자동 (외장 그래픽 우선)"));
+    SendMessageW(state->playbackGpuCombo, CB_SETCURSEL, 0, 0);
+    AddSettingsTooltip(state, hwnd, state->playbackGpuCombo, initial.english
+        ? L"Applies to all video playback. Automatic prefers a high-performance GPU. Exclusive fullscreen requires a GPU connected to the display."
+        : L"모든 영상 재생에 적용됩니다. 자동은 외장 그래픽을 우선합니다. 독점 전체화면은 표시 모니터가 연결된 GPU를 사용합니다.");
+    state->vfgDownloadButton=CreateWindowExW(0,L"BUTTON",
+        initial.english?L"Download VFG components":L"VFG 구성품 받기",WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON,
+        0,0,240,32,hwnd,reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_VFG_DOWNLOAD)),instance,nullptr);
+#endif
+#if defined(LLCV_RIFE_VULKAN_BUNDLED) || ((defined(LLCV_FLYHIGH_TEST) || defined(LLCV_RIFE_OPTIONAL)) && !defined(LLCV_INTERPOLATION_RELEASE))
+    state->interpolationProviderLabel=makeLabel(initial.english?L"Method (F8)":L"보간 방식 (F8)",184,176);
+    state->interpolationProviderCombo=CreateWindowExW(0,L"COMBOBOX",L"",kSettingsDropdownStyle,
+        184,204,376,160,hwnd,reinterpret_cast<HMENU>(static_cast<INT_PTR>(llcv::rife_test::ProviderCommand)),instance,nullptr);
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+    SendMessageW(state->interpolationProviderCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"RIFE Vulkan"));
+    SendMessageW(state->interpolationProviderCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"NVIDIA VFG"));
+#elif defined(LLCV_RIFE_OPTIONAL)
+    const auto vfgLabel=state->vfgRtx30?(initial.english?L"NVIDIA VFG (experimental compatibility)":L"NVIDIA VFG (실험적 호환)"):L"NVIDIA VFG";
+    for(const wchar_t* choice:{L"RIFE",vfgLabel})SendMessageW(state->interpolationProviderCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(choice));
+#else
+    for(const wchar_t* choice:{L"RIFE",L"FlyHighFG"})SendMessageW(state->interpolationProviderCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(choice));
+#endif
+#endif
+#ifdef LLCV_RIFE_OPTIONAL
+    state->interpolationQualityHelp=CreateWindowExW(0,L"BUTTON",L"?",WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON,0,0,24,24,hwnd,reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_INTERPOLATION_QUALITY_HELP)),instance,nullptr);
+#endif
+    state->rifeScaleLabel=makeLabel(initial.english?L"Scale":L"추정 크기",756,528);
+    state->rifeScaleCombo=CreateWindowExW(0,L"COMBOBOX",L"",
+#ifdef LLCV_RIFE_AUTO_UI_TEST
+        kSettingsDropdownStyle,
+#else
+        WS_CHILD|WS_VISIBLE|WS_TABSTOP|CBS_DROPDOWNLIST|WS_VSCROLL,
+#endif
+        828,524,148,160,hwnd,reinterpret_cast<HMENU>(static_cast<INT_PTR>(llcv::rife_test::ScaleCommand)),instance,nullptr);
+#ifdef LLCV_RIFE_OPTIONAL
+for(auto scale:llcv::rife_test::Scales){const auto index=SendMessageW(state->rifeScaleCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(llcv::rife_test::PresetLabel(scale,initial.english)));SendMessageW(state->rifeScaleCombo,CB_SETITEMDATA,index,static_cast<LPARAM>(scale));}
+#else
+for(auto scale:llcv::rife_test::Scales){const auto index=SendMessageW(state->rifeScaleCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(llcv::rife_test::ScaleLabel(scale)));SendMessageW(state->rifeScaleCombo,CB_SETITEMDATA,index,static_cast<LPARAM>(scale));}
+#endif
+    SendMessageW(state->rifeScaleCombo,CB_SETCURSEL,llcv::rife_test::ScaleIndex(llcv::rife_test::selectedScale.load()),0);
+    state->rifeQualityCheck=CreateWindowExW(0,L"BUTTON",initial.english?L"Quality compare (wait; more latency; F10)":L"화질 비교 (완료 대기·지연 증가·F10)",
+        WS_CHILD|WS_VISIBLE|WS_TABSTOP|BS_AUTOCHECKBOX,600,556,376,18,hwnd,reinterpret_cast<HMENU>(static_cast<INT_PTR>(llcv::rife_test::QualityCommand)),instance,nullptr);
+    SendMessageW(state->rifeQualityCheck,BM_SETCHECK,llcv::rife_test::qualityComparison.load()?BST_CHECKED:BST_UNCHECKED,0);
+#ifdef LLCV_RIFE_AUTO_UI_TEST
+    state->rifeAutoUiLabel=makeLabel(initial.english?L"Automatic HUD protection (F4)":L"자동 HUD 보호 (F4)",184,320);
+    state->rifeAutoUiCombo=CreateWindowExW(0,L"COMBOBOX",L"",kSettingsDropdownStyle,
+        184,348,376,160,hwnd,reinterpret_cast<HMENU>(static_cast<INT_PTR>(llcv::rife_test::AutoUiCommand)),instance,nullptr);
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+    for(const wchar_t* choice:{initial.english?L"Off":L"끄기",initial.english?L"Luma edges":L"밝기 윤곽",initial.english?L"Luma and color edges":L"밝기와 색 윤곽"})
+#elif defined(LLCV_RIFE_TRAJECTORY)
+    for(const wchar_t* choice:{initial.english?L"Off":L"끄기",initial.english?L"Trajectory":L"이동 추적"})
+#else
+    for(const wchar_t* choice:{initial.english?L"Off":L"끄기",L"16 px",L"32 px"})
+#endif
+        SendMessageW(state->rifeAutoUiCombo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(choice));
+    for(auto& hint:state->rifeAutoUiHints)hint=CreateWindowExW(0,L"STATIC",L"",WS_CHILD|WS_VISIBLE|SS_LEFT|SS_NOPREFIX,
+        184,396,740,28,hwnd,nullptr,instance,nullptr);
+#ifdef LLCV_RIFE_OPTIONAL
+    SetWindowTextW(state->rifeAutoUiHints[2], initial.english
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+        ? L"To use Smooth Motion, turn off frame interpolation in LLCV.\r\nNVIDIA App → Graphics → Program Settings → LLCV → Driver Settings → Smooth Motion: On"
+        : L"Smooth Motion을 사용하려면 LLCV의 프레임 보간을 끕니다.\r\nNVIDIA App → 그래픽 → 프로그램 설정 → LLCV → 드라이버 설정 → Smooth Motion: 켜기");
+#elif defined(LLCV_INTERPOLATION_RELEASE)
+        ? L"To use Smooth Motion instead of VFG, leave VFG off in LLCV.\r\nNVIDIA App → Graphics → Program Settings → LLCV → Driver Settings → Smooth Motion: On"
+        : L"Smooth Motion을 사용하려면 LLCV의 ‘NVIDIA VFG 사용’을 꺼 둡니다.\r\nNVIDIA App → 그래픽 → 프로그램 설정 → LLCV → 드라이버 설정 → Smooth Motion: 켜기");
+#else
+        ? L"If you use NVIDIA Smooth Motion (RTX 40/50 series)\r\nTo use Smooth Motion instead of RIFE or VFG, leave ‘Enable NVIDIA frame interpolation’ off in LLCV.\r\nIn NVIDIA App → Graphics → Program Settings, select LLCV and turn on Smooth Motion under Driver Settings."
+        : L"NVIDIA Smooth Motion (RTX 40·50 시리즈)\r\nSmooth Motion을 사용하려면 LLCV의 ‘NVIDIA 프레임 보간 사용’을 꺼 둡니다.\r\nNVIDIA App → 그래픽 → 프로그램 설정 → LLCV → 드라이버 설정 → Smooth Motion: 켜기");
+#endif
+#endif
+#endif
+#endif
     state->screenshotClipboardCheck = CreateWindowExW(
         0, L"BUTTON", initial.english ? L"Also copy to clipboard" : L"클립보드에도 복사",
         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX | WS_TABSTOP,
@@ -542,8 +679,8 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         instance, nullptr);
     state->guideDiagnosticsText = CreateWindowExW(
         0, L"STATIC", initial.english
-            ? L"Enable log saving and reproduce the issue.\r\nCreate a report ZIP to review and attach manually."
-            : L"로그 저장을 켠 뒤 증상을 다시 재현하세요.\r\n진단자료 ZIP을 확인한 뒤 직접 첨부해 주세요.",
+            ? L"Enable log saving, reproduce the issue, then create a report ZIP."
+            : L"로그 저장을 켜고 증상을 재현한 뒤 진단 자료를 저장합니다.",
         WS_CHILD | WS_VISIBLE | SS_LEFT,
         505, 84, 360, 70, hwnd, nullptr, instance, nullptr);
     state->guideLogFolderButton = CreateWindowExW(
@@ -728,6 +865,28 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     state->unlistedFpsStatus = CreateWindowExW(0, L"STATIC", L"",
         WS_CHILD | SS_LEFT | SS_NOPREFIX, 0, 0, 376, 16, hwnd,
         nullptr, instance, nullptr);
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+    // The normal pickers keep the user's saved choices while RIFE uses FHD.
+    auto makeCapturePreview=[&](const wchar_t* label){
+        const HWND combo=CreateWindowExW(0,L"COMBOBOX",nullptr,
+            (kSettingsDropdownStyle & ~(WS_TABSTOP | WS_VISIBLE)) | WS_DISABLED,
+            0,0,180,100,hwnd,nullptr,instance,nullptr);
+        SendMessageW(combo,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label));
+        SendMessageW(combo,CB_SETCURSEL,0,0);
+        return combo;
+    };
+    state->rifeCaptureResolution=makeCapturePreview(L"1920 × 1080");
+    state->rifeCaptureFrameRate=initial.settings.rifeCaptureFrameRate;
+    state->rifeCaptureFps=CreateWindowExW(0,L"COMBOBOX",nullptr,
+        kSettingsDropdownStyle & ~WS_VISIBLE,0,0,180,200,hwnd,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDC_SETTINGS_RIFE_CAPTURE_FPS)),instance,nullptr);
+    PopulateRifeCaptureRatePicker(state->rifeCaptureFps,initial.english,
+        interpolation::RifeCaptureRate(initial.settings),{});
+    state->rifeCaptureHint=CreateWindowExW(0,L"STATIC",initial.english
+        ? L"RIFE uses FHD capture at up to 60 fps. Starting without RIFE restores your usual capture settings."
+        : L"RIFE는 FHD로 최대 60 fps까지 캡처합니다. RIFE 없이 시작하면 기존 캡처 설정을 사용합니다.",
+        WS_CHILD|SS_LEFT|SS_NOPREFIX,0,0,376,44,hwnd,nullptr,instance,nullptr);
+#endif
     population.pixelFormat(population.context);
 
     state->scalingLabel = makeLabel(text(L"화면 확대 방식"), 430, 274);
@@ -991,6 +1150,9 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
     // naturally in the narrower two-column layout.
     for (HWND checkbox : {state->volumeBoostCheck, state->surround51Check,
                           state->forceHdr10Check, state->saveLogCheck}) {
+#ifdef LLCV_DOLBY_CAPTURE
+        if(checkbox==state->surround51Check)continue;
+#endif
         SetWindowLongPtrW(checkbox, GWL_STYLE,
             GetWindowLongPtrW(checkbox, GWL_STYLE) | BS_MULTILINE);
     }
@@ -1022,6 +1184,9 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         state->captureDeviceLabel, state->captureDeviceCombo,
         state->captureAudioDeviceLabel, state->captureAudioDeviceCombo, state->captureAudioStatus,
         state->videoLabel, state->videoCombo, state->frameRateLabel, state->frameRateCombo,
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+        state->rifeCaptureResolution, state->rifeCaptureFps,
+#endif
         state->frameOptionsButton, state->frameOptionsTitle,
         state->unlistedFpsCheck, state->capture40Check, state->capture40Help,
         state->frameOptionsHint, state->frameOptionsClose,
@@ -1033,11 +1198,32 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         state->unlistedFpsStatus,
         state->videoDisplaySection,
         state->presentationLabel, state->presentationCombo, state->presentationHelp,
-        state->displayMonitorLabel, state->displayMonitorCombo, state->pixelCheck,
+        state->displayMonitorLabel, state->displayMonitorCombo,
+#ifdef LLCV_INTERPOLATION_RELEASE
+        state->playbackGpuLabel, state->playbackGpuCombo,
+#endif
+        state->pixelCheck,
         state->scalingLabel, state->scalingCombo,
         state->displayResolutionLabel, state->displayResolutionCombo, state->upscalerLabel, state->upscalerCombo,
         state->cmaaQualityLabel, state->cmaaQualityCombo,
         state->nisSharpnessLabel, state->nisSharpnessCombo, state->vsrGuideButton, state->vsrStatus,
+#ifdef LLCV_RIFE_TEST
+#ifdef LLCV_INTERPOLATION_RELEASE
+        state->vfgDownloadButton,
+#endif
+        state->rifeHalfCheck,
+#if defined(LLCV_FLYHIGH_TEST) || defined(LLCV_RIFE_OPTIONAL)
+        state->interpolationProviderLabel,state->interpolationProviderCombo,
+#endif
+        state->rifeScaleLabel,
+#ifdef LLCV_RIFE_OPTIONAL
+        state->interpolationQualityHelp,
+#endif
+        state->rifeScaleCombo,state->rifeQualityCheck,
+#ifdef LLCV_RIFE_AUTO_UI_TEST
+        state->rifeAutoUiLabel,state->rifeAutoUiCombo,state->rifeAutoUiHints[0],state->rifeAutoUiHints[1],state->rifeAutoUiHints[2],
+#endif
+#endif
 
         state->audioOutputSection,
         state->audioLabel, state->audioCombo, state->audioOutputLabel, state->audioOutputCombo,
@@ -1045,7 +1231,12 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         state->audioPlaybackSection,
         state->volumeHudLabel, state->volumeHudCombo,
         state->volumeBoostCheck, state->volumeBoostHelp, state->muteBackgroundCheck,
-        state->audioOnlyCheck, state->surround51Check, state->surround51Hint,
+        state->audioOnlyCheck,
+#ifdef LLCV_DOLBY_CAPTURE
+        state->surround51Hint,state->surroundHelp,state->surround51Check,
+#else
+        state->surround51Check,state->surround51Hint,
+#endif
         state->audioStabilitySection,
         state->driftLabel, state->driftCombo, state->driftHelp,
         state->pcmQueueLabel, state->pcmQueueCombo, state->pcmQueueHelp,
@@ -1058,10 +1249,10 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         state->fullscreenCursorHint, state->fullscreenCursorLabel, state->fullscreenCursorCombo,
         state->fullscreenPositionLabel, state->fullscreenPositionCombo, state->fullscreenPositionHint,
 
-        state->guideShortcutsTitle, state->shortcutResetButton, state->guideVideoHint,
+        state->guideShortcutsTitle, state->shortcutListToggle, state->shortcutResetButton, state->guideVideoHint,
         state->guideDiagnosticsTitle, state->guideDiagnosticsText,
-        state->saveLogCheck, state->showConsoleCheck, state->guideLogFolderButton,
-        state->guideReportButton, state->guideLsButton,
+        state->saveLogCheck, state->guideReportButton, state->guideLogFolderButton,
+        state->showConsoleCheck, state->guideLsButton,
 
         state->appPreferencesSection, state->languageLabel, state->languageCombo,
         state->themeLabel, state->themeCombo,
@@ -1078,7 +1269,7 @@ void CreateSettingsDialogControls(SettingsControls* state, HWND hwnd,
         if (control) SetWindowPos(control, HWND_BOTTOM, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW);
         if (control == state->shortcutResetButton) {
-            for (size_t i = 0; i < state->guideKeys.size(); ++i) {
+            for (const auto i : viewer_help::kDisplayOrder) {
                 for (HWND row : {state->guideKeys[i], state->guideDescriptions[i]})
                     SetWindowPos(row, HWND_BOTTOM, 0, 0, 0, 0,
                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW);

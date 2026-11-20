@@ -1,7 +1,7 @@
 ﻿param(
-    [string]$Version = "2.2.1",
-    [string]$BuildDir = "..\build-v2210-release",
-    [string]$OutputDir = "outputs\v2.2.1"
+    [string]$Version = "2.4.0",
+    [string]$BuildDir = "..\build-v2400-release",
+    [string]$OutputDir = "outputs\v2.4.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,12 +15,43 @@ $exe = Join-Path $build "LowLatencyCaptureViewer.exe"
 if (Test-Path -LiteralPath (Join-Path $build 'llcv-audio-recovery-diagnostic.txt')) {
     throw "Audio-input recovery diagnostic builds cannot be packaged as a regular release."
 }
+if ((Get-ChildItem -LiteralPath $build -Filter 'swresample-*.dll' -File) -or
+    (Test-Path -LiteralPath (Join-Path $build 'ffmpeg-licenses/dolby-ffmpeg-NOTICE.txt'))) {
+    throw "Dolby preview FFmpeg cannot be packaged as a regular release."
+}
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
     throw "Release executable not found: $exe"
 }
 $exeVersion = (Get-Item -LiteralPath $exe).VersionInfo.FileVersion
 if ($exeVersion -ne $Version -and $exeVersion -ne "$Version.0") {
     throw "Version mismatch: requested $Version but executable reports $exeVersion"
+}
+if ([version]$Version -ge [version]'2.3.0') {
+    $stamp = Join-Path $build 'llcv-release-vfg-sm86.sha256'
+    if (-not (Test-Path -LiteralPath $stamp -PathType Leaf)) {
+        throw 'Build the VFG + SM86 release executable before packaging.'
+    }
+    if ((Get-Content -LiteralPath $stamp -Raw).Trim() -ne (Get-FileHash -LiteralPath $exe).Hash) {
+        throw 'VFG release stamp does not match the executable; rebuild before packaging.'
+    }
+}
+
+$rifeBundle = Join-Path $build 'rife-vulkan'
+$rifeAssets = @('fast-fold-cache.ncnn.param','fast-fold-cache.ncnn.bin',
+    'fast-encoder.ncnn.param','fast-encoder.ncnn.bin','RIFE-MODEL-LICENSE.txt','NCNN-LICENSE.txt','GLSLANG-LICENSE.txt')
+$includeRife = [version]$Version -ge [version]'2.4.0' -or
+    (Test-Path -LiteralPath (Join-Path $rifeBundle 'fast-fold-cache.ncnn.bin') -PathType Leaf)
+if ($includeRife) {
+    $rifeStamp = Join-Path $build 'llcv-release-rife-vulkan.sha256'
+    if (!(Test-Path -LiteralPath $rifeStamp -PathType Leaf) -or
+        (Get-Content -LiteralPath $rifeStamp -TotalCount 1).Trim() -ne (Get-FileHash -LiteralPath $exe).Hash) {
+        throw 'Build the bundled RIFE Vulkan executable before packaging.'
+    }
+    foreach ($asset in $rifeAssets) {
+        if (!(Test-Path -LiteralPath (Join-Path $rifeBundle $asset) -PathType Leaf)) {
+            throw "Missing bundled RIFE file: $asset"
+        }
+    }
 }
 
 New-Item -ItemType Directory -Force -Path $output | Out-Null
@@ -44,6 +75,13 @@ if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 New-Item -ItemType Directory -Force -Path $portable | Out-Null
 
 Copy-Item -LiteralPath $exe -Destination $portable
+if ($includeRife) {
+    $rifeTarget = Join-Path $portable 'rife-vulkan'
+    New-Item -ItemType Directory -Path $rifeTarget | Out-Null
+    foreach ($asset in $rifeAssets) {
+        Copy-Item -LiteralPath (Join-Path $rifeBundle $asset) -Destination $rifeTarget
+    }
+}
 # Only the pinned mux runtime is shipped, never the development SDK or FFmpeg tools.
 foreach ($dll in @("avformat-62.dll", "avcodec-62.dll", "avutil-60.dll")) {
     Copy-Item -LiteralPath (Join-Path $build $dll) -Destination $portable

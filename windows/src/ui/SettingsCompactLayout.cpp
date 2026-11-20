@@ -1,5 +1,8 @@
 #include "SettingsView.h"
 #include "settings/AppSettings.h"
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+#include "video/InterpolationMethodPolicy.h"
+#endif
 
 #include <algorithm>
 #include <initializer_list>
@@ -173,21 +176,48 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
             {s->recPause,0,120,std::min(width,240),32}});
         break;
 #endif
-    case SettingsTab::VideoWindow:
+    case SettingsTab::VideoWindow: {
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+        const bool rifeInput=SettingsRifeCaptureOverride(*s);
+#else
+        constexpr bool rifeInput=false;
+#endif
         pages.Group(text(L"캡처 장치",L"Capture devices"));
         pages.Button(s->videoRefreshButton);
         pages.Field(s->captureDeviceLabel,s->captureDeviceCombo);
         pages.Block(54, {{s->captureAudioDeviceLabel,0,0,width,20},
             {s->captureAudioDeviceCombo,0,24,width,30},{s->captureAudioStatus,0,24,width,30}});
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+        if (rifeInput && width >= 360) {
+            const int half = (width - 16) / 2;
+            pages.Block(54, {{s->videoLabel,0,0,half,20}, {s->rifeCaptureResolution,0,24,half,30},
+                {s->frameRateLabel,half+16,0,width-half-16,20},
+                {s->rifeCaptureFps,half+16,24,width-half-16,30}});
+        } else {
+            pages.Field(s->videoLabel,rifeInput?s->rifeCaptureResolution:s->videoCombo);
+            pages.Field(s->frameRateLabel,rifeInput?s->rifeCaptureFps:s->frameRateCombo);
+        }
+#else
         pages.Field(s->videoLabel,s->videoCombo);
         pages.Field(s->frameRateLabel,s->frameRateCombo);
-        pages.Check(s->unlistedFpsCheck);
-        pages.Check(s->capture40Check,s->capture40Help);
+#endif
+        if(!rifeInput){
+            pages.Check(s->unlistedFpsCheck);
+            pages.Check(s->capture40Check,s->capture40Help);
+        }
         pages.Group(text(L"영상 형식",L"Video format"));
-        pages.Field(s->pixelFormatLabel,s->pixelFormatCombo);
-        pages.Text(s->videoCapabilityStatus,CapabilityTextHeight(s->videoCapabilityStatus,width,dpi));
-        if (GetWindowTextLengthW(s->unlistedFpsStatus) > 0)
-            pages.Text(s->unlistedFpsStatus,20);
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+        if(rifeInput){
+            pages.Field(s->pixelFormatLabel,s->pixelFormatCombo);
+            pages.Text(s->rifeCaptureHint,CapabilityTextHeight(s->rifeCaptureHint,width,dpi));
+        }else
+#endif
+        {
+            pages.Field(s->pixelFormatLabel,s->pixelFormatCombo);
+            pages.Text(s->videoCapabilityStatus,CapabilityTextHeight(s->videoCapabilityStatus,width,dpi));
+            if (GetWindowTextLengthW(s->unlistedFpsStatus) > 0)
+                pages.Text(s->unlistedFpsStatus,20);
+        }
         // Do not create blank continuation pages for formats without overrides.
         {
         const LRESULT selection=SendMessageW(s->pixelFormatCombo,CB_GETCURSEL,0,0);
@@ -204,6 +234,9 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
         pages.Group(text(L"화면 표시",L"Display"));
         pages.HeadingField(s->presentationLabel,s->presentationCombo,s->presentationHelp);
         pages.Field(s->displayMonitorLabel,s->displayMonitorCombo);
+#ifdef LLCV_INTERPOLATION_RELEASE
+        pages.Field(s->playbackGpuLabel, s->playbackGpuCombo);
+#endif
         pages.Field(s->scalingLabel,s->scalingCombo);
         pages.Group(text(L"표시 해상도 · 업스케일링",L"Resolution & upscaling"));
         pages.Field(s->displayResolutionLabel,s->displayResolutionCombo);
@@ -223,8 +256,64 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
         }
         if (!cmaa && (SendMessageW(s->upscalerCombo,CB_GETCURSEL,0,0)!=0 || s->vsrGpuUnavailable))
             pages.Text(s->vsrStatus,36);
+#if defined(LLCV_RIFE_TEST) && !defined(LLCV_RIFE_AUTO_UI_TEST)
+        pages.Block(62,{{s->rifeHalfCheck,0,0,width,26},{s->rifeScaleLabel,0,34,64,20},
+            {s->rifeScaleCombo,72,30,width-72,30}});
+        pages.Check(s->rifeQualityCheck);
+#endif
         }
         break;
+    }
+#ifdef LLCV_RIFE_AUTO_UI_TEST
+    case SettingsTab::Interpolation: {
+#if defined(LLCV_FLYHIGH_TEST) || defined(LLCV_RIFE_OPTIONAL)
+        pages.Group(text(L"프레임 보간",L"Frame interpolation"));
+#else
+        pages.Group(text(L"RIFE",L"RIFE"));
+#endif
+#ifdef LLCV_INTERPOLATION_RELEASE
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+        const auto provider=interpolation::ChooseProvider(s->interpolationMethod,s->InterpolationGpuAvailable(),true);
+        if (s->interpolationMethod!=settings::InterpolationMethod::RifeVulkan &&
+            (s->InterpolationGpuAvailable() || s->ShowVfgGpuSwitch())) pages.Button(s->vfgDownloadButton);
+#else
+        if (s->InterpolationGpuAvailable() || s->ShowVfgGpuSwitch()) pages.Button(s->vfgDownloadButton);
+#endif
+#endif
+        pages.Check(s->rifeHalfCheck);
+#if defined(LLCV_RIFE_VULKAN_BUNDLED) || ((defined(LLCV_FLYHIGH_TEST) || defined(LLCV_RIFE_OPTIONAL)) && !defined(LLCV_INTERPOLATION_RELEASE))
+        pages.Field(s->interpolationProviderLabel,s->interpolationProviderCombo);
+#endif
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+        if(provider==interpolation::Provider::NvidiaVfg){
+            pages.HeadingField(s->rifeScaleLabel,s->rifeScaleCombo,s->interpolationQualityHelp);
+            pages.Check(s->rifeQualityCheck);
+        }else if(provider==interpolation::Provider::RifeVulkan)
+            pages.Field(s->rifeAutoUiLabel,s->rifeAutoUiCombo);
+#else
+#ifdef LLCV_RIFE_OPTIONAL
+        pages.HeadingField(s->rifeScaleLabel,s->rifeScaleCombo,s->interpolationQualityHelp);
+#else
+        pages.Field(s->rifeScaleLabel,s->rifeScaleCombo);
+#endif
+        pages.Check(s->rifeQualityCheck);
+#ifndef LLCV_INTERPOLATION_RELEASE
+        pages.Group(text(L"자동 HUD 보호",L"Automatic HUD protection"));
+        pages.Field(s->rifeAutoUiLabel,s->rifeAutoUiCombo);
+#endif
+#endif
+#ifdef LLCV_RIFE_OPTIONAL
+        pages.Text(s->rifeAutoUiHints[0],CapabilityTextHeight(s->rifeAutoUiHints[0],width,dpi));
+        if (GetWindowTextLengthW(s->rifeAutoUiHints[1]))
+            pages.Text(s->rifeAutoUiHints[1],CapabilityTextHeight(s->rifeAutoUiHints[1],width,dpi));
+        pages.Group(text(L"Smooth Motion 사용 시",L"If you use Smooth Motion"));
+        pages.Text(s->rifeAutoUiHints[2],CapabilityTextHeight(s->rifeAutoUiHints[2],width,dpi));
+#else
+        for(auto hint:s->rifeAutoUiHints)pages.Text(hint,CapabilityTextHeight(hint,width,dpi));
+#endif
+        break;
+    }
+#endif
     case SettingsTab::Audio:
         pages.Group(text(L"출력",L"Output"));
         pages.Field(s->audioLabel,s->audioCombo);
@@ -239,8 +328,12 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
         pages.Check(s->audioOnlyCheck);
         // The continuation name keeps the standalone explanation associated
         // with its option on the shortest supported work areas.
+#ifdef LLCV_DOLBY_CAPTURE
+        pages.HeadingField(s->surround51Hint,s->surround51Check,s->surroundHelp);
+#else
         if (pageHeight < 128) pages.Group(text(L"콘솔 LPCM 5.1",L"Console LPCM 5.1"));
         pages.Block(128, {{s->surround51Check,0,0,width,32},{s->surround51Hint,0,40,width,88}},40);
+#endif
         pages.Group(text(L"동기화 · 안정성",L"Timing & stability"));
         pages.Field(s->driftLabel,s->driftCombo,s->driftHelp);
         pages.Field(s->pcmQueueLabel,s->pcmQueueCombo,s->pcmQueueHelp);
@@ -261,10 +354,12 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
         break;
     case SettingsTab::GuideDiagnostics:
         pages.Group(text(L"키보드 단축키",L"Keyboard shortcuts"));
-        pages.Button(s->shortcutResetButton);
+        if (s->shortcutListToggle) pages.Button(s->shortcutListToggle);
+        if (!s->shortcutListToggle || s->showAllShortcuts) pages.Button(s->shortcutResetButton);
         {
         const auto metrics=MeasureShortcutLayout(s,dpi,width);
-        for (size_t i=0;i<s->guideKeys.size();++i) {
+        for (auto i:viewer_help::kDisplayOrder) {
+            if (!s->ShowShortcut(i)) continue;
             const int height=std::max(29,metrics.descriptionHeights[i]);
             pages.Block(std::max(36,height+7),{{s->guideKeys[i],0,0,metrics.keyWidth,29},
                 {s->guideDescriptions[i],metrics.keyWidth+12,0,width-metrics.keyWidth-12,height}});
@@ -274,9 +369,9 @@ void LayoutCompactSettingsControls(SettingsControls* s, UINT dpi) {
         pages.Group(text(L"진단",L"Diagnostics"));
         pages.Text(s->guideDiagnosticsText,52);
         pages.Check(s->saveLogCheck);
-        pages.Check(s->showConsoleCheck);
-        pages.Button(s->guideLogFolderButton);
         pages.Button(s->guideReportButton);
+        pages.Button(s->guideLogFolderButton);
+        pages.Check(s->showConsoleCheck);
         pages.Button(s->guideLsButton);
         break;
     case SettingsTab::Updates:

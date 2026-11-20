@@ -1,7 +1,14 @@
 #include "ui/SettingsTheme.h"
 #include "ui/SettingsView.h"
+#ifdef LLCV_RIFE_OPTIONAL
+#include "settings/TestProfile.h"
+#include "settings/SettingsStore.h"
+#endif
 #include "ui/SettingsDialogControls.h"
 #include "ui/UiText.h"
+#if defined(LLCV_FLYHIGH_TEST) || defined(LLCV_RIFE_OPTIONAL)
+#include "video/RifeHalfTest.h"
+#endif
 #include "capture/DirectShowDevices.h"
 #ifdef LLCV_RECORDING
 #include "recording/RecordingSettingsView.h"
@@ -466,7 +473,11 @@ void CheckActualTabOrder() {
                 if (format == VideoPixelFormat::Mjpeg)
                     expected.insert(expected.end(), {c.mjpegColorCombo, c.mjpegColorHelp});
                 expected.insert(expected.end(), {c.presentationCombo, c.presentationHelp,
-                    c.displayMonitorCombo, c.pixelCheck});
+                    c.displayMonitorCombo});
+#ifdef LLCV_INTERPOLATION_RELEASE
+                expected.push_back(c.playbackGpuCombo);
+#endif
+                expected.push_back(c.pixelCheck);
                 // Equal capture/display sizes; CMAA/NIS replaces the ordinary scaler.
                 if (!pixelPerfect && upscaler != 1) expected.push_back(c.scalingCombo);
                 expected.insert(expected.end(), {c.displayResolutionCombo, c.upscalerCombo});
@@ -475,12 +486,64 @@ void CheckActualTabOrder() {
                     expected.push_back(c.nisSharpnessCombo);
                 }
                 expected.push_back(c.vsrGuideButton);
+#if defined(LLCV_RIFE_TEST) && !defined(LLCV_RIFE_AUTO_UI_TEST)
+                {
+                expected.push_back(c.rifeHalfCheck);
+                expected.push_back(c.rifeScaleCombo);
+                expected.push_back(c.rifeQualityCheck);
+                RECT rifeBounds{},hintBounds{};GetWindowRect(c.rifeHalfCheck,&rifeBounds);GetWindowRect(c.rifeQualityCheck,&hintBounds);
+                MapWindowPoints(HWND_DESKTOP,hwnd,reinterpret_cast<POINT*>(&rifeBounds),2);
+                MapWindowPoints(HWND_DESKTOP,hwnd,reinterpret_cast<POINT*>(&hintBounds),2);
+                Check(rifeBounds.bottom<=hintBounds.top,
+                    "RIFE checkbox and hint do not overlap");
+                Check(hintBounds.bottom<=SettingsPixels(c.footerTopDip-16,dpi),
+                    "RIFE hint keeps bottom margin above the footer");
+                Check(GetWindow(c.rifeScaleCombo,GW_HWNDPREV)==c.rifeScaleLabel,
+                    "RIFE scale has an adjacent accessible label");
+                RECT scaleBounds{},overlap{};GetWindowRect(c.rifeScaleCombo,&scaleBounds);
+                MapWindowPoints(HWND_DESKTOP,hwnd,reinterpret_cast<POINT*>(&scaleBounds),2);
+                Check(!IntersectRect(&overlap,&scaleBounds,&rifeBounds)&&scaleBounds.bottom<=hintBounds.top,
+                    "RIFE checkbox, scale field and hint do not overlap");
+                }
+#endif
                 break;
+#ifdef LLCV_RIFE_AUTO_UI_TEST
+            case SettingsTab::Interpolation:
+#ifdef LLCV_RIFE_OPTIONAL
+                if(c.vsrGpuUnavailable){expected.push_back(c.interpolationQualityHelp);break;}
+#endif
+                expected.push_back(c.rifeHalfCheck);
+#ifdef LLCV_RIFE_OPTIONAL
+                if(!llcv::rife_test::componentsEnabled.load()){expected.push_back(c.interpolationQualityHelp);break;}
+#endif
+#if defined(LLCV_FLYHIGH_TEST) || defined(LLCV_RIFE_OPTIONAL)
+                expected.push_back(c.interpolationProviderCombo);
+#ifdef LLCV_RIFE_OPTIONAL
+                expected.push_back(c.interpolationQualityHelp);
+#endif
+#endif
+#ifdef LLCV_FLYHIGH_TEST
+                if(!llcv::rife_test::IsFlyHigh())expected.push_back(c.rifeScaleCombo);
+#else
+                expected.push_back(c.rifeScaleCombo);
+#endif
+                expected.push_back(c.rifeQualityCheck);
+#ifdef LLCV_RIFE_OPTIONAL
+                if(llcv::rife_test::IsVfg(llcv::rife_test::selectedScale.load()))break;
+#endif
+                expected.push_back(c.rifeAutoUiCombo);
+                Check(GetWindow(c.rifeAutoUiCombo,GW_HWNDPREV)==c.rifeAutoUiLabel,
+                    "automatic HUD picker has an adjacent accessible label");
+                break;
+#endif
             case SettingsTab::Audio:
                 expected.insert(expected.end(), {c.audioCombo, c.audioOutputCombo, c.bufferCombo});
                 if (exclusive) expected.push_back(c.exclusiveTestButton);
                 expected.insert(expected.end(), {c.volumeHudCombo, c.volumeBoostCheck,
                     c.volumeBoostHelp, c.muteBackgroundCheck, c.audioOnlyCheck});
+#ifdef LLCV_DOLBY_CAPTURE
+                expected.push_back(c.surroundHelp);
+#endif
                 if (!exclusive) expected.push_back(c.surround51Check);
                 expected.insert(expected.end(), {c.driftCombo, c.driftHelp, c.pcmQueueCombo, c.pcmQueueHelp});
                 break;
@@ -489,9 +552,10 @@ void CheckActualTabOrder() {
                     c.roundedCornersCheck, c.windowSnapCheck, c.fullscreenCursorCombo, c.fullscreenPositionCombo});
                 break;
             case SettingsTab::GuideDiagnostics:
-                expected.push_back(c.shortcutResetButton);
-                expected.insert(expected.end(), c.guideKeys.begin(), c.guideKeys.end());
-                expected.insert(expected.end(), {c.saveLogCheck, c.showConsoleCheck, c.guideLogFolderButton, c.guideReportButton, c.guideLsButton});
+                if(c.shortcutListToggle) expected.push_back(c.shortcutListToggle);
+                if(!c.shortcutListToggle || c.showAllShortcuts) expected.push_back(c.shortcutResetButton);
+                for (auto i:llcv::viewer_help::kDisplayOrder) if(c.ShowShortcut(i)) expected.push_back(c.guideKeys[i]);
+                expected.insert(expected.end(), {c.saveLogCheck, c.guideReportButton, c.guideLogFolderButton, c.showConsoleCheck, c.guideLsButton});
                 break;
             case SettingsTab::Updates:
                 expected.insert(expected.end(), {c.languageCombo, c.themeCombo, c.skipStartupCheck,
@@ -562,6 +626,74 @@ void CheckActualTabOrder() {
                     verify(SettingsTab::VideoWindow, false, format, pixelPerfect, externalAudio, upscaler);
         for (bool exclusive : {false, true})
             verify(SettingsTab::Audio, exclusive, VideoPixelFormat::Nv12, false, false);
+#ifdef LLCV_RIFE_AUTO_UI_TEST
+#ifdef LLCV_RIFE_OPTIONAL
+        static_assert(llcv::rife_test::DefaultScale==llcv::rife_test::Scale::VfgMedium);
+        llcv::rife_test::SelectScale(llcv::rife_test::DefaultScale);
+#endif
+        verify(SettingsTab::Interpolation,false,VideoPixelFormat::Nv12,false,false);
+#ifdef LLCV_RIFE_OPTIONAL
+        Check(SendMessageW(c.interpolationProviderCombo,CB_GETCURSEL,0,0)==1 &&
+              SendMessageW(c.rifeScaleCombo,CB_GETCURSEL,0,0)==1,"default is VFG Medium");
+        llcv::rife_test::SelectScale(llcv::rife_test::Scale::Half);
+        verify(SettingsTab::Interpolation,false,VideoPixelFormat::Nv12,false,false);
+        {
+            using namespace llcv::rife_test;
+            for (const auto mode : Scales) {
+                Check(SupportsInput(mode,1920,1080), "each optional mode accepts FHD");
+                Check(SupportsInput(mode,2560,1440)==IsVfg(mode) &&
+                      SupportsInput(mode,3840,2160)==IsVfg(mode), "QHD and UHD are VFG-only");
+                Check(!SupportsInput(mode,3840,1080) && !SupportsInput(mode,4096,2160),
+                      "non-preset dimensions must not pass the frame generation gate");
+            }
+        }
+        Check(!IsWindowEnabled(c.rifeScaleCombo)&&!IsWindowEnabled(c.rifeAutoUiCombo),"optional controls disabled until opted in");
+        wchar_t smoothGuide[512]{};
+        GetWindowTextW(c.rifeAutoUiHints[2], smoothGuide, ARRAYSIZE(smoothGuide));
+        Check((GetWindowLongPtrW(c.rifeAutoUiHints[2],GWL_STYLE)&WS_VISIBLE) &&
+              IsWindowEnabled(c.rifeAutoUiHints[2]) && wcsstr(smoothGuide,L"NVIDIA App") &&
+              wcsstr(smoothGuide,L"Smooth Motion") && GetWindowTextLengthW(c.rifeAutoUiHints[1])==0,
+              "Smooth Motion setup is readable inline with RIFE off and no percentage hint");
+        llcv::rife_test::Request(true);
+        Check(!llcv::rife_test::requested.load(),"F7 cannot bypass opt-in");
+        for (bool enabled : {true, false, true}) {
+            ValidateRect(c.pageTitle, nullptr);
+            ValidateRect(c.rifeAutoUiHints[0], nullptr);
+            llcv::rife_test::EnableComponents(enabled);
+            UpdateInterpolationAvailability(&c);
+            Check(!!IsWindowEnabled(c.interpolationProviderCombo) == enabled &&
+                  !!IsWindowEnabled(c.rifeScaleCombo) == enabled, "opt-in only changes dependent options");
+            Check(!GetUpdateRect(c.pageTitle, nullptr, FALSE) &&
+                  !GetUpdateRect(c.rifeAutoUiHints[0], nullptr, FALSE), "opt-in leaves unrelated text clean");
+        }
+        verify(SettingsTab::Interpolation,false,VideoPixelFormat::Nv12,false,false);
+        Check(IsWindowEnabled(c.rifeScaleCombo)&&SendMessageW(c.rifeHalfCheck,BM_GETCHECK,0,0)==BST_CHECKED,"opt-in enables options");
+        Check(SendMessageW(c.interpolationProviderCombo,CB_GETCOUNT,0,0)==2&&SendMessageW(c.rifeScaleCombo,CB_GETCOUNT,0,0)==3,"separate method and RIFE quality");
+        for(auto preset:{llcv::rife_test::Scale::VfgLow,llcv::rife_test::Scale::VfgMedium}){
+            llcv::rife_test::SelectScale(preset);verify(SettingsTab::Interpolation,false,VideoPixelFormat::Nv12,false,false);
+            Check(!IsWindowEnabled(c.rifeAutoUiCombo),"VFG HUD option disabled");
+            llcv::rife_test::SetSelectedHudWidth(16);
+            Check(llcv::rife_test::SelectedHudWidth()==0,"VFG cannot enable HUD correction");
+            Check(SendMessageW(c.rifeScaleCombo,CB_GETCOUNT,0,0)==2&&SendMessageW(c.interpolationProviderCombo,CB_GETCURSEL,0,0)==1,"VFG exposes only its two quality levels");
+        }
+        c.vsrGpuUnavailable=true;verify(SettingsTab::Interpolation,false,VideoPixelFormat::Nv12,false,false);
+        Check(!IsWindowEnabled(c.rifeHalfCheck)&&!IsWindowEnabled(c.rifeScaleCombo),"non-NVIDIA cannot enable interpolation");
+        c.vsrGpuUnavailable=false;llcv::rife_test::SelectScale(llcv::rife_test::Scale::Half);
+        llcv::rife_test::Request(false);
+        verify(SettingsTab::Interpolation,false,VideoPixelFormat::Nv12,false,false);
+        Check(SendMessageW(c.rifeHalfCheck,BM_GETCHECK,0,0)==BST_CHECKED,"F7 leaves module opt-in unchanged");
+        llcv::rife_test::EnableComponents(false);
+#endif
+#ifdef LLCV_FLYHIGH_TEST
+        llcv::rife_test::SelectProvider(llcv::rife_test::Provider::FlyHigh);
+        verify(SettingsTab::Interpolation,false,VideoPixelFormat::Nv12,false,false);
+        Check(!IsWindowEnabled(c.rifeScaleCombo),"FlyHigh does not use the RIFE scale choice");
+        Check(SendMessageW(c.rifeAutoUiCombo,CB_GETCOUNT,0,0)==2,"FlyHigh has native HUD ON/OFF only");
+        llcv::rife_test::SelectProvider(llcv::rife_test::Provider::Rife);
+        verify(SettingsTab::Interpolation,false,VideoPixelFormat::Nv12,false,false);
+        Check(IsWindowEnabled(c.rifeScaleCombo)&&SendMessageW(c.rifeAutoUiCombo,CB_GETCOUNT,0,0)==3,"returning to RIFE restores its independent controls");
+#endif
+#endif
         for (auto tab : {SettingsTab::Window, SettingsTab::GuideDiagnostics, SettingsTab::Updates})
             verify(tab, false, VideoPixelFormat::Nv12, false, false);
         DestroyWindow(hwnd);
@@ -608,7 +740,7 @@ void CheckDeferredTransitions() {
                 RefreshPreview(state);
                 for (size_t row = 0; row < c.guideKeys.size(); ++row) {
                     for (HWND control : {c.guideKeys[row], c.guideDescriptions[row]}) {
-                        const bool guideVisible = c.activeTab == SettingsTab::GuideDiagnostics;
+                        const bool guideVisible = c.activeTab == SettingsTab::GuideDiagnostics && c.ShowShortcut(row);
                         Check(((GetWindowLongPtrW(control, GWL_STYLE) & WS_VISIBLE) != 0) == guideVisible,
                               "shortcut rows are visible only on the guide page");
                         Check((IsWindowEnabled(control) != FALSE) == guideVisible,
@@ -737,8 +869,12 @@ void CheckDisabledLabelPixels() {
                 RECT measured = rect;
                 TEXTMETRICW metrics{}; GetTextMetricsW(dc, &metrics);
                 DrawTextW(dc, caption.c_str(), -1, &measured, referenceFlags | DT_CALCRECT);
+#ifdef LLCV_DOLBY_CAPTURE
+                Check(caption.find(L'\n')==std::wstring::npos,"audio format has an inline title, not a help paragraph");
+#else
                 Check(measured.bottom - measured.top >= 4 * metrics.tmHeight,
                     "surround explanation retains at least four lines");
+#endif
                 Check(measured.bottom <= rect.bottom, "surround explanation fits at each language/DPI");
             }
             if (std::find(c.guideDescriptions.begin(),c.guideDescriptions.end(),label)!=c.guideDescriptions.end()) {
@@ -799,6 +935,14 @@ void CheckDisabledLabelPixels() {
         for (int mode : {2, 1, 0, 2, 0}) {
             SendMessageW(c.audioCombo, CB_SETCURSEL, mode, 0);
             RefreshPreview(state);
+#ifdef LLCV_DOLBY_CAPTURE
+            Check(IsWindowEnabled(c.surroundHelp), "capture audio help remains available in all output modes");
+            for (auto item : {static_cast<WPARAM>(-1), static_cast<WPARAM>(0)}) {
+                const auto height = SendMessageW(c.audioOutputCombo, CB_GETITEMHEIGHT, item, 0);
+                Check(height > 0 && SendMessageW(c.surround51Check, CB_GETITEMHEIGHT, item, 0) == height,
+                    "capture audio format matches standard combo face and option heights");
+            }
+#endif
             Check(IsWindowEnabled(c.surround51Hint) == (mode == 0) &&
                   IsWindowEnabled(c.surround51Check) == (mode == 0),
                 "ASIO/Exclusive/Shared transitions preserve actual surround availability");
@@ -1114,6 +1258,309 @@ void ActualSnapshots(const wchar_t* directory, bool videoOnly = false, bool wind
         for (HFONT font : c.uiFonts) DeleteObject(font);
     }
 }
+#ifdef LLCV_INTERPOLATION_RELEASE
+void CheckReleaseVfgControls() {
+    for (bool english : {false, true}) for (bool compact : {false, true}) {
+        TestWindow state;
+        auto& c = state.controls;
+        const UINT dpi = compact ? 144 : 96;
+        FitSettingsClientArea(&c, compact ? SIZE{960,650} : SIZE{1000,650}, dpi);
+        HWND hwnd = CreateWindowW(L"LLCV.SettingsTheme.Tests", L"VFG release controls",
+            WS_POPUP|WS_CLIPCHILDREN, 0, 0, SettingsPixels(c.clientWidthDip,dpi),
+            SettingsPixels(c.clientHeightDip,dpi), nullptr, nullptr, GetModuleHandleW(nullptr), &state);
+        Check(hwnd!=nullptr,"create release interpolation fixture");
+        CreateActualContents(state,hwnd,english,dpi);
+        wchar_t gpuText[128]{};
+        SendMessageW(c.playbackGpuCombo, CB_GETLBTEXT, 0, reinterpret_cast<LPARAM>(gpuText));
+        c.activeTab = SettingsTab::VideoWindow;
+        RefreshPreview(state);
+        Check(std::wstring_view(gpuText).find(english ? L"high-performance" : L"외장 그래픽 우선") != std::wstring_view::npos &&
+              (compact || (GetWindowLongPtrW(c.playbackGpuCombo,GWL_STYLE)&WS_VISIBLE)),
+              "video settings offer automatic high-performance GPU selection");
+        if (!compact) {
+            RECT monitor{}, gpu{};
+            GetWindowRect(c.displayMonitorCombo, &monitor);
+            GetWindowRect(c.playbackGpuCombo, &gpu);
+            Check(gpu.top == monitor.top && gpu.left > monitor.right,
+                  "playback GPU aligns next to the display monitor");
+        }
+        c.activeTab = SettingsTab::Interpolation;
+        c.vfgGpuSupported = true;
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+        RefreshPreview(state);
+        Check(SendMessageW(c.interpolationProviderCombo,CB_GETCOUNT,0,0)==2 &&
+              SendMessageW(c.interpolationProviderCombo,CB_GETCURSEL,0,0)==0 &&
+              c.interpolationMethod==llcv::settings::InterpolationMethod::RifeVulkan &&
+              !c.interpolationEnabled,"RIFE is the default of two methods; interpolation defaults to off");
+        c.interpolationMethod=llcv::settings::InterpolationMethod::NvidiaVfg;
+#endif
+        SendMessageW(c.tabControl, LB_SETCURSEL, SettingsNavigationIndex(c.activeTab), 0);
+        RefreshPreview(state);
+        Check(!(GetWindowLongPtrW(c.playbackGpuCombo,GWL_STYLE)&WS_VISIBLE),
+              "playback GPU stays on the video page");
+        for (bool enabled : {true,false,true}) {
+            llcv::rife_test::EnableComponents(enabled);
+            UpdateInterpolationAvailability(&c);
+            RECT label{}, help{}, overlap{};
+            Check(GetWindowRect(c.rifeScaleLabel,&label) && GetWindowRect(c.interpolationQualityHelp,&help) &&
+                  !IsRectEmpty(&label) && !IsRectEmpty(&help) &&
+                  !IntersectRect(&overlap,&label,&help), "quality label never paints over the help button");
+        }
+        llcv::rife_test::EnableComponents(false);
+        RefreshVfgDownloadControl(&c);
+        Check((GetWindowLongPtrW(c.vfgDownloadButton,GWL_STYLE)&WS_VISIBLE)!=0,"available VFG can be installed");
+        c.vfgGpuSupported=false;
+        RefreshPreview(state);
+        Check(!(GetWindowLongPtrW(c.vfgDownloadButton,GWL_STYLE)&WS_VISIBLE) &&
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+              IsWindowEnabled(c.rifeHalfCheck) && !(GetWindowLongPtrW(c.rifeAutoUiCombo,GWL_STYLE)&WS_VISIBLE),
+              "unsupported VFG hides the download but does not silently select RIFE");
+#else
+              !IsWindowEnabled(c.rifeHalfCheck),"unsupported VFG hides download and prevents opt-in");
+#endif
+        c.vsrGpuUnavailable = true; // Windows selected a non-NVIDIA playback adapter.
+        c.vfgOtherCompatibleGpu = true;
+        RefreshPreview(state);
+        wchar_t text[256]{};
+        GetWindowTextW(c.vfgDownloadButton, text, ARRAYSIZE(text));
+        Check(std::wstring_view(text) == (english ? L"Windows graphics settings" : L"Windows 그래픽 설정") &&
+              (GetWindowLongPtrW(c.vfgDownloadButton,GWL_STYLE)&WS_VISIBLE) &&
+              IsWindowEnabled(c.vfgDownloadButton) &&
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+              IsWindowEnabled(c.rifeHalfCheck),
+#else
+              !IsWindowEnabled(c.rifeHalfCheck),
+#endif
+              "hybrid GPUs offer graphics settings without enabling VFG on the wrong adapter");
+        GetWindowTextW(c.rifeAutoUiHints[0], text, ARRAYSIZE(text));
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+        Check(std::wstring_view(text).find(english ? L"VFG is not available" : L"VFG를 사용할 수 없습니다") != std::wstring_view::npos,
+              "VFG remains selected and explains the unsupported playback GPU");
+#else
+        Check(std::wstring_view(text).find(english ? L"Playback GPU" : L"재생 그래픽카드") != std::wstring_view::npos,
+              "hybrid GPU guidance says what to change");
+#endif
+        c.activeTab = SettingsTab::Audio;
+        RefreshVfgDownloadControl(&c);
+        Check(!(GetWindowLongPtrW(c.vfgDownloadButton,GWL_STYLE)&WS_VISIBLE),
+              "GPU shortcut stays on the interpolation page");
+        c.activeTab = SettingsTab::Interpolation;
+        c.vsrGpuUnavailable = false;
+        c.vfgOtherCompatibleGpu = false;
+        c.vfgGpuCheckFailed = true;
+        RefreshPreview(state);
+        GetWindowTextW(c.rifeAutoUiHints[0], text, ARRAYSIZE(text));
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+        Check(std::wstring_view(text).find(english ? L"VFG is not available" : L"VFG를 사용할 수 없습니다") != std::wstring_view::npos &&
+              !(GetWindowLongPtrW(c.vfgDownloadButton,GWL_STYLE)&WS_VISIBLE),
+              "VFG does not switch methods when its capability cannot be checked");
+#else
+        Check(std::wstring_view(text).find(english ? L"graphics driver" : L"그래픽 드라이버") != std::wstring_view::npos &&
+              !(GetWindowLongPtrW(c.vfgDownloadButton,GWL_STYLE)&WS_VISIBLE),
+              "a driver query failure is not reported as unsupported hardware");
+#endif
+        c.vfgGpuSupported = true;
+        c.vfgOtherCompatibleGpu = true;
+        c.vfgGpuCheckFailed = false;
+        RefreshPreview(state);
+        GetWindowTextW(c.vfgDownloadButton, text, ARRAYSIZE(text));
+        Check(std::wstring_view(text) == (english ? L"Download VFG components" : L"VFG 구성품 받기"),
+              "supported playback keeps the component download after switching GPUs");
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+        c.interpolationMethod=llcv::settings::InterpolationMethod::RifeVulkan;
+        RefreshPreview(state);
+        Check(!(GetWindowLongPtrW(c.vfgDownloadButton,GWL_STYLE)&WS_VISIBLE),"explicit RIFE never shows VFG download");
+        c.activeTab=SettingsTab::VideoWindow;
+        c.interpolationEnabled=true;
+        SendMessageW(c.presentationCombo,CB_SETCURSEL,0,0);
+        const LRESULT savedResolution=SendMessageW(c.videoCombo,CB_FINDSTRINGEXACT,static_cast<WPARAM>(-1),
+            reinterpret_cast<LPARAM>(L"2560 x 1440"));
+        Check(savedResolution!=CB_ERR,"QHD saved-input fixture exists");
+        SendMessageW(c.videoCombo,CB_SETCURSEL,savedResolution,0);
+        const auto originalRes=SendMessageW(c.videoCombo,CB_GETCURSEL,0,0);
+        const auto originalFormat=SendMessageW(c.pixelFormatCombo,CB_GETCURSEL,0,0);
+        const auto originalFps=SendMessageW(c.frameRateCombo,CB_GETCURSEL,0,0);
+        constexpr int fixtureRates[]{120, 60, 40, 30, 30, 24, 23};
+        PopulateRifeCaptureRatePicker(c.rifeCaptureFps,english,30,fixtureRates);
+        RefreshPreview(state);
+        Check(SettingsRifeCaptureOverride(c) && !IsWindowEnabled(c.rifeCaptureResolution),
+            "RIFE resolution preview is read-only");
+        SendMessageW(c.rifeCaptureResolution,CB_GETLBTEXT,0,reinterpret_cast<LPARAM>(text));
+        Check(std::wstring_view(text)==L"1920 × 1080","RIFE previews FHD");
+        Check(IsWindowEnabled(c.rifeCaptureFps) &&
+            (GetWindowLongPtrW(c.rifeCaptureFps,GWL_STYLE)&WS_VISIBLE) &&
+            (GetWindowLongPtrW(c.rifeCaptureFps,GWL_STYLE)&WS_TABSTOP),
+            "RIFE capture rate picker is visible and keyboard accessible");
+        constexpr int expectedRates[]{0, 60, 40, 30, 24};
+        Check(SendMessageW(c.rifeCaptureFps,CB_GETCOUNT,0,0)==ARRAYSIZE(expectedRates),
+            "RIFE rate list excludes unsupported rates and duplicates");
+        for (size_t i=0;i<ARRAYSIZE(expectedRates);++i)
+            Check(SendMessageW(c.rifeCaptureFps,CB_GETITEMDATA,i,0)==expectedRates[i],
+                "RIFE rates are Auto followed by detected rates from 60 to 24");
+        const auto selectedRifeRate=SendMessageW(c.rifeCaptureFps,CB_GETCURSEL,0,0);
+        Check(selectedRifeRate==3,"RIFE selects its own capture rate");
+        if(compact) {
+            RECT resolution{}, rate{};
+            GetWindowRect(c.rifeCaptureResolution,&resolution);
+            GetWindowRect(c.rifeCaptureFps,&rate);
+            Check(rate.top==resolution.top&&rate.left>resolution.right,
+                "compact capture settings keep FHD and FPS in the same row when they fit");
+            FitSettingsClientArea(&c,SIZE{744,635},dpi);
+            RefreshPreview(state);
+            const int tab=SettingsNavigationIndex(c.activeTab);
+            bool reachable=false;
+            for(int page=0;page<static_cast<int>(c.compactPageNames.size());++page) {
+                c.compactPages[tab]=page;
+                RefreshPreview(state);
+                reachable|=IsWindowEnabled(c.rifeCaptureFps) &&
+                    (GetWindowLongPtrW(c.rifeCaptureFps,GWL_STYLE)&WS_VISIBLE);
+            }
+            Check(reachable,"the RIFE FPS picker remains reachable in a narrow settings window");
+            c.compactPages[tab]=0;
+            FitSettingsClientArea(&c,SIZE{960,650},dpi);
+            RefreshPreview(state);
+        }
+        if(!compact)Check((GetWindowLongPtrW(c.rifeCaptureResolution,GWL_STYLE)&WS_VISIBLE)!=0&&
+            IsWindowEnabled(c.pixelFormatCombo),"RIFE keeps the pixel format picker editable");
+        c.interpolationMethod=llcv::settings::InterpolationMethod::NvidiaVfg;
+        RefreshPreview(state);
+        Check(!SettingsRifeCaptureOverride(c) &&
+            !(GetWindowLongPtrW(c.rifeCaptureResolution,GWL_STYLE)&WS_VISIBLE) &&
+            SendMessageW(c.videoCombo,CB_GETCURSEL,0,0)==originalRes &&
+            SendMessageW(c.pixelFormatCombo,CB_GETCURSEL,0,0)==originalFormat &&
+            SendMessageW(c.frameRateCombo,CB_GETCURSEL,0,0)==originalFps &&
+            !(GetWindowLongPtrW(c.rifeCaptureFps,GWL_STYLE)&WS_VISIBLE),
+            "leaving RIFE restores the untouched capture pickers");
+#endif
+        DestroyWindow(hwnd);
+        for (HFONT font : c.uiFonts) DeleteObject(font);
+    }
+}
+#endif
+#ifdef LLCV_RIFE_AUTO_UI_TEST
+#ifdef LLCV_RIFE_OPTIONAL
+void ShortcutSnapshots(const wchar_t* directory) {
+    namespace keys=llcv::shortcuts;
+    const size_t hud=static_cast<size_t>(keys::Action::HudCorrection);
+    const auto ini=llcv::test_profile::Directory()+L"/shortcut-migration.ini";
+    auto settings=llcv::settings::LoadFromIni(ini).settings;
+    Check(keys::Valid(settings.shortcuts) && settings.shortcuts[hud]==0 &&
+        !keys::Match(settings.shortcuts,keys::Action::HudCorrection,VK_F4,0),"fresh HUD key is unassigned");
+    for (unsigned binding:{unsigned(VK_F4),keys::Ctrl|'H',0u}) {
+        settings.shortcuts[hud]=binding;
+        Check(llcv::settings::SaveToIni(ini,settings) &&
+            llcv::settings::LoadFromIni(ini).settings.shortcuts==settings.shortcuts,"legacy, custom and cleared bindings round-trip");
+    }
+    DeleteFileW(ini.c_str());
+    for (bool english : {false,true}) for (bool compact : {false,true}) {
+        TestWindow state;
+        auto& c=state.controls;
+        const UINT dpi=compact?192:144;
+        FitSettingsClientArea(&c,compact?SIZE{1254,810}:SIZE{1500,975},dpi);
+        HWND hwnd=CreateWindowW(L"LLCV.SettingsTheme.Tests",L"Shortcut layout",WS_POPUP|WS_CLIPCHILDREN,
+            0,0,SettingsPixels(c.clientWidthDip,dpi),SettingsPixels(c.clientHeightDip,dpi),
+            nullptr,nullptr,GetModuleHandleW(nullptr),&state);
+        Check(hwnd!=nullptr,"shortcut snapshot owner");
+        CreateActualContents(state,hwnd,english,dpi,true);
+        c.activeTab=SettingsTab::GuideDiagnostics;
+        SendMessageW(c.tabControl,LB_SETCURSEL,SettingsNavigationIndex(c.activeTab),0);
+        for (bool expanded : {false,true}) for (bool chord : {false,true}) {
+            c.showAllShortcuts=expanded;
+            c.shortcutBindings=llcv::shortcuts::Defaults;
+            if (chord) c.shortcutBindings[0]=llcv::shortcuts::Ctrl|llcv::shortcuts::Alt|llcv::shortcuts::Shift|VK_SPACE;
+            RefreshShortcutCaptions(&c);
+            UpdateAdvancedControlVisibility(&c,false,llcv::settings::VideoPixelFormat::Nv12);
+            const size_t pages=compact?c.compactPageNames.size():1;
+            std::array<bool,llcv::shortcuts::Count> seen{};
+            for (size_t page=0;page<pages;++page) {
+                c.compactPages[SettingsNavigationIndex(c.activeTab)]=static_cast<int>(page);
+                UpdateAdvancedControlVisibility(&c,false,llcv::settings::VideoPixelFormat::Nv12);
+                std::vector<RECT> bounds;
+                auto check=[&](HWND h) {
+                    if (!(GetWindowLongPtrW(h,GWL_STYLE)&WS_VISIBLE)) return false;
+                    RECT r{};GetWindowRect(h,&r);MapWindowPoints(nullptr,hwnd,reinterpret_cast<POINT*>(&r),2);
+                    Check(r.top>=0 && r.bottom<=SettingsPixels(c.footerTopDip-8,dpi),"shortcut page respects footer margin");
+                    for (const auto& previous:bounds) {RECT overlap{};Check(!IntersectRect(&overlap,&r,&previous),"shortcut controls do not overlap");}
+                    bounds.push_back(r);return true;
+                };
+                for (auto i:llcv::viewer_help::kDisplayOrder) {
+                    if (check(c.guideKeys[i])) seen[i]=true;
+                    check(c.guideDescriptions[i]);
+                }
+                for(HWND h:{c.shortcutListToggle,c.shortcutResetButton,c.guideVideoHint,c.guideShortcutsTitle,c.guideDiagnosticsTitle,c.guideDiagnosticsText,
+                            c.saveLogCheck,c.showConsoleCheck,c.guideLogFolderButton,c.guideReportButton,c.guideLsButton}) check(h);
+                if (!compact && !chord) {
+                    const auto path=std::wstring(directory)+(expanded?L"/editor-":L"/guide-")+(english?L"en.bmp":L"ko.bmp");
+                    SaveSnapshot(hwnd,path.c_str());
+                }
+            }
+            Check(static_cast<size_t>(std::count(seen.begin(),seen.end(),true))==(expanded?seen.size():std::size(llcv::viewer_help::kQuickActions)),"overview shows quick keys; editor exposes every binding");
+        }
+        DestroyWindow(hwnd);for(HFONT font:c.uiFonts)DeleteObject(font);
+    }
+}
+#endif
+void AutoUiSnapshots(const wchar_t* directory) {
+    using llcv::settings::VideoPixelFormat;
+#ifdef LLCV_FLYHIGH_TEST
+    for(auto provider:{llcv::rife_test::Provider::Rife,llcv::rife_test::Provider::FlyHigh}){
+    llcv::rife_test::SelectProvider(provider);
+#endif
+    for(bool english:{false,true})for(bool compact:{false,true}) {
+        TestWindow state;const UINT dpi=compact?192:144;
+        FitSettingsClientArea(&state.controls,compact?SIZE{1254,552}:SIZE{1500,975},dpi);
+        HWND hwnd=CreateWindowW(L"LLCV.SettingsTheme.Tests",L"Offscreen interpolation UI",
+            WS_POPUP|WS_CLIPCHILDREN,-32000,-32000,
+            SettingsPixels(state.controls.clientWidthDip,dpi),SettingsPixels(state.controls.clientHeightDip,dpi),
+            nullptr,nullptr,GetModuleHandleW(nullptr),&state);
+        Check(hwnd!=nullptr,"create interpolation snapshot fixture");
+        CreateActualContents(state,hwnd,english,dpi,true);auto& c=state.controls;
+        c.activeTab=SettingsTab::Interpolation;
+        SendMessageW(c.tabControl,LB_SETCURSEL,SettingsNavigationIndex(c.activeTab),0);
+        UpdateAdvancedControlVisibility(&c,false,VideoPixelFormat::Nv12);
+        UpdateAdvancedControlVisibility(&c,false,VideoPixelFormat::Nv12);
+        const int count=compact?int(c.compactPageNames.size()):1;
+        Check(SendMessageW(c.rifeAutoUiCombo,CB_GETCOUNT,0,0)==
+#ifdef LLCV_RIFE_OPTIONAL
+            2,"trajectory UI has off/on");
+#else
+#ifdef LLCV_FLYHIGH_TEST
+            (llcv::rife_test::IsFlyHigh()?2:3),"provider-specific HUD choices");
+#else
+            3,"HUD protection has only OFF/16/32 options");
+#endif
+#endif
+        for(int page=0;page<count;++page) {
+            c.compactPages[SettingsNavigationIndex(c.activeTab)]=page;
+            UpdateAdvancedControlVisibility(&c,false,VideoPixelFormat::Nv12);
+            RECT owner{};GetClientRect(hwnd,&owner);
+            for(HWND control:{c.rifeHalfCheck,c.rifeScaleLabel,c.rifeScaleCombo,c.rifeQualityCheck,
+#ifdef LLCV_FLYHIGH_TEST
+                c.interpolationProviderLabel,c.interpolationProviderCombo,
+#endif
+                c.rifeAutoUiLabel,c.rifeAutoUiCombo,c.rifeAutoUiHints[0],c.rifeAutoUiHints[1],c.rifeAutoUiHints[2]}) {
+                if(!(GetWindowLongPtrW(control,GWL_STYLE)&WS_VISIBLE))continue;
+                RECT bounds{};GetWindowRect(control,&bounds);MapWindowPoints(nullptr,hwnd,reinterpret_cast<POINT*>(&bounds),2);
+                Check(bounds.left>=0&&bounds.right<=owner.right&&bounds.top>=0&&bounds.bottom<=SettingsPixels(c.footerTopDip-16,dpi),
+                    "interpolation controls stay inside content with footer margin");
+                if(control==c.rifeAutoUiCombo||control==c.rifeScaleCombo)
+                    Check(bounds.bottom-bounds.top==SettingsPixels(kSettingsComboHeightDip,dpi),
+                        "interpolation dropdowns match the existing closed control height");
+            }
+            wchar_t filename[120]{};swprintf_s(filename,L"/hud-%s-%s-page%d.bmp",english?L"en":L"ko",compact?L"compact":L"normal",page);
+#ifdef LLCV_FLYHIGH_TEST
+            swprintf_s(filename,L"/%s-%s-%s-page%d.bmp",llcv::rife_test::IsFlyHigh()?L"flyhigh":L"rife",english?L"en":L"ko",compact?L"compact":L"normal",page);
+#endif
+            SaveSnapshot(hwnd,(std::wstring(directory)+filename).c_str());
+        }
+        DestroyWindow(hwnd);for(HFONT font:c.uiFonts)DeleteObject(font);
+    }
+#ifdef LLCV_FLYHIGH_TEST
+    }
+    llcv::rife_test::SelectProvider(llcv::rife_test::Provider::Rife);
+#endif
+}
+#endif
 }
 #ifdef LLCV_SETTINGS_PREVIEW
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
@@ -1157,6 +1604,26 @@ int wmain(int argc, wchar_t** argv) {
     return 0;
 #else
     std::setvbuf(stdout, nullptr, _IONBF, 0);
+#ifdef LLCV_INTERPOLATION_RELEASE
+    if (argc == 2 && std::wcscmp(argv[1],L"--vfg-release-ui")==0) {
+        CheckReleaseVfgControls();
+        UnregisterClassW(wc.lpszClassName,wc.hInstance);
+        std::puts("Bilingual release VFG controls, label geometry and GPU gate passed.");
+        return 0;
+    }
+#endif
+#ifdef LLCV_RIFE_AUTO_UI_TEST
+#ifdef LLCV_RIFE_OPTIONAL
+    if(argc==3&&std::wcscmp(argv[1],L"--shortcut-snapshots")==0){
+        ShortcutSnapshots(argv[2]);UnregisterClassW(wc.lpszClassName,wc.hInstance);
+        std::puts("Bilingual normal/compact shortcut layouts passed.");return 0;
+    }
+#endif
+    if(argc==3&&std::wcscmp(argv[1],L"--auto-ui-snapshots")==0){
+        AutoUiSnapshots(argv[2]);UnregisterClassW(wc.lpszClassName,wc.hInstance);
+        std::puts("Bilingual normal/compact HUD controls and footer margins passed; snapshots saved.");return 0;
+    }
+#endif
     if (argc == 2 && (std::wcscmp(argv[1], L"--trace-cycle") == 0 || std::wcscmp(argv[1], L"--trace-two") == 0)) {
         traceCycle = true; OneCycle();
         if (std::wcscmp(argv[1], L"--trace-two") == 0) OneCycle();

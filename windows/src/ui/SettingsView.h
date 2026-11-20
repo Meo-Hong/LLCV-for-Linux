@@ -1,4 +1,7 @@
 #pragma once
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+#include "settings/AppSettings.h"
+#endif
 
 #include <windows.h>
 #include <string>
@@ -21,12 +24,18 @@ enum class SettingsTab : int {
     GuideDiagnostics = 2,
     Updates = 3,
     Window = 4,
+#ifdef LLCV_RIFE_AUTO_UI_TEST
+    Interpolation = 6,
+#endif
 #ifdef LLCV_RECORDING
     Recording = 5,
 #endif
 };
 
 inline constexpr int kSettingsNavigationCount =
+#ifdef LLCV_RIFE_AUTO_UI_TEST
+    1 +
+#endif
 #ifdef LLCV_RECORDING
     6;
 #else
@@ -52,6 +61,33 @@ struct SettingsControls {
     bool english = false;
     // Supplied once by the controller; view refresh never probes hardware.
     bool vsrGpuUnavailable = false;
+    bool vfgRtx30 = false;
+#ifdef LLCV_INTERPOLATION_RELEASE
+    bool vfgGpuSupported = false;
+    bool vfgOtherCompatibleGpu = false;
+    bool vfgGpuCheckFailed = false;
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+    llcv::settings::InterpolationMethod interpolationMethod = llcv::settings::InterpolationMethod::RifeVulkan;
+    int rifeHudMode = llcv::settings::kDefaultRifeHudMode;
+    bool interpolationEnabled = false;
+    bool interpolationVfgLow = false;
+    bool interpolationVfgWait = false;
+    HWND rifeCaptureResolution = nullptr;
+    HWND rifeCaptureFps = nullptr;
+    int rifeCaptureFrameRate = -1;
+    HWND rifeCaptureHint = nullptr;
+#endif
+    HWND playbackGpuLabel = nullptr;
+    HWND playbackGpuCombo = nullptr;
+    bool ShowVfgGpuSwitch() const { return !InterpolationGpuAvailable() && vfgOtherCompatibleGpu; }
+#endif
+    bool InterpolationGpuAvailable() const {
+#ifdef LLCV_INTERPOLATION_RELEASE
+        return !vsrGpuUnavailable && vfgGpuSupported;
+#else
+        return !vsrGpuUnavailable;
+#endif
+    }
     bool vsrGpuUnknown = false;
     UINT layoutDpi = USER_DEFAULT_SCREEN_DPI;
     // Physical work-area fitting never changes type size. Smaller desktops
@@ -99,6 +135,17 @@ struct SettingsControls {
     std::array<HWND, viewer_help::kShortcuts.size()> guideDescriptions{};
     HWND guideShortcutsTitle = nullptr;
     HWND shortcutResetButton = nullptr;
+    HWND shortcutListToggle = nullptr;
+    bool showAllShortcuts = false;
+    bool ShowShortcut(size_t index) const {
+#ifdef LLCV_INTERPOLATION_RELEASE
+        if (index==static_cast<size_t>(shortcuts::Action::HudCorrection)) return false;
+#endif
+        if (!shortcutListToggle || showAllShortcuts) return true;
+        for (auto action : viewer_help::kQuickActions)
+            if (static_cast<size_t>(action)==index) return true;
+        return false;
+    }
     shortcuts::Bindings shortcutBindings=shortcuts::Defaults;
     int editingShortcut=-1;
     UINT shortcutKeyToRelease=0;
@@ -125,6 +172,27 @@ struct SettingsControls {
     HWND nisSharpnessCombo = nullptr;
     HWND vsrGuideButton = nullptr;
     HWND vsrStatus = nullptr;
+#ifdef LLCV_RIFE_TEST
+    HWND rifeHalfCheck = nullptr;
+#ifdef LLCV_INTERPOLATION_RELEASE
+    HWND vfgDownloadButton = nullptr;
+#endif
+#if defined(LLCV_FLYHIGH_TEST) || defined(LLCV_RIFE_OPTIONAL)
+    HWND interpolationProviderLabel = nullptr;
+    HWND interpolationProviderCombo = nullptr;
+#endif
+#ifdef LLCV_RIFE_OPTIONAL
+    HWND interpolationQualityHelp = nullptr;
+#endif
+    HWND rifeScaleLabel = nullptr;
+    HWND rifeScaleCombo = nullptr;
+    HWND rifeQualityCheck = nullptr;
+#ifdef LLCV_RIFE_AUTO_UI_TEST
+    HWND rifeAutoUiLabel = nullptr;
+    HWND rifeAutoUiCombo = nullptr;
+    std::array<HWND,3> rifeAutoUiHints{};
+#endif
+#endif
     HWND displayResolutionLabel = nullptr;
     HWND displayResolutionCombo = nullptr;
     HWND updateTitle = nullptr;
@@ -175,6 +243,9 @@ struct SettingsControls {
     HWND muteBackgroundCheck = nullptr;
     HWND audioOnlyCheck = nullptr;
     HWND surround51Check = nullptr;
+#ifdef LLCV_DOLBY_CAPTURE
+    HWND surroundHelp = nullptr;
+#endif
     HWND surround51Hint = nullptr;
     HWND forceHdr10Check = nullptr;
     HWND forceHdr10Help = nullptr;
@@ -286,12 +357,22 @@ void CancelShortcutEdit(SettingsControls* state);
 bool ProcessShortcutEdit(SettingsControls* state, const MSG& message,
                          unsigned modifiers=shortcuts::Modifiers());
 void SetSettingsControlVisible(HWND control, bool visible, bool enabled = true);
+#ifdef LLCV_RIFE_VULKAN_BUNDLED
+bool SettingsRifeCaptureOverride(const SettingsControls& state);
+bool SettingsRifeCaptureOverride(const SettingsControls& state, settings::VideoPixelFormat format);
+#endif
 void SetSettingsText(HWND control, const wchar_t* text);
+#ifdef LLCV_INTERPOLATION_RELEASE
+void RefreshVfgDownloadControl(SettingsControls* state);
+#endif
 // Display-only item data; keep the existing fixed-resolution row indices and
 // the capture-preset enum unchanged. Distinct from CB_ERR (-1).
 inline constexpr LPARAM kDisplayMatchCaptureItem = -2;
 bool DisplayResolutionMatchesCapture(HWND combo);
 void UpdateScalingControlVisibility(SettingsControls* state);
+#ifdef LLCV_RIFE_OPTIONAL
+void UpdateInterpolationAvailability(SettingsControls* state);
+#endif
 void UpdateWindowBehaviorVisibility(SettingsControls* state);
 // Call only for a deliberate range selection, not tab/format reflow. Choosing
 // Auto explicitly also retires the older MJPEG-only range correction.

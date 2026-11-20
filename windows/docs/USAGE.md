@@ -46,6 +46,12 @@ devices can expose separate video and audio devices; in that case, choose the
 matching audio input manually. If the app shows “Internal audio detected · use
 automatically,” no separate selection is needed.
 
+If capture audio cannot be connected, startup asks whether to **start with video
+only**. Yes plays video without sound and closes the audio output device (including
+WASAPI Exclusive and ASIO); recording is unavailable in that state.
+No returns to Settings. Exclusive fullscreen presentation does not ask and reports
+the error as before.
+
 <br>
 
 ## Finding your settings
@@ -125,6 +131,7 @@ change Windows power settings or disable screen savers or security locks.
 | 40 fps capture | **Off (default)**. Enable to request 40 fps instead of the normal frame-rate selection; support is checked at startup |
 | Presentation | **Low latency (standard)** is the default for use alongside other apps. **Low latency (exclusive fullscreen)** may further reduce latency but limits use of other windows. **VSync (reduced tearing)** waits for refresh. **Compatibility (Blt + VSync)** uses an alternative output path, may add latency/GPU load, and does not support HDR10 |
 | Display monitor | **Auto (restore last position)**; select a monitor to choose the startup location. A missing monitor falls back to the primary display; moving the window afterward is still allowed |
+| Playback GPU | **Automatic (high-performance first)**, or choose an adapter manually. For VFG, select a compatible NVIDIA GPU. Exclusive fullscreen prefers a GPU connected to the selected display |
 | Pixel-perfect / Lock display size | Locks the selected display size; 1:1 only when capture and display resolutions match. Turn off to resize manually |
 
 A 120 fps capture mode does not create extra visual information when the game
@@ -400,10 +407,12 @@ Press **F12** during video playback to save a PNG in **Pictures / LowLatencyCapt
 The screenshot section of **App** has **Open folder** and
 **Also copy to clipboard** (off by default).
 
-**F1** opens a modeless guide with the app version, keyboard shortcuts, mouse controls,
+**F1** opens a modeless guide with the app version, all assigned keyboard shortcuts, mouse controls,
 and screenshot information without stopping playback.
 Use the configured Help or Exit key (defaults: F1/Esc), or its Close button, to
-dismiss it. The Exit key here closes only the help window, not the viewer.
+dismiss it. The Exit key here closes only the help window, not the viewer. Unassigned actions are hidden.
+
+See [Frame interpolation](FRAME_INTERPOLATION.md) to enable optional interpolation. F7 toggles it by default.
 
 - NV12/YUY2 and decoded MJPEG retain the capture resolution and selected SDR color interpretation.
 - P010 HDR10 is converted to **SDR sRGB**, both in the PNG and clipboard image.
